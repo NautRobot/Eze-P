@@ -28,10 +28,6 @@
 #include <cstring>
 #include <string>
 
-#include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
-
 namespace amd::dbgapi
 {
 
@@ -248,79 +244,6 @@ string_printf (const char *format, ...)
   va_end (va);
 
   return str;
-}
-
-bool
-pipe_t::open ()
-{
-  std::array<file_desc_t, 2> pipe;
-  if (::pipe2 (pipe.data (), O_CLOEXEC))
-    {
-      warning ("pipe_t::open: pipe2 failed: %s", strerror (errno));
-      return false;
-    }
-
-  m_pipe_fd.emplace (pipe);
-
-  if (::fcntl (read_fd (), F_SETFL, O_NONBLOCK)
-      || ::fcntl (write_fd (), F_SETFL, O_NONBLOCK))
-    {
-      warning ("pipe_t::open: fcntl failed: %s", strerror (errno));
-      close ();
-      return false;
-    }
-
-  return true;
-}
-
-void
-pipe_t::close ()
-{
-  if (is_valid ())
-    {
-      ::close (read_fd ());
-      ::close (write_fd ());
-    }
-
-  m_pipe_fd.reset ();
-}
-
-int
-pipe_t::flush ()
-{
-  int ret;
-
-  do
-    {
-      char buf;
-      ret = ::read (read_fd (), &buf, 1);
-    }
-  while (ret >= 0 || (ret == -1 && errno == EINTR));
-
-  if (ret == -1 && errno != EAGAIN)
-    fatal_error ("read: %s", strerror (errno));
-
-  return ret == -1 ? -errno : 0;
-}
-
-int
-pipe_t::mark ()
-{
-  int ret;
-
-  /* First, flush the pipe.  */
-  flush ();
-
-  do
-    {
-      ret = ::write (write_fd (), "+", 1);
-    }
-  while (ret == -1 && errno == EINTR);
-
-  if (ret == -1 && errno != EAGAIN)
-    fatal_error ("write: %s", strerror (errno));
-
-  return ret == -1 ? -errno : 0;
 }
 
 } /* namespace amd::dbgapi */

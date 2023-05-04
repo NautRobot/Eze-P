@@ -37,6 +37,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <memory>
 
 #define CONCAT_NX(x, y) x##y
 #define CONCAT(x, y) CONCAT_NX (x, y)
@@ -1042,42 +1043,36 @@ private:
   value_type m_value{ 0 };
 };
 
-class pipe_t
+class notifier_t : private utils::not_copyable_t
 {
-private:
-  std::optional<std::array<file_desc_t, 2>> m_pipe_fd{};
-
 public:
-  pipe_t () = default;
-  ~pipe_t () { close (); }
+  static std::unique_ptr<notifier_t> create ();
 
-  bool open ();
-  void close ();
+  notifier_t () { }
+  virtual ~notifier_t () { };
 
-  /* Return true if the pipe is valid and ready for use.  */
-  bool is_valid () const { return m_pipe_fd.has_value (); }
+  /* The notifier_t is non-movable.  */
+  notifier_t (notifier_t &&) = delete;
+  notifier_t &operator= (notifier_t &&) = delete;
 
-  /* Return the read-end file descriptor of the pipe.  */
-  file_desc_t read_fd () const
-  {
-    dbgapi_assert (is_valid () && "this pipe is not valid");
-    return (*m_pipe_fd)[0];
-  }
+  virtual void open () = 0;
+  virtual void close () = 0;
+  virtual bool is_valid () const = 0;
 
-  /* Return the write-end file descriptor of the pipe.  */
-  file_desc_t write_fd () const
-  {
-    dbgapi_assert (is_valid () && "this pipe is not valid");
-    return (*m_pipe_fd)[1];
-  }
+  /* Return the platform-specific amd_dbgapi_notifier_t a producer can use
+     to send notifications to the consumer.  */
+  virtual amd_dbgapi_notifier_t producer_end () const = 0;
 
-  /* Write a single char, '+', to the pipe.  Return 0 if successful, errno
+  /* Return the platform-specific amd_dbgapi_notifier_t a consumer can
+     subscribe to.  */
+  virtual amd_dbgapi_notifier_t consumer_end () const = 0;
+
+  /* Notify the consumer of the notifier_t.  The true on success, false
      otherwise.  */
-  int mark ();
+  virtual bool mark () = 0;
 
-  /* Consume all the data in the pipe.  Return 0 if successful, errno
-     otherwise.  */
-  int flush ();
+  /* Clear the notifier_t.  Return true on success, false otherwise.  */
+  virtual bool clear () = 0;
 };
 
 } /* namespace amd::dbgapi */
