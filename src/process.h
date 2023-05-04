@@ -119,7 +119,7 @@ private:
 
   bool m_forward_progress_needed{ true };
 
-  pipe_t m_client_notifier_pipe{};
+  std::unique_ptr<notifier_t> m_client_notifier{ notifier_t::create () };
 
   std::queue<event_t *> m_pending_events{};
 
@@ -410,7 +410,16 @@ public:
       .find_if (std::forward<Functor> (predicate), all);
   }
 
-  pipe_t &client_notifier_pipe () { return m_client_notifier_pipe; }
+  notifier_t &client_notifier ()
+  {
+    dbgapi_assert (m_client_notifier != nullptr);
+    return *m_client_notifier;
+  }
+  const notifier_t &client_notifier () const
+  {
+    dbgapi_assert (m_client_notifier != nullptr);
+    return *m_client_notifier;
+  }
 };
 
 template <typename T>

@@ -87,8 +87,8 @@ process_t::process_t (amd_dbgapi_process_id_t process_id,
     m_dummy_agent (AMD_DBGAPI_AGENT_NONE, *this, nullptr, {})
 {
   /* Create the notifier pipe.  */
-  m_client_notifier_pipe.open ();
-  if (!m_client_notifier_pipe.is_valid ())
+  client_notifier ().open ();
+  if (!client_notifier ().is_valid ())
     fatal_error ("Could not create the client notifier pipe");
 
   amd_dbgapi_os_process_id_t os_process_id;
@@ -133,9 +133,9 @@ process_t::~process_t ()
   m_memory_cache.write_back ();
   m_memory_cache.discard ();
 
-  /* Destruct the os_driver before closing the notifier pipe.  */
+  /* Destruct the os_driver before closing the notifier.  */
   m_os_driver.reset ();
-  m_client_notifier_pipe.close ();
+  client_notifier ().close ();
 
   if (this == detail::last_found_process)
     detail::last_found_process = nullptr;
@@ -1613,7 +1613,7 @@ process_t::attach ()
   os_runtime_info_t runtime_info{};
   if (auto status = os_driver ().enable_debug (
         os_exception_mask_t::process_runtime,
-        m_client_notifier_pipe.write_fd (), &runtime_info);
+        client_notifier ().producer_end (), &runtime_info);
       status == AMD_DBGAPI_STATUS_ERROR_RESTRICTION)
     throw api_error_t (AMD_DBGAPI_STATUS_ERROR_RESTRICTION);
   else if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
@@ -1685,7 +1685,7 @@ process_t::get_info (amd_dbgapi_process_info_t query, size_t value_size,
   switch (query)
     {
     case AMD_DBGAPI_PROCESS_INFO_NOTIFIER:
-      utils::get_info (value_size, value, m_client_notifier_pipe.read_fd ());
+      utils::get_info (value_size, value, client_notifier ().consumer_end ());
       return;
 
     case AMD_DBGAPI_PROCESS_INFO_WATCHPOINT_COUNT:
@@ -1787,7 +1787,7 @@ process_t::enqueue_event (event_t &event)
   event.set_state (event_t::state_t::queued);
 
   /* Notify the client that a new event is available.  */
-  client_notifier_pipe ().mark ();
+  client_notifier ().mark ();
 }
 
 std::pair<std::variant<process_t *, agent_t *, queue_t *>, os_exception_mask_t>
