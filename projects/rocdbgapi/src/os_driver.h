@@ -416,7 +416,8 @@ public:
                   os_exception_mask_t exceptions_cleared) const = 0;
 
   virtual amd_dbgapi_status_t
-  enable_debug (os_exception_mask_t exceptions_reported, file_desc_t notifier,
+  enable_debug (os_exception_mask_t exceptions_reported,
+                amd_dbgapi_notifier_t notifier,
                 os_runtime_info_t *runtime_info)
     = 0;
   virtual amd_dbgapi_status_t disable_debug () = 0;

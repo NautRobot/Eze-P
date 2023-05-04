@@ -102,7 +102,7 @@ public:
 
   amd_dbgapi_status_t
   enable_debug (os_exception_mask_t /* exceptions_reported  */,
-                file_desc_t /* notifier  */,
+                amd_dbgapi_notifier_t /* notifier  */,
                 os_runtime_info_t * /* runtime_info  */) override
   {
     return AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED;
@@ -527,7 +527,7 @@ public:
   kfd_driver_base_t::version_t get_kfd_version () const override final;
 
   amd_dbgapi_status_t enable_debug (os_exception_mask_t exceptions_reported,
-                                    file_desc_t notifier,
+                                    amd_dbgapi_notifier_t notifier,
                                     os_runtime_info_t *runtime_info) override;
 
   amd_dbgapi_status_t disable_debug () override
@@ -716,7 +716,7 @@ kfd_core_driver_t::kfd_queue_snapshot (
 
 amd_dbgapi_status_t
 kfd_core_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
-                                 file_desc_t notifier,
+                                 amd_dbgapi_notifier_t notifier,
                                  os_runtime_info_t *runtime_info)
 {
   TRACE_DRIVER_BEGIN (param_in (exceptions_reported), param_in (notifier),
@@ -808,7 +808,7 @@ public:
                       os_exception_mask_t exceptions_cleared) const override;
 
   amd_dbgapi_status_t enable_debug (os_exception_mask_t exceptions_reported,
-                                    file_desc_t notifier,
+                                    amd_dbgapi_notifier_t notifier,
                                     os_runtime_info_t *runtime_info) override;
   amd_dbgapi_status_t disable_debug () override;
   bool is_debug_enabled () const override { return m_is_debug_enabled; }
@@ -1182,7 +1182,7 @@ kfd_driver_t::kfd_agent_snapshot (kfd_dbg_device_info_entry *agents_infos,
 
 amd_dbgapi_status_t
 kfd_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
-                            file_desc_t notifier,
+                            amd_dbgapi_notifier_t notifier,
                             os_runtime_info_t *runtime_info)
 {
   TRACE_DRIVER_BEGIN (param_in (exceptions_reported), param_in (notifier),
