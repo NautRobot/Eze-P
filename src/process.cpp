@@ -2083,9 +2083,9 @@ process_t::next_pending_event ()
                       == (m_runtime_info.runtime_state
                           != os_runtime_state_t::disabled))
                     fatal_error (
-                      "spurious runtime exception (runtime_state %d->%d)",
-                      m_runtime_info.runtime_state,
-                      runtime_info.runtime_state);
+                      "spurious runtime exception (runtime_state %s->%s)",
+                      to_string (m_runtime_info.runtime_state).c_str (),
+                      to_string (runtime_info.runtime_state).c_str ());
 
                   runtime_enable (runtime_info);
                 }
