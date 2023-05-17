@@ -25,8 +25,6 @@
 #include "process.h"
 #include "utils.h"
 
-#include <dlfcn.h>
-
 #include <cstddef>
 
 namespace amd::dbgapi::detail
@@ -59,16 +57,8 @@ amd_dbgapi_initialize (struct amd_dbgapi_callbacks_s *callbacks)
     process_t::reset_all_ids ();
     detail::is_initialized = true;
 
-    log_verbose (
-      "library info: file_name=\"%s\", build_info=%s",
-      [] ()
-      {
-        Dl_info dl_info{};
-        if (!dladdr (&detail::process_callbacks, &dl_info))
-          return "";
-        return dl_info.dli_fname;
-      }(),
-      AMD_DBGAPI_BUILD_INFO);
+    log_verbose ("library info: file_name=\"%s\", build_info=%s",
+                 utils::get_self_name (), AMD_DBGAPI_BUILD_INFO);
   }
   CATCH (AMD_DBGAPI_STATUS_ERROR_ALREADY_INITIALIZED,
          AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT,

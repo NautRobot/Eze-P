@@ -91,6 +91,9 @@ extern std::string string_printf (const char *format, ...)
 namespace utils
 {
 
+/* Get the filename containing dbgapi's code.  */
+const char *get_self_name ();
+
 template <typename Integral = uint64_t>
 constexpr Integral
 bit_mask (int first, int last)
