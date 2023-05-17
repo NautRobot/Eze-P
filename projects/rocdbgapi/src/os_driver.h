@@ -334,19 +334,19 @@ enum class os_watch_mode_t : uint32_t
   all = 3,     /* Read, write or atomic operations.  */
 };
 
-using os_queue_snapshot_entry_t = kfd_queue_snapshot_entry;
-
-inline os_exception_mask_t
-os_queue_exception_status (os_queue_snapshot_entry_t entry)
+struct os_queue_snapshot_entry_t
 {
-  return static_cast<os_exception_mask_t> (entry.exception_status);
-}
-
-inline os_queue_type_t
-os_queue_type (os_queue_snapshot_entry_t entry)
-{
-  return static_cast<os_queue_type_t> (entry.queue_type);
-}
+  os_queue_id_t queue_id;
+  os_agent_id_t gpu_id;
+  os_queue_type_t queue_type;
+  os_exception_mask_t exception_status;
+  amd_dbgapi_global_address_t ring_base_address;
+  amd_dbgapi_size_t ring_size;
+  amd_dbgapi_global_address_t write_pointer_address;
+  amd_dbgapi_global_address_t read_pointer_address;
+  amd_dbgapi_global_address_t ctx_save_restore_address;
+  amd_dbgapi_size_t ctx_save_restore_area_size;
+};
 
 constexpr os_queue_id_t os_queue_error_mask = KFD_DBG_QUEUE_ERROR_MASK;
 constexpr os_queue_id_t os_queue_invalid_mask = KFD_DBG_QUEUE_INVALID_MASK;
@@ -488,6 +488,7 @@ template <> std::string to_string (os_exception_code_t exception_code);
 template <> std::string to_string (os_exception_mask_t exception_mask);
 template <> std::string to_string (os_process_flags_t flags);
 template <> std::string to_string (os_queue_snapshot_entry_t snapshot);
+template <> std::string to_string (os_queue_type_t queue_type);
 template <> std::string to_string (os_runtime_info_t runtime_info);
 template <> std::string to_string (os_runtime_state_t runtime_state);
 template <> std::string to_string (os_source_id_t source_id);

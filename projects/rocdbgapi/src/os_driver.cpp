@@ -491,8 +491,34 @@ kfd_driver_base_t::queue_snapshot (
   TRACE_DRIVER_BEGIN (param_in (snapshots), param_in (snapshot_count),
                       param_in (queue_count), param_in (exceptions_cleared));
 
-  return kfd_queue_snapshot (snapshots, snapshot_count, queue_count,
-                             exceptions_cleared);
+  std::vector<kfd_queue_snapshot_entry> kfd_queues_entries (snapshot_count);
+  if (amd_dbgapi_status_t status
+      = kfd_queue_snapshot (kfd_queues_entries.data (), snapshot_count,
+                            queue_count, exceptions_cleared);
+      status != AMD_DBGAPI_STATUS_SUCCESS)
+    return status;
+
+  for (size_t i = 0; i < std::min (*queue_count, snapshot_count); ++i)
+    {
+      auto &queue_info = snapshots[i];
+      const kfd_queue_snapshot_entry &entry = kfd_queues_entries[i];
+
+      memset (&queue_info, 0, sizeof (os_queue_snapshot_entry_t));
+
+      queue_info.queue_id = entry.queue_id;
+      queue_info.gpu_id = entry.gpu_id;
+      queue_info.queue_type = static_cast<os_queue_type_t> (entry.queue_type);
+      queue_info.exception_status
+        = static_cast<os_exception_mask_t> (entry.exception_status);
+      queue_info.ring_base_address = entry.ring_base_address;
+      queue_info.write_pointer_address = entry.write_pointer_address;
+      queue_info.read_pointer_address = entry.read_pointer_address;
+      queue_info.ctx_save_restore_address = entry.ctx_save_restore_address;
+      queue_info.ctx_save_restore_area_size = entry.ctx_save_restore_area_size;
+      queue_info.ring_size = entry.ring_size;
+    }
+
+  return AMD_DBGAPI_STATUS_SUCCESS;
 
   TRACE_DRIVER_END (
     make_ref (param_out (snapshots), std::min (snapshot_count, *queue_count)),
@@ -1452,12 +1478,12 @@ kfd_driver_t::kfd_queue_snapshot (kfd_queue_snapshot_entry *snapshots,
     = reinterpret_cast<uint64_t> (snapshots);
   args.queue_snapshot.num_queues = static_cast<uint32_t> (snapshot_count);
   args.queue_snapshot.entry_size
-    = static_cast<uint32_t> (sizeof (os_queue_snapshot_entry_t));
+    = static_cast<uint32_t> (sizeof (kfd_queue_snapshot_entry));
 
   int err = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_GET_QUEUE_SNAPSHOT, &args);
   if (err == -ESRCH)
     return AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED;
-  else if (args.queue_snapshot.entry_size != sizeof (os_queue_snapshot_entry_t)
+  else if (args.queue_snapshot.entry_size != sizeof (kfd_queue_snapshot_entry)
            || err < 0)
     return AMD_DBGAPI_STATUS_ERROR;
 
@@ -1853,6 +1879,22 @@ to_string (os_agent_info_t os_agent_info)
 
 template <>
 std::string
+to_string (kfd_queue_snapshot_entry entry)
+{
+  return string_printf (
+    "{ .exception_status=%#llx, .ring_base_address=%#llx, "
+    ".write_pointer_address=%#llx, .read_pointer_address=%#llx, "
+    ".ctx_save_restore_address=%#llx, .queue_id=%d, "
+    ".gpu_id=%d, .ring_size=%#x, .queue_type=%d, "
+    ".ctx_save_restore_area_size=%#x}",
+    entry.exception_status, entry.ring_base_address,
+    entry.write_pointer_address, entry.read_pointer_address,
+    entry.ctx_save_restore_address, entry.queue_id, entry.gpu_id,
+    entry.ring_size, entry.queue_type, entry.ctx_save_restore_area_size);
+}
+
+template <>
+std::string
 to_string (kfd_dbg_device_info_entry entry)
 {
   return string_printf (
@@ -1928,14 +1970,14 @@ std::string
 to_string (os_queue_snapshot_entry_t snapshot)
 {
   return string_printf (
-    "{ .exception_status=%#llx, .ring_base_address=%#llx, "
-    ".write_pointer_address=%#llx, .read_pointer_address=%#llx, "
-    ".ctx_save_restore_address=%#llx, .queue_id=%d, .gpu_id=%d, "
-    ".ring_size=%d, .queue_type=%d }",
-    snapshot.exception_status, snapshot.ring_base_address,
+    "{ .exception_status=%s, .ring_base_address=%#" PRIx64 ", "
+    ".write_pointer_address=%#" PRIx64 ", .read_pointer_address=%#" PRIx64 ", "
+    ".ctx_save_restore_address=%#" PRIx64 ", .queue_id=%d, .gpu_id=%d, "
+    ".ring_size=%" PRId64 ", .queue_type=%s }",
+    to_string (snapshot.exception_status).c_str (), snapshot.ring_base_address,
     snapshot.write_pointer_address, snapshot.read_pointer_address,
     snapshot.ctx_save_restore_address, snapshot.queue_id, snapshot.gpu_id,
-    snapshot.ring_size, snapshot.queue_type);
+    snapshot.ring_size, to_string (snapshot.queue_type).c_str ());
 }
 
 template <>
@@ -1991,6 +2033,25 @@ to_string (os_process_flags_t flags)
     }
 
   return str;
+}
+
+template <>
+std::string
+to_string (os_queue_type_t queue_type)
+{
+  switch (queue_type)
+    {
+    case os_queue_type_t::compute:
+      return "COMPUTE";
+    case os_queue_type_t::sdma:
+      return "SDMA";
+    case os_queue_type_t::compute_aql:
+      return "AQL";
+    case os_queue_type_t::sdma_xgmi:
+      return "XGMI";
+    }
+  return to_string (make_hex (
+    static_cast<std::underlying_type_t<decltype (queue_type)>> (queue_type)));
 }
 
 } /* namespace amd::dbgapi */
