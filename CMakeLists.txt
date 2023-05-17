@@ -136,7 +136,7 @@ if(API_TRACING)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  target_sources(amd-dbgapi PRIVATE src/os_driver_kfd.cpp)
+  target_sources(amd-dbgapi PRIVATE src/os_driver_kfd.cpp src/utils_linux.cpp)
 
   set(CMAKE_REQUIRED_FLAGS_BKP "${CMAKE_REQUIRED_FLAGS}")
   set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
