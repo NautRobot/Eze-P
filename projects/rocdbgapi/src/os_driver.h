@@ -187,14 +187,19 @@ enum class os_exception_code_t : uint32_t
   process_device_remove = EC_PROCESS_DEVICE_REMOVE,
 };
 
-using os_runtime_info_t = kfd_runtime_info;
-
 enum class os_runtime_state_t : uint32_t
 {
   disabled = DEBUG_RUNTIME_STATE_DISABLED,
   enabled = DEBUG_RUNTIME_STATE_ENABLED,
   enabled_busy = DEBUG_RUNTIME_STATE_ENABLED_BUSY,
   enabled_error = DEBUG_RUNTIME_STATE_ENABLED_ERROR,
+};
+
+struct os_runtime_info_t
+{
+  amd_dbgapi_global_address_t r_debug;
+  os_runtime_state_t runtime_state;
+  bool ttmp_setup;
 };
 
 constexpr bool

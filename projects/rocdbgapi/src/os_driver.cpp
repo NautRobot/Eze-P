@@ -748,7 +748,11 @@ kfd_core_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
   TRACE_DRIVER_BEGIN (param_in (exceptions_reported), param_in (notifier),
                       param_in (runtime_info));
 
-  *runtime_info = m_state->runtime_info;
+  runtime_info->r_debug = m_state->runtime_info.r_debug;
+  runtime_info->runtime_state
+    = static_cast<os_runtime_state_t> (m_state->runtime_info.runtime_state);
+  runtime_info->ttmp_setup = !!m_state->runtime_info.ttmp_setup;
+
   return AMD_DBGAPI_STATUS_SUCCESS;
 
   TRACE_DRIVER_END (make_ref (param_out (runtime_info)));
@@ -1216,10 +1220,12 @@ kfd_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
 
   dbgapi_assert (!is_debug_enabled () && "debug is already enabled");
 
+  kfd_runtime_info os_runtime_info;
+
   kfd_ioctl_dbg_trap_args args{};
   args.enable.exception_mask = static_cast<uint64_t> (exceptions_reported);
-  args.enable.rinfo_ptr = reinterpret_cast<uintptr_t> (runtime_info);
-  args.enable.rinfo_size = sizeof (*runtime_info);
+  args.enable.rinfo_ptr = reinterpret_cast<uintptr_t> (&os_runtime_info);
+  args.enable.rinfo_size = sizeof (kfd_runtime_info);
   args.enable.dbg_fd = notifier;
 
   int err = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_ENABLE, &args);
@@ -1234,6 +1240,12 @@ kfd_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
     return AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT_COMPATIBILITY;
 
   m_is_debug_enabled = true;
+
+  runtime_info->r_debug = os_runtime_info.r_debug;
+  runtime_info->runtime_state
+    = static_cast<os_runtime_state_t> (os_runtime_info.runtime_state);
+  runtime_info->ttmp_setup = !!os_runtime_info.ttmp_setup;
+
   return AMD_DBGAPI_STATUS_SUCCESS;
 
   TRACE_DRIVER_END (make_ref (param_out (runtime_info)));
@@ -1937,9 +1949,8 @@ std::string
 to_string (os_runtime_info_t runtime_info)
 {
   return string_printf (
-    "{ .r_debug=%#llx, .runtime_state=%s, .ttmp_setup=%d }",
-    runtime_info.r_debug,
-    to_cstring (static_cast<os_runtime_state_t> (runtime_info.runtime_state)),
+    "{ .r_debug=%#" PRIx64 ", .runtime_state=%s, .ttmp_setup=%d }",
+    runtime_info.r_debug, to_cstring (runtime_info.runtime_state),
     runtime_info.ttmp_setup);
 }
 
