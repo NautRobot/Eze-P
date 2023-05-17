@@ -1134,7 +1134,7 @@ process_t::update_queues ()
                         queue_info.gpu_id);
               continue;
             }
-          else if ((os_queue_exception_status (queue_info)
+          else if ((queue_info.exception_status
                     & os_exception_mask_t::queue_new)
                    != os_exception_mask_t::none)
             {

@@ -797,7 +797,8 @@ aql_queue_t::update_waves ()
       if (control_stack_begin != control_stack_end)
         {
           log_info ("decoding %s's context save area #%u: "
-                    "ctrl_stk:[0x%llx..0x%llx[, wave_area:[0x%llx..0x%llx[",
+                    "ctrl_stk:[%#" PRIx64 "..%#" PRIx64 "[, "
+                    "wave_area:[%#" PRIx64 "..%#" PRIx64 "[",
                     to_cstring (id ()), xcc_id, control_stack_begin,
                     control_stack_end, wave_area_begin, wave_area_end);
 
@@ -962,7 +963,7 @@ public:
 amd_dbgapi_os_queue_type_t
 unsupported_queue_t::type () const
 {
-  switch (os_queue_type (m_os_queue_info))
+  switch (m_os_queue_info.queue_type)
     {
     case os_queue_type_t::compute:
       return AMD_DBGAPI_OS_QUEUE_TYPE_AMD_PM4;
@@ -1027,7 +1028,7 @@ queue_t::create (std::optional<amd_dbgapi_queue_id_t> queue_id,
                  const agent_t &agent,
                  const os_queue_snapshot_entry_t &os_queue_info)
 {
-  switch (os_queue_type (os_queue_info))
+  switch (os_queue_info.queue_type)
     {
     case os_queue_type_t::compute_aql:
       return agent.process ().create<detail::aql_queue_t> (queue_id, agent,
