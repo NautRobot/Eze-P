@@ -384,6 +384,11 @@ template <> struct is_flag<os_process_flags_t> : std::true_type
 {
 };
 
+union os_exception_info_t
+{
+  os_runtime_info_t runtime_info;
+};
+
 class os_driver_t
 {
 protected:
@@ -442,11 +447,9 @@ public:
                      os_exception_mask_t exceptions_cleared)
     = 0;
 
-  virtual amd_dbgapi_status_t
-  query_exception_info (os_exception_code_t exception,
-                        os_source_id_t os_source_id, void *exception_info,
-                        size_t exception_info_size,
-                        bool clear_exception) const = 0;
+  virtual amd_dbgapi_status_t query_exception_info (
+    os_exception_code_t exception, os_source_id_t os_source_id,
+    os_exception_info_t *os_exception_info, bool clear_exception) const = 0;
 
   virtual amd_dbgapi_status_t
   suspend_queues (os_queue_id_t *queues, size_t queue_count,
