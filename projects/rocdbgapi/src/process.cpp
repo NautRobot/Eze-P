@@ -2068,13 +2068,16 @@ process_t::next_pending_event ()
                 });
 
               /* Retrieve the runtime enable exception info.  */
-              os_runtime_info_t runtime_info;
+              os_exception_info_t os_exception_info;
               amd_dbgapi_status_t status = os_driver ().query_exception_info (
-                os_exception_code_t::process_runtime, {}, &runtime_info,
-                sizeof (runtime_info), true);
+                os_exception_code_t::process_runtime, {}, &os_exception_info,
+                true);
 
               if (status == AMD_DBGAPI_STATUS_SUCCESS)
                 {
+                  const os_runtime_info_t &runtime_info
+                    = os_exception_info.runtime_info;
+
                   /* Check that we have a valid runtime state in the exception
                      info.  There are only two valid state changes:
                      disabled -> !disabled, and !disabled -> disabled.  */

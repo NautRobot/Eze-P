@@ -139,10 +139,11 @@ public:
     return AMD_DBGAPI_STATUS_SUCCESS;
   }
 
-  amd_dbgapi_status_t query_exception_info (
-    os_exception_code_t /* exception  */, os_source_id_t /* os_source_id  */,
-    void * /* exception_info  */, size_t /* exception_info_size  */,
-    bool /* clear_exception  */) const override
+  amd_dbgapi_status_t
+  query_exception_info (os_exception_code_t /* exception */,
+                        os_source_id_t /* os_source_id  */,
+                        os_exception_info_t * /* os_exception_info */,
+                        bool /* clear_exception  */) const override
   {
     return AMD_DBGAPI_STATUS_ERROR;
   }
@@ -858,8 +859,8 @@ public:
 
   amd_dbgapi_status_t
   query_exception_info (os_exception_code_t exception,
-                        os_source_id_t os_source_id, void *exception_info,
-                        size_t exception_info_size,
+                        os_source_id_t os_source_id,
+                        os_exception_info_t *os_exception_info,
                         bool clear_exception) const override;
 
   amd_dbgapi_status_t suspend_queues (os_queue_id_t *queues,
@@ -1375,20 +1376,23 @@ kfd_driver_t::query_debug_event (os_exception_mask_t *exceptions_present,
 amd_dbgapi_status_t
 kfd_driver_t::query_exception_info (os_exception_code_t exception,
                                     os_source_id_t os_source_id,
-                                    void *exception_info,
-                                    size_t exception_info_size,
+                                    os_exception_info_t *os_exception_info,
                                     bool clear_exception) const
 {
-  TRACE_DRIVER_BEGIN (
-    param_in (exception), param_in (os_source_id), param_in (exception_info),
-    param_in (exception_info_size), param_in (clear_exception));
+  TRACE_DRIVER_BEGIN (param_in (exception), param_in (os_source_id),
+                      param_in (os_exception_info),
+                      param_in (clear_exception));
 
   dbgapi_assert (is_debug_enabled () && "debug is not enabled");
 
+  /* Curently, dbgapi's core can only query process_runtime exception info.  */
+  dbgapi_assert (exception == os_exception_code_t::process_runtime);
+  kfd_runtime_info runtime_info;
+
   kfd_ioctl_dbg_trap_args args{};
   args.query_exception_info.info_ptr
-    = reinterpret_cast<uintptr_t> (exception_info);
-  args.query_exception_info.info_size = exception_info_size;
+    = reinterpret_cast<uintptr_t> (&runtime_info);
+  args.query_exception_info.info_size = sizeof (kfd_runtime_info);
   args.query_exception_info.source_id = os_source_id.raw;
   args.query_exception_info.exception_code = static_cast<uint32_t> (exception);
   args.query_exception_info.clear_exception = clear_exception ? 1 : 0;
@@ -1399,11 +1403,17 @@ kfd_driver_t::query_exception_info (os_exception_code_t exception,
   else if (err < 0)
     return AMD_DBGAPI_STATUS_ERROR;
 
-  return exception_info_size > args.query_exception_info.info_size
-           ? AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT_COMPATIBILITY
-           : AMD_DBGAPI_STATUS_SUCCESS;
+  if (sizeof (kfd_runtime_info) > args.query_exception_info.info_size)
+    return AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT_COMPATIBILITY;
 
-  TRACE_DRIVER_END (make_query_ref (exception, param_out (exception_info)));
+  os_exception_info->runtime_info.r_debug = runtime_info.r_debug;
+  os_exception_info->runtime_info.runtime_state
+    = static_cast<os_runtime_state_t> (runtime_info.runtime_state);
+  os_exception_info->runtime_info.ttmp_setup = !!runtime_info.ttmp_setup;
+
+  return AMD_DBGAPI_STATUS_SUCCESS;
+
+  TRACE_DRIVER_END (make_query_ref (exception, param_out (os_exception_info)));
 }
 
 amd_dbgapi_status_t
