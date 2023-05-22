@@ -845,6 +845,12 @@ constexpr size_t GiB = KiB * KiB * KiB;
 
 extern std::string human_readable_size (size_t size);
 
+template <typename T>
+struct type_identity
+{
+  using type = T;
+};
+
 } /* namespace utils */
 
 template <typename T> struct is_flag : std::false_type

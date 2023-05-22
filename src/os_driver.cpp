@@ -142,6 +142,68 @@ kfd_exception_code (os_exception_code_t ec_code)
   dbgapi_assert_not_reached ("Unknown exception code");
 }
 
+static constexpr std::optional<os_exception_code_t>
+os_exception_code (kfd_dbg_trap_exception_code kfd_code)
+{
+  switch (kfd_code)
+    {
+    case EC_NONE:
+      return os_exception_code_t::none;
+    case EC_QUEUE_WAVE_ABORT:
+      return os_exception_code_t::queue_wave_abort;
+    case EC_QUEUE_WAVE_TRAP:
+      return os_exception_code_t::queue_wave_trap;
+    case EC_QUEUE_WAVE_MATH_ERROR:
+      return os_exception_code_t::queue_wave_math_error;
+    case EC_QUEUE_WAVE_ILLEGAL_INSTRUCTION:
+      return os_exception_code_t::queue_wave_illegal_instruction;
+    case EC_QUEUE_WAVE_MEMORY_VIOLATION:
+      return os_exception_code_t::queue_wave_memory_violation;
+    case EC_QUEUE_WAVE_APERTURE_VIOLATION:
+      return os_exception_code_t::queue_wave_address_error;
+    case EC_QUEUE_PACKET_DISPATCH_DIM_INVALID:
+      return os_exception_code_t::queue_packet_dispatch_dim_invalid;
+    case EC_QUEUE_PACKET_DISPATCH_GROUP_SEGMENT_SIZE_INVALID:
+      return os_exception_code_t::
+        queue_packet_dispatch_group_segment_size_invalid;
+    case EC_QUEUE_PACKET_DISPATCH_CODE_INVALID:
+      return os_exception_code_t::queue_packet_dispatch_code_invalid;
+    case EC_QUEUE_PACKET_UNSUPPORTED:
+      return os_exception_code_t::queue_packet_unsupported;
+    case EC_QUEUE_PACKET_DISPATCH_WORK_GROUP_SIZE_INVALID:
+      return os_exception_code_t::
+        queue_packet_dispatch_work_group_size_invalid;
+    case EC_QUEUE_PACKET_DISPATCH_REGISTER_INVALID:
+      return os_exception_code_t::queue_packet_dispatch_register_invalid;
+    case EC_QUEUE_PACKET_VENDOR_UNSUPPORTED:
+      return os_exception_code_t::queue_packet_vendor_unsupported;
+    case EC_QUEUE_PREEMPTION_ERROR:
+      return os_exception_code_t::queue_preemption_error;
+    case EC_QUEUE_NEW:
+      return os_exception_code_t::queue_new;
+    case EC_DEVICE_QUEUE_DELETE:
+      return os_exception_code_t::device_queue_delete;
+    case EC_DEVICE_MEMORY_VIOLATION:
+      return os_exception_code_t::device_memory_violation;
+    case EC_DEVICE_RAS_ERROR:
+      return os_exception_code_t::device_ras_error;
+    case EC_DEVICE_FATAL_HALT:
+      return os_exception_code_t::device_fatal_halt;
+    case EC_DEVICE_NEW:
+      return os_exception_code_t::device_new;
+    case EC_PROCESS_RUNTIME:
+      return os_exception_code_t::process_runtime;
+    case EC_PROCESS_DEVICE_REMOVE:
+      return os_exception_code_t::process_device_remove;
+
+    case EC_QUEUE_PACKET_RESERVED:
+      [[fallthrough]];
+    case EC_MAX:
+      return {};
+    }
+  return {};
+}
+
 /* Convert a runtime state returned by KFD to os_runtime_state_t.  */
 
 static constexpr os_runtime_state_t
@@ -161,6 +223,71 @@ os_runtime_state (decltype (kfd_runtime_info::runtime_state) state)
 
   return os_runtime_state_t::disabled;
 }
+
+/* Convert a KFD exception mask to os_exception_mask_t.  */
+
+static constexpr os_exception_mask_t
+kfd_to_os_exception_mask (__u64 kfd_mask)
+{
+  os_exception_mask_t mask{};
+
+  if (kfd_mask == 0)
+    return mask;
+
+  while (kfd_mask != 0)
+    {
+      __u64 one_bit = kfd_mask ^ (kfd_mask & (kfd_mask - 1));
+
+      auto code = os_exception_code (
+        excp_mask_to_excp_code<kfd_dbg_trap_exception_code> (one_bit));
+
+      if (code.has_value ())
+        mask |= os_exception_mask (code.value ());
+      else
+        warning ("Unknown KFD exception code %" PRIx64,
+                 static_cast<uint64_t> (one_bit));
+
+      kfd_mask ^= one_bit;
+    }
+
+  return mask;
+}
+
+/* Convert a os_exception_mask_t to a KFD excepton mask.  */
+
+static constexpr __u64
+kfd_exception_mask (os_exception_mask_t mask)
+{
+  __u64 kfd_mask = 0;
+  if (mask == os_exception_mask_t::none)
+    return kfd_mask;
+
+  while (mask != os_exception_mask_t::none)
+    {
+      os_exception_mask_t one_bit = mask ^ (mask & (mask - 1));
+
+      kfd_mask |= KFD_EC_MASK (kfd_exception_code (
+        excp_mask_to_excp_code<os_exception_code_t, os_exception_mask_t> (
+          one_bit)));
+      mask ^= one_bit;
+    }
+
+  return kfd_mask;
+}
+
+/* Sanity check: ensure that we agree with kfd_ioctl.h.  */
+
+/* KFD counts EC_QUEUE_PACKET_RESERVED in KFD_EC_MASK_QUEUE, which is not
+   a valid exception code ID for dbgapi.  */
+static_assert (kfd_exception_mask (os_queue_exception_mask)
+               == (KFD_EC_MASK_QUEUE
+                   & ~KFD_EC_MASK (EC_QUEUE_PACKET_RESERVED)));
+
+static_assert (kfd_exception_mask (os_agent_exception_mask)
+               == KFD_EC_MASK_DEVICE);
+
+static_assert (kfd_exception_mask (os_process_exception_mask)
+               == KFD_EC_MASK_PROCESS);
 
 /* OS driver class that implements no access that can be used if there is no
    process.  */
@@ -612,7 +739,7 @@ kfd_driver_base_t::queue_snapshot (
       queue_info.gpu_id = entry.gpu_id;
       queue_info.queue_type = os_queue_type (entry.queue_type);
       queue_info.exception_status
-        = static_cast<os_exception_mask_t> (entry.exception_status);
+        = kfd_to_os_exception_mask (entry.exception_status);
       queue_info.ring_base_address = entry.ring_base_address;
       queue_info.write_pointer_address = entry.write_pointer_address;
       queue_info.read_pointer_address = entry.read_pointer_address;
@@ -808,7 +935,7 @@ kfd_core_driver_t::kfd_agent_snapshot (
     {
       agents[i] = m_state->agents[i];
       m_state->agents[i].exception_status
-        &= ~static_cast<uint64_t> (exceptions_cleared);
+        &= ~kfd_exception_mask (exceptions_cleared);
     }
   *agent_count = m_state->agents.size ();
 
@@ -832,7 +959,7 @@ kfd_core_driver_t::kfd_queue_snapshot (
     {
       queues[i] = m_state->queues[i];
       m_state->queues[i].exception_status
-        &= ~static_cast<uint64_t> (exceptions_cleared);
+        &= ~kfd_exception_mask (exceptions_cleared);
     }
   *queue_count = m_state->queues.size ();
 
@@ -1289,7 +1416,7 @@ kfd_driver_t::kfd_agent_snapshot (kfd_dbg_device_info_entry *agents_infos,
 
   kfd_ioctl_dbg_trap_args args{};
   args.device_snapshot.exception_mask
-    = static_cast<uint64_t> (exceptions_cleared);
+    = kfd_exception_mask (exceptions_cleared);
   args.device_snapshot.snapshot_buf_ptr
     = reinterpret_cast<uint64_t> (agents_infos);
   args.device_snapshot.num_devices = static_cast<uint32_t> (*agent_count);
@@ -1326,7 +1453,7 @@ kfd_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
   kfd_runtime_info os_runtime_info;
 
   kfd_ioctl_dbg_trap_args args{};
-  args.enable.exception_mask = static_cast<uint64_t> (exceptions_reported);
+  args.enable.exception_mask = kfd_exception_mask (exceptions_reported);
   args.enable.rinfo_ptr = reinterpret_cast<uintptr_t> (&os_runtime_info);
   args.enable.rinfo_size = sizeof (kfd_runtime_info);
   args.enable.dbg_fd = notifier;
@@ -1387,7 +1514,7 @@ kfd_driver_t::set_exceptions_reported (
 
   kfd_ioctl_dbg_trap_args args{};
   args.set_exceptions_enabled.exception_mask
-    = static_cast<uint64_t> (exceptions_reported);
+    = kfd_exception_mask (exceptions_reported);
 
   int err
     = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_SET_EXCEPTIONS_ENABLED, &args);
@@ -1412,7 +1539,7 @@ kfd_driver_t::send_exceptions (os_exception_mask_t exceptions,
   dbgapi_assert (is_debug_enabled () && "debug is not enabled");
 
   kfd_ioctl_dbg_trap_args args{};
-  args.send_runtime_event.exception_mask = static_cast<uint64_t> (exceptions);
+  args.send_runtime_event.exception_mask = kfd_exception_mask (exceptions);
   args.send_runtime_event.gpu_id = agent_id.has_value () ? *agent_id : -1;
   args.send_runtime_event.queue_id = queue_id.has_value () ? *queue_id : -1;
 
@@ -1448,7 +1575,7 @@ kfd_driver_t::query_debug_event (os_exception_mask_t *exceptions_present,
 
   kfd_ioctl_dbg_trap_args args{};
   args.query_debug_event.exception_mask
-    = static_cast<uint64_t> (exceptions_cleared);
+    = kfd_exception_mask (exceptions_cleared);
 
   int err = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_QUERY_DEBUG_EVENT, &args);
   if (err == -ESRCH)
@@ -1464,7 +1591,7 @@ kfd_driver_t::query_debug_event (os_exception_mask_t *exceptions_present,
     return AMD_DBGAPI_STATUS_ERROR;
 
   *exceptions_present
-    = static_cast<os_exception_mask_t> (args.query_debug_event.exception_mask);
+    = kfd_to_os_exception_mask (args.query_debug_event.exception_mask);
   *os_queue_id = args.query_debug_event.queue_id;
   *os_agent_id = args.query_debug_event.gpu_id;
 
@@ -1531,8 +1658,7 @@ kfd_driver_t::suspend_queues (os_queue_id_t *queues, size_t queue_count,
   dbgapi_assert (queue_count <= std::numeric_limits<uint32_t>::max ());
 
   kfd_ioctl_dbg_trap_args args{};
-  args.suspend_queues.exception_mask
-    = static_cast<uint64_t> (exceptions_cleared);
+  args.suspend_queues.exception_mask = kfd_exception_mask (exceptions_cleared);
   args.suspend_queues.queue_array_ptr = reinterpret_cast<uint64_t> (queues);
   args.suspend_queues.num_queues = static_cast<uint32_t> (queue_count);
   args.suspend_queues.grace_period = 0;
@@ -1596,8 +1722,7 @@ kfd_driver_t::kfd_queue_snapshot (kfd_queue_snapshot_entry *snapshots,
     }
 
   kfd_ioctl_dbg_trap_args args{};
-  args.queue_snapshot.exception_mask
-    = static_cast<uint64_t> (exceptions_cleared);
+  args.queue_snapshot.exception_mask = kfd_exception_mask (exceptions_cleared);
   args.queue_snapshot.snapshot_buf_ptr
     = reinterpret_cast<uint64_t> (snapshots);
   args.queue_snapshot.num_queues = static_cast<uint32_t> (snapshot_count);

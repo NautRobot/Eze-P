@@ -224,60 +224,109 @@ operator!= (os_runtime_state_t lhs,
   return rhs != lhs;
 }
 
+constexpr auto
+ec_mask (os_exception_code_t c)
+{
+  using underlying_t = typename std::underlying_type_t<os_exception_code_t>;
+  return 1ull << (static_cast<underlying_t> (c) - 1);
+}
+
 enum class os_exception_mask_t : uint64_t
 {
   none = 0,
 
   /* per queue exceptions  */
-  queue_wave_abort = KFD_EC_MASK (EC_QUEUE_WAVE_ABORT),
-  queue_wave_trap = KFD_EC_MASK (EC_QUEUE_WAVE_TRAP),
-  queue_wave_math_error = KFD_EC_MASK (EC_QUEUE_WAVE_MATH_ERROR),
+  queue_wave_abort = ec_mask (os_exception_code_t::queue_wave_abort),
+  queue_wave_trap = ec_mask (os_exception_code_t::queue_wave_trap),
+  queue_wave_math_error = ec_mask (os_exception_code_t::queue_wave_math_error),
   queue_wave_illegal_instruction
-  = KFD_EC_MASK (EC_QUEUE_WAVE_ILLEGAL_INSTRUCTION),
-  queue_wave_memory_violation = KFD_EC_MASK (EC_QUEUE_WAVE_MEMORY_VIOLATION),
+  = ec_mask (os_exception_code_t::queue_wave_illegal_instruction),
+  queue_wave_memory_violation
+  = ec_mask (os_exception_code_t::queue_wave_memory_violation),
   queue_wave_address_error
-  = KFD_EC_MASK (/* FIXME: a future change to the ioctl will rename
-       APERTURE_VIOLATION -> ADDRESS_ERROR.  */
-                 EC_QUEUE_WAVE_APERTURE_VIOLATION),
+  = ec_mask (os_exception_code_t::queue_wave_address_error),
   queue_packet_dispatch_dim_invalid
-  = KFD_EC_MASK (EC_QUEUE_PACKET_DISPATCH_DIM_INVALID),
-  queue_packet_dispatch_group_segment_size_invalid
-  = KFD_EC_MASK (EC_QUEUE_PACKET_DISPATCH_GROUP_SEGMENT_SIZE_INVALID),
+  = ec_mask (os_exception_code_t::queue_packet_dispatch_dim_invalid),
+  queue_packet_dispatch_group_segment_size_invalid = ec_mask (
+    os_exception_code_t::queue_packet_dispatch_group_segment_size_invalid),
   queue_packet_dispatch_code_invalid
-  = KFD_EC_MASK (EC_QUEUE_PACKET_DISPATCH_CODE_INVALID),
-  queue_packet_unsupported = KFD_EC_MASK (EC_QUEUE_PACKET_UNSUPPORTED),
-  queue_packet_dispatch_work_group_size_invalid
-  = KFD_EC_MASK (EC_QUEUE_PACKET_DISPATCH_WORK_GROUP_SIZE_INVALID),
+  = ec_mask (os_exception_code_t::queue_packet_dispatch_code_invalid),
+  queue_packet_unsupported
+  = ec_mask (os_exception_code_t::queue_packet_unsupported),
+  queue_packet_dispatch_work_group_size_invalid = ec_mask (
+    os_exception_code_t::queue_packet_dispatch_work_group_size_invalid),
   queue_packet_dispatch_register_invalid
-  = KFD_EC_MASK (EC_QUEUE_PACKET_DISPATCH_REGISTER_INVALID),
+  = ec_mask (os_exception_code_t::queue_packet_dispatch_register_invalid),
   queue_packet_vendor_unsupported
-  = KFD_EC_MASK (EC_QUEUE_PACKET_VENDOR_UNSUPPORTED),
-  queue_preemption_error = KFD_EC_MASK (EC_QUEUE_PREEMPTION_ERROR),
-  queue_new = KFD_EC_MASK (EC_QUEUE_NEW),
+  = ec_mask (os_exception_code_t::queue_packet_vendor_unsupported),
+  queue_preemption_error
+  = ec_mask (os_exception_code_t::queue_preemption_error),
+  queue_new = ec_mask (os_exception_code_t::queue_new),
 
   /* per device exceptions  */
-  device_queue_delete = KFD_EC_MASK (EC_DEVICE_QUEUE_DELETE),
-  device_memory_violation = KFD_EC_MASK (EC_DEVICE_MEMORY_VIOLATION),
-  device_ras_error = KFD_EC_MASK (EC_DEVICE_RAS_ERROR),
-  device_fatal_halt = KFD_EC_MASK (EC_DEVICE_FATAL_HALT),
-  device_new = KFD_EC_MASK (EC_DEVICE_NEW),
+  device_queue_delete = ec_mask (os_exception_code_t::device_queue_delete),
+  device_memory_violation
+  = ec_mask (os_exception_code_t::device_memory_violation),
+  device_ras_error = ec_mask (os_exception_code_t::device_ras_error),
+  device_fatal_halt = ec_mask (os_exception_code_t::device_fatal_halt),
+  device_new = ec_mask (os_exception_code_t::device_new),
 
   /* per process exceptions  */
-  process_runtime = KFD_EC_MASK (EC_PROCESS_RUNTIME),
-  process_device_remove = KFD_EC_MASK (EC_PROCESS_DEVICE_REMOVE),
+  process_runtime = ec_mask (os_exception_code_t::process_runtime),
+  process_device_remove = ec_mask (os_exception_code_t::process_device_remove),
 };
+
+
+/* Helper function to convert an exception mask with only 1 bit set to an
+   exception code.  This is written as templated code as driver backends
+   might use this helper as well.  */
+
+template <typename Code, typename Mask>
+static inline constexpr Code
+excp_mask_to_excp_code (Mask m)
+{
+  using scalar_mask_t
+    = typename std::conditional_t<std::is_enum_v<Mask>,
+                                  std::underlying_type<Mask>,
+                                  utils::type_identity<Mask>>::type;
+
+  const auto imask{ static_cast<scalar_mask_t> (m) };
+  dbgapi_assert (utils::is_power_of_two (imask));
+
+  return static_cast<Code> (utils::trailing_zeroes_count (imask) + 1);
+}
+
 template <> struct is_flag<os_exception_mask_t> : std::true_type
 {
 };
 
 static constexpr os_exception_mask_t os_queue_exception_mask
-  = os_exception_mask_t{ KFD_EC_MASK_QUEUE };
+  = os_exception_mask_t::queue_wave_abort
+    | os_exception_mask_t::queue_wave_trap
+    | os_exception_mask_t::queue_wave_math_error
+    | os_exception_mask_t::queue_wave_illegal_instruction
+    | os_exception_mask_t::queue_wave_memory_violation
+    | os_exception_mask_t::queue_wave_address_error
+    | os_exception_mask_t::queue_packet_dispatch_dim_invalid
+    | os_exception_mask_t::queue_packet_dispatch_group_segment_size_invalid
+    | os_exception_mask_t::queue_packet_dispatch_code_invalid
+    | os_exception_mask_t::queue_packet_unsupported
+    | os_exception_mask_t::queue_packet_dispatch_work_group_size_invalid
+    | os_exception_mask_t::queue_packet_dispatch_register_invalid
+    | os_exception_mask_t::queue_packet_vendor_unsupported
+    | os_exception_mask_t::queue_preemption_error
+    | os_exception_mask_t::queue_new;
 
 static constexpr os_exception_mask_t os_agent_exception_mask
-  = os_exception_mask_t{ KFD_EC_MASK_DEVICE };
+  = os_exception_mask_t::device_queue_delete
+    | os_exception_mask_t::device_ras_error
+    | os_exception_mask_t::device_fatal_halt
+    | os_exception_mask_t::device_memory_violation
+    | os_exception_mask_t::device_new;
 
 static constexpr os_exception_mask_t os_process_exception_mask
-  = os_exception_mask_t{ KFD_EC_MASK_PROCESS };
+  = os_exception_mask_t::process_runtime
+    | os_exception_mask_t::process_device_remove;
 
 constexpr os_exception_mask_t
 os_exception_mask (os_exception_code_t os_exception_code)
@@ -285,8 +334,7 @@ os_exception_mask (os_exception_code_t os_exception_code)
   if (os_exception_code == os_exception_code_t::none)
     return os_exception_mask_t::none;
 
-  return os_exception_mask_t{ KFD_EC_MASK (
-    static_cast<int> (os_exception_code)) };
+  return os_exception_mask_t{ ec_mask (os_exception_code) };
 }
 
 /* Helper function to build an os_exception_mask_t from a list of
