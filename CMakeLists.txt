@@ -77,8 +77,28 @@ configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/amd-dbgapi.pc.in
   ${CMAKE_CURRENT_BINARY_DIR}/share/pkgconfig/amd-dbgapi.pc @ONLY)
 
-file(GLOB SOURCES "src/*.cpp")
-add_library(amd-dbgapi SHARED ${SOURCES})
+add_library(amd-dbgapi SHARED
+  src/agent.cpp
+  src/architecture.cpp
+  src/callbacks.cpp
+  src/code_object.cpp
+  src/debug.cpp
+  src/dispatch.cpp
+  src/displaced_stepping.cpp
+  src/event.cpp
+  src/exception.cpp
+  src/initialization.cpp
+  src/logging.cpp
+  src/memory.cpp
+  src/os_driver.cpp
+  src/process.cpp
+  src/queue.cpp
+  src/register.cpp
+  src/utils.cpp
+  src/versioning.cpp
+  src/watchpoint.cpp
+  src/wave.cpp
+  src/workgroup.cpp)
 
 set_target_properties(amd-dbgapi PROPERTIES
   CXX_STANDARD 17
