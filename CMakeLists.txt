@@ -134,6 +134,8 @@ if(API_TRACING)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_sources(amd-dbgapi PRIVATE src/os_driver_kfd.cpp)
+
   set(CMAKE_REQUIRED_FLAGS_BKP "${CMAKE_REQUIRED_FLAGS}")
   set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
   # For some platforms (PPC64), linux/types.h uses L64, but this code assumes
@@ -160,6 +162,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     endif()
   endif()
   set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS_BKP}")
+else()
+  message(FATAL_ERROR "Platform ${CMAKE_SYSTEM_NAME} is not supported")
 endif()
 
 find_package(amd_comgr REQUIRED CONFIG
