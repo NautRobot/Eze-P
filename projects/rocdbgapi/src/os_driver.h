@@ -533,6 +533,187 @@ public:
                               const void *write, size_t *size) const = 0;
 };
 
+/* OS driver class that implements no access that can be used if there is no
+   process.  */
+
+class null_driver_t : public os_driver_t
+{
+public:
+  null_driver_t (std::optional<amd_dbgapi_os_process_id_t> os_pid = {})
+    : os_driver_t (os_pid)
+  {
+  }
+  ~null_driver_t () override = default;
+
+  /* Disable copies.  */
+  null_driver_t (const null_driver_t &) = delete;
+  null_driver_t &operator= (const null_driver_t &) = delete;
+
+  bool is_valid () const override { return true; }
+
+  amd_dbgapi_status_t check_version () const override
+  {
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  amd_dbgapi_status_t
+  create_core_state_note (const os_runtime_info_t & /* runtime_info  */,
+                          amd_dbgapi_core_state_data_t *data) const override
+  {
+    memset (data, 0, sizeof (amd_dbgapi_core_state_data_t));
+    return AMD_DBGAPI_STATUS_ERROR_NOT_SUPPORTED;
+  }
+
+  amd_dbgapi_status_t
+  agent_snapshot (os_agent_info_t * /* snapshots  */,
+                  size_t /* snapshot_count  */, size_t *agent_count,
+                  os_exception_mask_t /* exceptions_cleared  */) const override
+  {
+    *agent_count = 0;
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  amd_dbgapi_status_t
+  enable_debug (os_exception_mask_t /* exceptions_reported  */,
+                amd_dbgapi_notifier_t /* notifier  */,
+                os_runtime_info_t * /* runtime_info  */) override
+  {
+    return AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED;
+  }
+
+  amd_dbgapi_status_t disable_debug () override
+  {
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  bool is_debug_enabled () const override { return false; }
+
+  amd_dbgapi_status_t set_exceptions_reported (
+    os_exception_mask_t /* exceptions_reported  */) const override
+  {
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  amd_dbgapi_status_t
+  send_exceptions (os_exception_mask_t /* exceptions  */,
+                   std::optional<os_agent_id_t> /* agent_id  */,
+                   std::optional<os_queue_id_t> /* queue_id  */) const override
+  {
+    return AMD_DBGAPI_STATUS_ERROR;
+  }
+
+  amd_dbgapi_status_t
+  query_debug_event (os_exception_mask_t *exceptions_present,
+                     os_queue_id_t *os_queue_id, os_agent_id_t *os_agent_id,
+                     os_exception_mask_t /* exceptions_cleared  */) override
+  {
+    *exceptions_present = os_exception_mask_t::none;
+    *os_queue_id = *os_agent_id = 0;
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  amd_dbgapi_status_t
+  query_exception_info (os_exception_code_t /* exception */,
+                        os_source_id_t /* os_source_id  */,
+                        os_exception_info_t * /* os_exception_info */,
+                        bool /* clear_exception  */) const override
+  {
+    return AMD_DBGAPI_STATUS_ERROR;
+  }
+
+  amd_dbgapi_status_t
+  suspend_queues (const os_queue_id_t * /* queues  */, size_t queue_count,
+                  os_exception_mask_t /* exceptions_cleared  */,
+                  size_t *suspended_count,
+                  os_queue_state_t * /* queue_states  */) const override
+  {
+    dbgapi_assert (suspended_count != nullptr);
+
+    if (queue_count > 0)
+      fatal_error (
+        "should not call this, null_driver does not have any queues");
+
+    *suspended_count = 0;
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  amd_dbgapi_status_t
+  resume_queues (const os_queue_id_t * /* queues  */, size_t queue_count,
+                 size_t *resumed_count,
+                 os_queue_state_t * /* queue_states  */) const override
+  {
+    dbgapi_assert (resumed_count != nullptr);
+
+    if (queue_count > 0)
+      fatal_error (
+        "should not call this, null_driver does not have any queues");
+
+    *resumed_count = 0;
+
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  amd_dbgapi_status_t
+  queue_snapshot (os_queue_snapshot_entry_t * /* snapshots  */,
+                  size_t /* snapshot_count  */, size_t *queue_count,
+                  os_exception_mask_t /* exceptions_cleared  */) const override
+  {
+    *queue_count = 0;
+    return AMD_DBGAPI_STATUS_SUCCESS;
+  }
+
+  amd_dbgapi_status_t
+  set_address_watch (os_agent_id_t /* os_agent_id  */,
+                     amd_dbgapi_global_address_t /* address  */,
+                     amd_dbgapi_global_address_t /* mask  */,
+                     os_watch_mode_t /* os_watch_mode  */,
+                     os_watch_id_t * /* os_watch_id  */) const override
+  {
+    return AMD_DBGAPI_STATUS_ERROR_NOT_SUPPORTED;
+  }
+
+  amd_dbgapi_status_t
+  clear_address_watch (os_agent_id_t /* os_agent_id  */,
+                       os_watch_id_t /* os_watch_id  */) const override
+  {
+    fatal_error (
+      "should not call this, null_driver does not support watchpoints");
+  }
+
+  amd_dbgapi_status_t
+  set_wave_launch_mode (os_wave_launch_mode_t /* mode  */) const override
+  {
+    return AMD_DBGAPI_STATUS_ERROR;
+  }
+
+  amd_dbgapi_status_t set_wave_launch_trap_override (
+    os_wave_launch_trap_override_t /* override  */,
+    os_wave_launch_trap_mask_t /* trap_mask  */,
+    os_wave_launch_trap_mask_t /* requested_bits  */,
+    os_wave_launch_trap_mask_t * /* previous_mask  */,
+    os_wave_launch_trap_mask_t * /* supported_mask  */) const override
+  {
+    return AMD_DBGAPI_STATUS_ERROR;
+  }
+
+  amd_dbgapi_status_t
+  set_process_flags (os_process_flags_t /* flags  */) const override
+  {
+    return AMD_DBGAPI_STATUS_ERROR_NOT_SUPPORTED;
+  }
+
+  amd_dbgapi_status_t
+  xfer_global_memory_partial (amd_dbgapi_global_address_t /* address  */,
+                              void *read, const void *write,
+                              size_t * /* size  */) const override
+  {
+    dbgapi_assert (!read != !write && "either read or write buffer");
+    /* Suppress warnings in release builds.  */
+    [] (auto &&...) {}(read, write);
+    return AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS;
+  }
+};
+
 template <> std::string to_string (os_agent_info_t os_agent_info);
 template <> std::string to_string (os_exception_code_t exception_code);
 template <> std::string to_string (os_exception_mask_t exception_mask);
