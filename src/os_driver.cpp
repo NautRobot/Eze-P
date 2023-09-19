@@ -60,6 +60,26 @@ using namespace std::string_literals;
 namespace amd::dbgapi
 {
 
+/* Convert a KFD queue type to a os_queue_type_t.  */
+
+static constexpr os_queue_type_t
+os_queue_type (decltype (kfd_queue_snapshot_entry::queue_type) kfd_type)
+{
+  switch (kfd_type)
+    {
+    case KFD_IOC_QUEUE_TYPE_COMPUTE:
+      return os_queue_type_t::compute;
+    case KFD_IOC_QUEUE_TYPE_SDMA:
+      return os_queue_type_t::sdma;
+    case KFD_IOC_QUEUE_TYPE_COMPUTE_AQL:
+      return os_queue_type_t::compute_aql;
+    case KFD_IOC_QUEUE_TYPE_SDMA_XGMI:
+      return os_queue_type_t::sdma_xgmi;
+    }
+
+  return os_queue_type_t::unknown;
+}
+
 /* OS driver class that implements no access that can be used if there is no
    process.  */
 
@@ -504,11 +524,11 @@ kfd_driver_base_t::queue_snapshot (
       auto &queue_info = snapshots[i];
       const kfd_queue_snapshot_entry &entry = kfd_queues_entries[i];
 
-      memset (&queue_info, 0, sizeof (os_queue_snapshot_entry_t));
+      queue_info = {};
 
       queue_info.queue_id = entry.queue_id;
       queue_info.gpu_id = entry.gpu_id;
-      queue_info.queue_type = static_cast<os_queue_type_t> (entry.queue_type);
+      queue_info.queue_type = os_queue_type (entry.queue_type);
       queue_info.exception_status
         = static_cast<os_exception_mask_t> (entry.exception_status);
       queue_info.ring_base_address = entry.ring_base_address;
@@ -2070,6 +2090,8 @@ to_string (os_queue_type_t queue_type)
       return "AQL";
     case os_queue_type_t::sdma_xgmi:
       return "XGMI";
+    case os_queue_type_t::unknown:
+      return "UNKNOWN";
     }
   return to_string (make_hex (
     static_cast<std::underlying_type_t<decltype (queue_type)>> (queue_type)));

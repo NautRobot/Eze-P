@@ -135,10 +135,11 @@ using os_watch_id_t = uint32_t;
 
 enum class os_queue_type_t : uint32_t
 {
-  compute = KFD_IOC_QUEUE_TYPE_COMPUTE,
-  sdma = KFD_IOC_QUEUE_TYPE_SDMA,
-  compute_aql = KFD_IOC_QUEUE_TYPE_COMPUTE_AQL,
-  sdma_xgmi = KFD_IOC_QUEUE_TYPE_SDMA_XGMI
+  unknown,
+  compute,
+  sdma,
+  compute_aql,
+  sdma_xgmi,
 };
 
 union os_source_id_t
@@ -343,7 +344,7 @@ struct os_queue_snapshot_entry_t
 {
   os_queue_id_t queue_id;
   os_agent_id_t gpu_id;
-  os_queue_type_t queue_type;
+  os_queue_type_t queue_type{ os_queue_type_t::unknown };
   os_exception_mask_t exception_status;
   amd_dbgapi_global_address_t ring_base_address;
   amd_dbgapi_size_t ring_size;
