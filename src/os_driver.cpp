@@ -289,6 +289,23 @@ static_assert (kfd_exception_mask (os_agent_exception_mask)
 static_assert (kfd_exception_mask (os_process_exception_mask)
                == KFD_EC_MASK_PROCESS);
 
+/* Convert a os_wave_launch_trap_override_t to a KFD wave launch override
+   mode.  */
+
+static constexpr auto
+kfd_wave_launch_trap_override (os_wave_launch_trap_override_t o)
+{
+  switch (o)
+    {
+    case os_wave_launch_trap_override_t::apply:
+      return KFD_DBG_TRAP_OVERRIDE_OR;
+    case os_wave_launch_trap_override_t::replace:
+      return KFD_DBG_TRAP_OVERRIDE_REPLACE;
+    }
+
+  dbgapi_assert_not_reached ("Unknown wave launch trap override");
+}
+
 /* OS driver class that implements no access that can be used if there is no
    process.  */
 
@@ -1832,8 +1849,7 @@ kfd_driver_t::set_wave_launch_trap_override (
                       param_in (previous_value), param_in (supported_mask));
 
   kfd_ioctl_dbg_trap_args args{};
-  args.launch_override.override_mode
-    = static_cast<std::underlying_type_t<decltype (override)>> (override);
+  args.launch_override.override_mode = kfd_wave_launch_trap_override (override);
   args.launch_override.enable_mask
     = static_cast<std::underlying_type_t<decltype (value)>> (value);
   args.launch_override.support_request_mask
