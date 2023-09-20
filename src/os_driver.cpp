@@ -80,6 +80,68 @@ os_queue_type (decltype (kfd_queue_snapshot_entry::queue_type) kfd_type)
   return os_queue_type_t::unknown;
 }
 
+/* Convert a kfd_exception_code_t code to a KFD code.  */
+
+static constexpr decltype (kfd_ioctl_dbg_trap_query_exception_info_args::
+                             exception_code)
+kfd_exception_code (os_exception_code_t ec_code)
+{
+  switch (ec_code)
+    {
+    case os_exception_code_t::none:
+      return EC_NONE;
+
+    case os_exception_code_t::queue_wave_abort:
+      return EC_QUEUE_WAVE_ABORT;
+    case os_exception_code_t::queue_wave_trap:
+      return EC_QUEUE_WAVE_TRAP;
+    case os_exception_code_t::queue_wave_math_error:
+      return EC_QUEUE_WAVE_MATH_ERROR;
+    case os_exception_code_t::queue_wave_illegal_instruction:
+      return EC_QUEUE_WAVE_ILLEGAL_INSTRUCTION;
+    case os_exception_code_t::queue_wave_memory_violation:
+      return EC_QUEUE_WAVE_MEMORY_VIOLATION;
+    case os_exception_code_t::queue_wave_address_error:
+      return EC_QUEUE_WAVE_APERTURE_VIOLATION;
+    case os_exception_code_t::queue_packet_dispatch_dim_invalid:
+      return EC_QUEUE_PACKET_DISPATCH_DIM_INVALID;
+    case os_exception_code_t::queue_packet_dispatch_group_segment_size_invalid:
+      return EC_QUEUE_PACKET_DISPATCH_GROUP_SEGMENT_SIZE_INVALID;
+    case os_exception_code_t::queue_packet_dispatch_code_invalid:
+      return EC_QUEUE_PACKET_DISPATCH_CODE_INVALID;
+    case os_exception_code_t::queue_packet_unsupported:
+      return EC_QUEUE_PACKET_UNSUPPORTED;
+    case os_exception_code_t::queue_packet_dispatch_work_group_size_invalid:
+      return EC_QUEUE_PACKET_DISPATCH_WORK_GROUP_SIZE_INVALID;
+    case os_exception_code_t::queue_packet_dispatch_register_invalid:
+      return EC_QUEUE_PACKET_DISPATCH_REGISTER_INVALID;
+    case os_exception_code_t::queue_packet_vendor_unsupported:
+      return EC_QUEUE_PACKET_VENDOR_UNSUPPORTED;
+    case os_exception_code_t::queue_preemption_error:
+      return EC_QUEUE_PREEMPTION_ERROR;
+    case os_exception_code_t::queue_new:
+      return EC_QUEUE_NEW;
+
+    case os_exception_code_t::device_queue_delete:
+      return EC_DEVICE_QUEUE_DELETE;
+    case os_exception_code_t::device_memory_violation:
+      return EC_DEVICE_MEMORY_VIOLATION;
+    case os_exception_code_t::device_ras_error:
+      return EC_DEVICE_RAS_ERROR;
+    case os_exception_code_t::device_fatal_halt:
+      return EC_DEVICE_FATAL_HALT;
+    case os_exception_code_t::device_new:
+      return EC_DEVICE_NEW;
+
+    case os_exception_code_t::process_runtime:
+      return EC_PROCESS_RUNTIME;
+    case os_exception_code_t::process_device_remove:
+      return EC_PROCESS_DEVICE_REMOVE;
+    }
+
+  dbgapi_assert_not_reached ("Unknown exception code");
+}
+
 /* OS driver class that implements no access that can be used if there is no
    process.  */
 
@@ -1414,7 +1476,7 @@ kfd_driver_t::query_exception_info (os_exception_code_t exception,
     = reinterpret_cast<uintptr_t> (&runtime_info);
   args.query_exception_info.info_size = sizeof (kfd_runtime_info);
   args.query_exception_info.source_id = os_source_id.raw;
-  args.query_exception_info.exception_code = static_cast<uint32_t> (exception);
+  args.query_exception_info.exception_code = kfd_exception_code (exception);
   args.query_exception_info.clear_exception = clear_exception ? 1 : 0;
 
   int err = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_QUERY_EXCEPTION_INFO, &args);

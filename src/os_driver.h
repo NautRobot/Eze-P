@@ -152,40 +152,35 @@ static_assert (sizeof (os_source_id_t) == sizeof (uint32_t));
 
 enum class os_exception_code_t : uint32_t
 {
-  none = EC_NONE,
+  none = 0,
 
   /* per queue exceptions  */
-  queue_wave_abort = EC_QUEUE_WAVE_ABORT,
-  queue_wave_trap = EC_QUEUE_WAVE_TRAP,
-  queue_wave_math_error = EC_QUEUE_WAVE_MATH_ERROR,
-  queue_wave_illegal_instruction = EC_QUEUE_WAVE_ILLEGAL_INSTRUCTION,
-  queue_wave_memory_violation = EC_QUEUE_WAVE_MEMORY_VIOLATION,
-  queue_wave_address_error = /* FIXME: a future change to the ioctl will rename
-                                APERTURE_VIOLATION -> ADDRESS_ERROR.  */
-  EC_QUEUE_WAVE_APERTURE_VIOLATION,
-  queue_packet_dispatch_dim_invalid = EC_QUEUE_PACKET_DISPATCH_DIM_INVALID,
-  queue_packet_dispatch_group_segment_size_invalid
-  = EC_QUEUE_PACKET_DISPATCH_GROUP_SEGMENT_SIZE_INVALID,
-  queue_packet_dispatch_code_invalid = EC_QUEUE_PACKET_DISPATCH_CODE_INVALID,
-  queue_packet_unsupported = EC_QUEUE_PACKET_UNSUPPORTED,
-  queue_packet_dispatch_work_group_size_invalid
-  = EC_QUEUE_PACKET_DISPATCH_WORK_GROUP_SIZE_INVALID,
-  queue_packet_dispatch_register_invalid
-  = EC_QUEUE_PACKET_DISPATCH_REGISTER_INVALID,
-  queue_packet_vendor_unsupported = EC_QUEUE_PACKET_VENDOR_UNSUPPORTED,
-  queue_preemption_error = EC_QUEUE_PREEMPTION_ERROR,
-  queue_new = EC_QUEUE_NEW,
+  queue_wave_abort = 1,
+  queue_wave_trap = 2,
+  queue_wave_math_error = 3,
+  queue_wave_illegal_instruction = 4,
+  queue_wave_memory_violation = 5,
+  queue_wave_address_error = 6,
+  queue_packet_dispatch_dim_invalid = 16,
+  queue_packet_dispatch_group_segment_size_invalid = 17,
+  queue_packet_dispatch_code_invalid = 18,
+  queue_packet_unsupported = 20,
+  queue_packet_dispatch_work_group_size_invalid = 21,
+  queue_packet_dispatch_register_invalid = 22,
+  queue_packet_vendor_unsupported = 23,
+  queue_preemption_error = 30,
+  queue_new = 31,
 
   /* per device exceptions  */
-  device_queue_delete = EC_DEVICE_QUEUE_DELETE,
-  device_memory_violation = EC_DEVICE_MEMORY_VIOLATION,
-  device_ras_error = EC_DEVICE_RAS_ERROR,
-  device_fatal_halt = EC_DEVICE_FATAL_HALT,
-  device_new = EC_DEVICE_NEW,
+  device_queue_delete = 32,
+  device_memory_violation = 33,
+  device_ras_error = 34,
+  device_fatal_halt = 35,
+  device_new = 36,
 
   /* per process exceptions  */
-  process_runtime = EC_PROCESS_RUNTIME,
-  process_device_remove = EC_PROCESS_DEVICE_REMOVE,
+  process_runtime = 48,
+  process_device_remove = 49,
 };
 
 enum class os_runtime_state_t : uint32_t
