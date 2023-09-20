@@ -20,6 +20,7 @@
 
 #include "os_driver.h"
 #include "debug.h"
+#include "linux/kfd_ioctl.h"
 #include "linux/kfd_sysfs.h"
 #include "logging.h"
 #include "process.h"
