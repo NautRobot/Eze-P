@@ -142,6 +142,26 @@ kfd_exception_code (os_exception_code_t ec_code)
   dbgapi_assert_not_reached ("Unknown exception code");
 }
 
+/* Convert a runtime state returned by KFD to os_runtime_state_t.  */
+
+static constexpr os_runtime_state_t
+os_runtime_state (decltype (kfd_runtime_info::runtime_state) state)
+{
+  switch (state)
+    {
+    case DEBUG_RUNTIME_STATE_DISABLED:
+      return os_runtime_state_t::disabled;
+    case DEBUG_RUNTIME_STATE_ENABLED:
+      return os_runtime_state_t::enabled;
+    case DEBUG_RUNTIME_STATE_ENABLED_BUSY:
+      return os_runtime_state_t::enabled_busy;
+    case DEBUG_RUNTIME_STATE_ENABLED_ERROR:
+      return os_runtime_state_t::enabled_error;
+    }
+
+  return os_runtime_state_t::disabled;
+}
+
 /* OS driver class that implements no access that can be used if there is no
    process.  */
 
@@ -833,7 +853,7 @@ kfd_core_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
 
   runtime_info->r_debug = m_state->runtime_info.r_debug;
   runtime_info->runtime_state
-    = static_cast<os_runtime_state_t> (m_state->runtime_info.runtime_state);
+    = os_runtime_state (m_state->runtime_info.runtime_state);
   runtime_info->ttmp_setup = !!m_state->runtime_info.ttmp_setup;
 
   return AMD_DBGAPI_STATUS_SUCCESS;
@@ -1326,7 +1346,7 @@ kfd_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
 
   runtime_info->r_debug = os_runtime_info.r_debug;
   runtime_info->runtime_state
-    = static_cast<os_runtime_state_t> (os_runtime_info.runtime_state);
+    = os_runtime_state (os_runtime_info.runtime_state);
   runtime_info->ttmp_setup = !!os_runtime_info.ttmp_setup;
 
   return AMD_DBGAPI_STATUS_SUCCESS;
@@ -1490,7 +1510,7 @@ kfd_driver_t::query_exception_info (os_exception_code_t exception,
 
   os_exception_info->runtime_info.r_debug = runtime_info.r_debug;
   os_exception_info->runtime_info.runtime_state
-    = static_cast<os_runtime_state_t> (runtime_info.runtime_state);
+    = os_runtime_state (runtime_info.runtime_state);
   os_exception_info->runtime_info.ttmp_setup = !!runtime_info.ttmp_setup;
 
   return AMD_DBGAPI_STATUS_SUCCESS;
