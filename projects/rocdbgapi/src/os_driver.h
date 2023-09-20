@@ -358,16 +358,16 @@ enum class os_wave_launch_trap_override_t : uint32_t
 enum class os_wave_launch_trap_mask_t : uint32_t
 {
   none = 0,
-  fp_invalid = KFD_DBG_TRAP_MASK_FP_INVALID,
-  fp_input_denormal = KFD_DBG_TRAP_MASK_FP_INPUT_DENORMAL,
-  fp_divide_by_zero = KFD_DBG_TRAP_MASK_FP_DIVIDE_BY_ZERO,
-  fp_overflow = KFD_DBG_TRAP_MASK_FP_OVERFLOW,
-  fp_underflow = KFD_DBG_TRAP_MASK_FP_UNDERFLOW,
-  fp_inexact = KFD_DBG_TRAP_MASK_FP_INEXACT,
-  int_divide_by_zero = KFD_DBG_TRAP_MASK_INT_DIVIDE_BY_ZERO,
-  address_watch = KFD_DBG_TRAP_MASK_DBG_ADDRESS_WATCH,
-  wave_start = KFD_DBG_TRAP_MASK_TRAP_ON_WAVE_START,
-  wave_end = static_cast<uint32_t> (KFD_DBG_TRAP_MASK_TRAP_ON_WAVE_END)
+  fp_invalid = 1 << 0,
+  fp_input_denormal = 1 << 1,
+  fp_divide_by_zero = 1 << 2,
+  fp_overflow = 1 << 3,
+  fp_underflow = 1 << 4,
+  fp_inexact = 1 << 5,
+  int_divide_by_zero = 1 << 6,
+  address_watch = 1 << 7,
+  wave_start = 1 << 30,
+  wave_end = 1u << 31
 };
 template <> struct is_flag<os_wave_launch_trap_mask_t> : std::true_type
 {

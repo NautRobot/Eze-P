@@ -306,6 +306,90 @@ kfd_wave_launch_trap_override (os_wave_launch_trap_override_t o)
   dbgapi_assert_not_reached ("Unknown wave launch trap override");
 }
 
+/* Convert a os_wave_launch_trap_mask_t to a KFD wave_launch_trap_mask.  */
+
+static constexpr __u32
+kfd_wave_launch_trap_mask (os_wave_launch_trap_mask_t wave_launch_trap)
+{
+  __u32 kfd_wave_launch_trap = 0;
+
+  if (wave_launch_trap == os_wave_launch_trap_mask_t::none)
+    return kfd_wave_launch_trap;
+
+  auto convert_one = [] (os_wave_launch_trap_mask_t one_bit) -> __u32
+  {
+    switch (one_bit)
+      {
+      case os_wave_launch_trap_mask_t::none:
+        return 0;
+      case os_wave_launch_trap_mask_t::fp_invalid:
+        return KFD_DBG_TRAP_MASK_FP_INVALID;
+      case os_wave_launch_trap_mask_t::fp_input_denormal:
+        return KFD_DBG_TRAP_MASK_FP_INPUT_DENORMAL;
+      case os_wave_launch_trap_mask_t::fp_divide_by_zero:
+        return KFD_DBG_TRAP_MASK_FP_DIVIDE_BY_ZERO;
+      case os_wave_launch_trap_mask_t::fp_overflow:
+        return KFD_DBG_TRAP_MASK_FP_OVERFLOW;
+      case os_wave_launch_trap_mask_t::fp_underflow:
+        return KFD_DBG_TRAP_MASK_FP_UNDERFLOW;
+      case os_wave_launch_trap_mask_t::fp_inexact:
+        return KFD_DBG_TRAP_MASK_FP_INEXACT;
+      case os_wave_launch_trap_mask_t::int_divide_by_zero:
+        return KFD_DBG_TRAP_MASK_INT_DIVIDE_BY_ZERO;
+      case os_wave_launch_trap_mask_t::address_watch:
+        return KFD_DBG_TRAP_MASK_DBG_ADDRESS_WATCH;
+      case os_wave_launch_trap_mask_t::wave_start:
+        return KFD_DBG_TRAP_MASK_TRAP_ON_WAVE_START;
+      case os_wave_launch_trap_mask_t::wave_end:
+        return KFD_DBG_TRAP_MASK_TRAP_ON_WAVE_END;
+      }
+
+    dbgapi_assert_not_reached ();
+  };
+
+  while (wave_launch_trap != os_wave_launch_trap_mask_t::none)
+    {
+      os_wave_launch_trap_mask_t one_bit
+        = wave_launch_trap ^ (wave_launch_trap & (wave_launch_trap - 1));
+
+      kfd_wave_launch_trap |= convert_one (one_bit);
+      wave_launch_trap ^= one_bit;
+    }
+
+  return kfd_wave_launch_trap;
+}
+
+/* Convert a KFD wave_launch_trap_mask to os_wave_launch_trap_mask_t.  */
+
+static constexpr os_wave_launch_trap_mask_t
+os_wave_launch_trap_mask (__u32 wave_launch_trap)
+{
+  os_wave_launch_trap_mask_t mask{};
+
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_FP_INVALID))
+    mask |= os_wave_launch_trap_mask_t::fp_invalid;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_FP_INPUT_DENORMAL))
+    mask |= os_wave_launch_trap_mask_t::fp_input_denormal;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_FP_DIVIDE_BY_ZERO))
+    mask |= os_wave_launch_trap_mask_t::fp_divide_by_zero;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_FP_OVERFLOW))
+    mask |= os_wave_launch_trap_mask_t::fp_overflow;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_FP_UNDERFLOW))
+    mask |= os_wave_launch_trap_mask_t::fp_underflow;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_FP_INEXACT))
+    mask |= os_wave_launch_trap_mask_t::fp_inexact;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_INT_DIVIDE_BY_ZERO))
+    mask |= os_wave_launch_trap_mask_t::int_divide_by_zero;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_DBG_ADDRESS_WATCH))
+    mask |= os_wave_launch_trap_mask_t::address_watch;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_TRAP_ON_WAVE_START))
+    mask |= os_wave_launch_trap_mask_t::wave_start;
+  if (!!(wave_launch_trap & KFD_DBG_TRAP_MASK_TRAP_ON_WAVE_END))
+    mask |= os_wave_launch_trap_mask_t::wave_end;
+
+  return mask;
+}
+
 /* OS driver class that implements no access that can be used if there is no
    process.  */
 
@@ -1849,11 +1933,10 @@ kfd_driver_t::set_wave_launch_trap_override (
                       param_in (previous_value), param_in (supported_mask));
 
   kfd_ioctl_dbg_trap_args args{};
-  args.launch_override.override_mode = kfd_wave_launch_trap_override (override);
-  args.launch_override.enable_mask
-    = static_cast<std::underlying_type_t<decltype (value)>> (value);
-  args.launch_override.support_request_mask
-    = static_cast<std::underlying_type_t<decltype (mask)>> (mask);
+  args.launch_override.override_mode
+    = kfd_wave_launch_trap_override (override);
+  args.launch_override.enable_mask = kfd_wave_launch_trap_mask (value);
+  args.launch_override.support_request_mask = kfd_wave_launch_trap_mask (mask);
 
   int err
     = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_SET_WAVE_LAUNCH_OVERRIDE, &args);
@@ -1865,11 +1948,11 @@ kfd_driver_t::set_wave_launch_trap_override (
     return AMD_DBGAPI_STATUS_ERROR;
 
   if (previous_value != nullptr)
-    *previous_value = static_cast<os_wave_launch_trap_mask_t> (
-      args.launch_override.enable_mask);
+    *previous_value
+      = os_wave_launch_trap_mask (args.launch_override.enable_mask);
   if (supported_mask != nullptr)
-    *supported_mask = static_cast<os_wave_launch_trap_mask_t> (
-      args.launch_override.support_request_mask);
+    *supported_mask
+      = os_wave_launch_trap_mask (args.launch_override.support_request_mask);
 
   return AMD_DBGAPI_STATUS_SUCCESS;
 
