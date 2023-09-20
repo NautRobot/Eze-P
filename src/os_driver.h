@@ -22,7 +22,6 @@
 #define AMD_DBGAPI_OS_DRIVER_H 1
 
 #include "amd-dbgapi.h"
-#include "linux/kfd_ioctl.h"
 #include "logging.h"
 #include "utils.h"
 
@@ -535,7 +534,6 @@ public:
 };
 
 template <> std::string to_string (os_agent_info_t os_agent_info);
-template <> std::string to_string (kfd_dbg_device_info_entry);
 template <> std::string to_string (os_exception_code_t exception_code);
 template <> std::string to_string (os_exception_mask_t exception_mask);
 template <> std::string to_string (os_process_flags_t flags);
