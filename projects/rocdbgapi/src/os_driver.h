@@ -351,8 +351,8 @@ os_exception_mask (ExceptionCodes... exception_codes)
 
 enum class os_wave_launch_trap_override_t : uint32_t
 {
-  apply = KFD_DBG_TRAP_OVERRIDE_OR, /* OR mask with HSA_DBG_TRAP_MASK.  */
-  replace = KFD_DBG_TRAP_OVERRIDE_REPLACE, /* Replace mask.  */
+  apply = 0,   /* OR mask with HSA_DBG_TRAP_MASK.  */
+  replace = 1, /* Replace mask.  */
 };
 
 enum class os_wave_launch_trap_mask_t : uint32_t
