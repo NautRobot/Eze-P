@@ -2559,7 +2559,7 @@ public:
       std::unique_ptr<const architecture_t::cwsr_record_t>)> &wave_callback)
     const override;
 
-  std::optional<amd_dbgapi_global_address_t> dispatch_packet_address (
+  std::optional<uint64_t> dispatch_packet_id (
     const architecture_t::cwsr_record_t &cwsr_record) const override;
 
   size_t maximum_queue_packet_count () const override
@@ -3336,8 +3336,8 @@ gfx9_architecture_t::control_stack_iterate (
   return wave_count;
 }
 
-std::optional<amd_dbgapi_global_address_t>
-gfx9_architecture_t::dispatch_packet_address (
+std::optional<uint64_t>
+gfx9_architecture_t::dispatch_packet_id (
   const architecture_t::cwsr_record_t &cwsr_record) const
 {
   if (!cwsr_record.agent ().spi_ttmps_setup_enabled ()
@@ -3350,16 +3350,7 @@ gfx9_architecture_t::dispatch_packet_address (
   uint32_t ttmp6;
   cwsr_record.process ().read_global_memory (ttmp6_address, &ttmp6);
 
-  uint64_t dispatch_packet_index
-    = (ttmp6 & ttmp6_queue_packet_id_mask) >> ttmp6_queue_packet_id_shift;
-
-  const compute_queue_t &queue = cwsr_record.queue ();
-
-  if ((dispatch_packet_index * queue.packet_size ()) >= queue.size ())
-    fatal_error ("dispatch_packet_index %#" PRIx64 " is out of bounds in %s",
-                 dispatch_packet_index, to_cstring (queue.id ()));
-
-  return queue.address () + (dispatch_packet_index * queue.packet_size ());
+  return (ttmp6 & ttmp6_queue_packet_id_mask) >> ttmp6_queue_packet_id_shift;
 }
 
 std::pair<amd_dbgapi_size_t /* offset  */, amd_dbgapi_size_t /* size  */>
@@ -3825,7 +3816,7 @@ protected:
   std::string register_type (amdgpu_regnum_t regnum) const override;
   const void *register_read_only_mask (amdgpu_regnum_t regnum) const override;
 
-  std::optional<amd_dbgapi_global_address_t> dispatch_packet_address (
+  std::optional<uint64_t> dispatch_packet_id (
     const architecture_t::cwsr_record_t &cwsr_record) const override;
 
   bool can_halt_at_endpgm () const override { return true; }
@@ -4147,15 +4138,13 @@ gfx9_4_architecture_t::register_read_only_mask (amdgpu_regnum_t regnum) const
     }
 }
 
-std::optional<amd_dbgapi_global_address_t>
-gfx9_4_architecture_t::dispatch_packet_address (
+std::optional<uint64_t>
+gfx9_4_architecture_t::dispatch_packet_id (
   const architecture_t::cwsr_record_t &cwsr_record) const
 {
   if (!cwsr_record.agent ().spi_ttmps_setup_enabled ()
       || !cwsr_record.spi_ttmps_setup_enabled ())
     return std::nullopt;
-
-  const compute_queue_t &queue = cwsr_record.queue ();
 
   const amd_dbgapi_global_address_t ttmp11_address
     = cwsr_record.register_address (amdgpu_regnum_t::ttmp11).value ();
@@ -4163,15 +4152,8 @@ gfx9_4_architecture_t::dispatch_packet_address (
   uint32_t ttmp11;
   cwsr_record.process ().read_global_memory (ttmp11_address, &ttmp11);
 
-  amd_dbgapi_os_queue_packet_id_t dispatch_packet_index
-    = (ttmp11 & ttmp11_queue_packet_id_mask) >> ttmp11_queue_packet_id_shift;
-
-  if ((dispatch_packet_index * queue.packet_size ()) >= queue.size ())
-    /* The dispatch_packet_index is out of bounds.  */
-    fatal_error ("dispatch_packet_index %#" PRIx64 " is out of bounds in %s",
-                 dispatch_packet_index, to_string (queue.id ()).c_str ());
-
-  return queue.address () + (dispatch_packet_index * queue.packet_size ());
+  return (ttmp11 & ttmp11_queue_packet_id_mask)
+         >> ttmp11_queue_packet_id_shift;
 }
 
 /* Generic gfx9.4 architecture.  */
@@ -6240,7 +6222,7 @@ protected:
   gfx12_architecture_t (elf_amdgpu_machine_t e_machine,
                         std::string target_triple);
 
-  std::optional<amd_dbgapi_global_address_t> dispatch_packet_address (
+  std::optional<uint64_t> dispatch_packet_id (
     const architecture_t::cwsr_record_t &cwsr_record) const override;
 
   bool are_trap_handler_ttmps_initialized (const wave_t &wave) const override;
@@ -6355,15 +6337,13 @@ gfx12_architecture_t::gfx12_architecture_t (elf_amdgpu_machine_t e_machine,
                                   amdgpu_regnum_t::excp_flag_user);
 }
 
-std::optional<amd_dbgapi_global_address_t>
-gfx12_architecture_t::dispatch_packet_address (
+std::optional<uint64_t>
+gfx12_architecture_t::dispatch_packet_id (
   const architecture_t::cwsr_record_t &cwsr_record) const
 {
   if (!cwsr_record.agent ().spi_ttmps_setup_enabled ()
       || !cwsr_record.spi_ttmps_setup_enabled ())
     return std::nullopt;
-
-  const compute_queue_t &queue = cwsr_record.queue ();
 
   const amd_dbgapi_global_address_t ttmp8_address
     = cwsr_record.register_address (amdgpu_regnum_t::ttmp8).value ();
@@ -6371,15 +6351,7 @@ gfx12_architecture_t::dispatch_packet_address (
   uint32_t ttmp8;
   cwsr_record.process ().read_global_memory (ttmp8_address, &ttmp8);
 
-  amd_dbgapi_os_queue_packet_id_t dispatch_packet_index
-    = (ttmp8 & ttmp8_queue_packet_id_mask) >> ttmp8_queue_packet_id_shift;
-
-  if ((dispatch_packet_index * queue.packet_size ()) >= queue.size ())
-    /* The dispatch_packet_index is out of bounds.  */
-    fatal_error ("dispatch_packet_index %#" PRIx64 " is out of bounds in %s",
-                 dispatch_packet_index, to_string (queue.id ()).c_str ());
-
-  return queue.address () + (dispatch_packet_index * queue.packet_size ());
+  return (ttmp8 & ttmp8_queue_packet_id_mask) >> ttmp8_queue_packet_id_shift;
 }
 
 amdgcn_architecture_t::exception_mask_t

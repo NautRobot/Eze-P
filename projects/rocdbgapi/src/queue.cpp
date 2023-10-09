@@ -573,10 +573,17 @@ std::optional<amd_dbgapi_os_queue_packet_id_t>
 aql_queue_t::get_os_queue_packet_id (
   const architecture_t::cwsr_record_t &cwsr_record) const
 {
-  auto packet_address = architecture ().dispatch_packet_address (cwsr_record);
+  auto dispatch_packet_id = architecture ().dispatch_packet_id (cwsr_record);
 
-  if (!packet_address)
+  if (!dispatch_packet_id.has_value ())
     return std::nullopt;
+
+  if ((dispatch_packet_id.value () * packet_size ()) >= size ())
+    fatal_error ("dispatch_packet_index %#" PRIx64 " is out of bounds in %s",
+                 dispatch_packet_id.value (), to_cstring (id ()));
+
+  amd_dbgapi_global_address_t packet_address
+    = address () + (dispatch_packet_id.value () * packet_size ());
 
   /* Calculate the monotonic dispatch id for this packet.  It is
      between read_packet_id and write_packet_id.  */
@@ -588,7 +595,7 @@ aql_queue_t::get_os_queue_packet_id (
   dbgapi_assert (m_read_packet_id && m_write_packet_id);
 
   amd_dbgapi_os_queue_packet_id_t os_queue_packet_id
-    = (*packet_address - address ()) / aql_packet_size
+    = (packet_address - address ()) / aql_packet_size
       + (*m_read_packet_id / ring_size) * ring_size;
 
   if (os_queue_packet_id < *m_read_packet_id
