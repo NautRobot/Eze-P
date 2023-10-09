@@ -263,7 +263,7 @@ public:
     const std::function<void (std::unique_ptr<const cwsr_record_t>)>
       &wave_callback) const = 0;
 
-  virtual std::optional<amd_dbgapi_global_address_t> dispatch_packet_address (
+  virtual std::optional<uint64_t> dispatch_packet_id (
     const architecture_t::cwsr_record_t &cwsr_record) const = 0;
 
   /* Default initialize the trap temporary registers normally set up by SPI.
