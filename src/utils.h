@@ -24,6 +24,7 @@
 #include "amd-dbgapi.h"
 #include "debug.h"
 #include "exception.h"
+#include "format_printf.h"
 
 #include <array>
 #include <cstdarg>
@@ -84,10 +85,7 @@ using file_desc_t = int;
 
 extern std::string string_vprintf (const char *format, va_list va);
 extern std::string string_printf (const char *format, ...)
-#if defined(__GNUC__)
-  __attribute__ ((format (printf, 1, 2)))
-#endif /* defined (__GNUC__) */
-  ;
+  ATTRIBUTE_PRINTF_FORMAT (1, 2);
 
 namespace utils
 {

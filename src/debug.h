@@ -22,6 +22,7 @@
 #define AMD_DBGAPI_DEBUG_H 1
 
 #include "amd-dbgapi.h"
+#include "format_printf.h"
 
 #include <stdexcept>
 #include <string>
@@ -49,17 +50,10 @@
 namespace amd::dbgapi
 {
 
-extern void warning (const char *format, ...)
-#if defined(__GNUC__)
-  __attribute__ ((format (printf, 1, 2)))
-#endif /* defined (__GNUC__) */
-  ;
+extern void warning (const char *format, ...) ATTRIBUTE_PRINTF_FORMAT (1, 2);
 
 extern void fatal_error [[noreturn]] (const char *format, ...)
-#if defined(__GNUC__)
-__attribute__ ((format (printf, 1, 2)))
-#endif /* defined (__GNUC__) */
-;
+ATTRIBUTE_PRINTF_FORMAT (1, 2);
 
 } /* namespace amd::dbgapi */
 
