@@ -24,6 +24,7 @@
 #include "amd-dbgapi.h"
 #include "debug.h"
 #include "utils.h"
+#include "format_printf.h"
 
 #include <cinttypes>
 #include <cstdarg>
@@ -55,10 +56,7 @@ namespace detail
 extern size_t log_indent_depth;
 
 extern void log (amd_dbgapi_log_level_t level, const char *format, ...)
-#if defined(__GNUC__)
-  __attribute__ ((format (printf, 2, 3)))
-#endif /* defined (__GNUC__) */
-  ;
+  ATTRIBUTE_PRINTF_FORMAT (2, 3);
 
 } /* namespace detail */
 
