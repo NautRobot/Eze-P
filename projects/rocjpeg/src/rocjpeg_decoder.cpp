@@ -78,7 +78,7 @@ RocJpegStatus ROCJpegDecoder::Decode(const uint8_t *data, size_t length, RocJpeg
 
     const JpegStreamParameters *jpeg_stream_params = jpeg_parser_.GetJpegStreamParameters();
     VASurfaceID current_surface_id;
-    CHECK_ROCJPEG(jpeg_vaapi_decoder_.SubmitDecode(jpeg_stream_params, current_surface_id));
+    CHECK_ROCJPEG(jpeg_vaapi_decoder_.SubmitDecode(jpeg_stream_params, current_surface_id, output_format));
 
     if (destination != nullptr) {
         VADRMPRIMESurfaceDescriptor va_drm_prime_surface_desc = {};
@@ -87,15 +87,16 @@ RocJpegStatus ROCJpegDecoder::Decode(const uint8_t *data, size_t length, RocJpeg
         CHECK_ROCJPEG(GetHipInteropMem(va_drm_prime_surface_desc));
 
         uint16_t chroma_height = 0;
-        CHECK_ROCJPEG(GetChromaHeight(jpeg_stream_params->picture_parameter_buffer.picture_height, chroma_height));
 
         switch (output_format) {
             case ROCJPEG_OUTPUT_NATIVE:
                 // copy the native decoded output buffers from interop memory directly to the destination buffers
+                CHECK_ROCJPEG(GetChromaHeight(jpeg_stream_params->picture_parameter_buffer.picture_height, chroma_height));
                 CHECK_ROCJPEG(CopyLuma(destination, jpeg_stream_params->picture_parameter_buffer.picture_height));
                 CHECK_ROCJPEG(CopyChroma(destination, chroma_height));
                 break;
             case ROCJPEG_OUTPUT_YUV_PLANAR:
+                CHECK_ROCJPEG(GetChromaHeight(jpeg_stream_params->picture_parameter_buffer.picture_height, chroma_height));
                 CHECK_ROCJPEG(GetPlanarYUVOutputFormat(jpeg_stream_params->picture_parameter_buffer.picture_width,
                                                     jpeg_stream_params->picture_parameter_buffer.picture_height, chroma_height, destination));
                 break;
@@ -293,6 +294,10 @@ RocJpegStatus ROCJpegDecoder::ColorConvertToRGB(uint32_t picture_width, uint32_t
             break;
         case VA_FOURCC_Y800:
             ColorConvertYUV400ToRGB(hip_stream_, picture_width, picture_height, destination->channel[0], destination->pitch[0],
+                                                hip_interop_.hip_mapped_device_mem, hip_interop_.pitch[0]);
+           break;
+        case VA_FOURCC_RGBA:
+            ColorConvertRGBAToRGB(hip_stream_, picture_width, picture_height, destination->channel[0], destination->pitch[0],
                                                 hip_interop_.hip_mapped_device_mem, hip_interop_.pitch[0]);
            break;
         default:
