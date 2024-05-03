@@ -22,7 +22,7 @@
 ################################################################################
 
 cmake_minimum_required (VERSION 3.0)
-project(jpegdecode)
+project(jpegdecodemultithreads)
 set(CMAKE_CXX_STANDARD 17)
 
 # ROCM Path
@@ -52,17 +52,23 @@ if(ROCJPEG_LIBRARY AND ROCJPEG_INCLUDE_DIR)
     message("-- ${White}Using rocJPEG -- \n\tLibraries:${ROCJPEG_LIBRARY} \n\tIncludes:${ROCJPEG_INCLUDE_DIR}${ColourReset}")
 endif()
 
-if(HIP_FOUND AND ROCJPEG_FOUND)
+# threads
+find_package(Threads REQUIRED)
+
+if(HIP_FOUND AND ROCJPEG_FOUND AND Threads_FOUND)
     # HIP
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} hip::device)
-    # rocJPEG
-    include_directories (${ROCJPEG_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
-    set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} ${ROCJPEG_LIBRARY})
+    #threads
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} Threads::Threads)
     #filesystem: c++ compilers less than equal to 8.5 need explicit link with stdc++fs
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS_EQUAL "8.5")
       set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} stdc++fs)
     endif()
-    list(APPEND SOURCES ${PROJECT_SOURCE_DIR} jpegdecode.cpp)
+    # rocJPEG
+    include_directories (${ROCJPEG_INCLUDE_DIR})
+    set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} ${ROCJPEG_LIBRARY})
+    list(APPEND SOURCES ${PROJECT_SOURCE_DIR} jpegdecodemultithreads.cpp)
     add_executable(${PROJECT_NAME} ${SOURCES})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++17")
     target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARY_LIST})
@@ -73,5 +79,8 @@ else()
     endif()
     if (NOT ROCJPEG_FOUND)
         message(FATAL_ERROR "-- ERROR!: rocJPEG Not Found! - please install rocJPEG!")
+    endif()
+    if (NOT Threads_FOUND)
+        message(FATAL_ERROR "-- ERROR!: Threads Not Found! - please insatll Threads!")
     endif()
 endif()

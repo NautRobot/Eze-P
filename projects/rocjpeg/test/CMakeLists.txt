@@ -109,3 +109,15 @@ add_test(
             --test-command "jpegdecode"
             -i ${ROCM_PATH}/share/rocjpeg/images/ -fmt rgb_planar
 )
+
+add_test(
+  NAME
+    jpeg-decode-threads-fmt-native
+  COMMAND
+    "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${ROCM_PATH}/share/rocjpeg/samples/jpegDecodeMultiThreads"
+                              "${CMAKE_CURRENT_BINARY_DIR}/jpegDecodeMultiThreads"
+            --build-generator "${CMAKE_GENERATOR}"
+            --test-command "jpegdecodemultithreads"
+            -i ${ROCM_PATH}/share/rocjpeg/images/ -t 2
+)
