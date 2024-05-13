@@ -22,16 +22,16 @@ THE SOFTWARE.
 
 #include "rocjpeg_decoder.h"
 
-ROCJpegDecoder::ROCJpegDecoder(RocJpegBackend backend, int device_id) :
+RocJpegDecoder::RocJpegDecoder(RocJpegBackend backend, int device_id) :
     num_devices_{0}, device_id_ {device_id}, hip_stream_ {0}, backend_{backend} {}
 
-ROCJpegDecoder::~ROCJpegDecoder() {
+RocJpegDecoder::~RocJpegDecoder() {
     if (hip_stream_) {
         hipError_t hip_status = hipStreamDestroy(hip_stream_);
     }
 }
 
-RocJpegStatus ROCJpegDecoder::InitHIP(int device_id) {
+RocJpegStatus RocJpegDecoder::InitHIP(int device_id) {
     hipError_t hip_status = hipSuccess;
     CHECK_HIP(hipGetDeviceCount(&num_devices_));
     if (num_devices_ < 1) {
@@ -48,7 +48,7 @@ RocJpegStatus ROCJpegDecoder::InitHIP(int device_id) {
     return ROCJPEG_STATUS_SUCCESS;
 }
 
-RocJpegStatus ROCJpegDecoder::InitializeDecoder() {
+RocJpegStatus RocJpegDecoder::InitializeDecoder() {
     RocJpegStatus rocjpeg_status = ROCJPEG_STATUS_SUCCESS;
     rocjpeg_status = InitHIP(device_id_);
     if (rocjpeg_status != ROCJPEG_STATUS_SUCCESS) {
@@ -67,16 +67,15 @@ RocJpegStatus ROCJpegDecoder::InitializeDecoder() {
     return rocjpeg_status;
 }
 
-RocJpegStatus ROCJpegDecoder::Decode(const uint8_t *data, size_t length, const RocJpegDecodeParams *decode_params, RocJpegImage *destination) {
+RocJpegStatus RocJpegDecoder::Decode(RocJpegStreamHandle jpeg_stream_handle, const RocJpegDecodeParams *decode_params, RocJpegImage *destination) {
     std::lock_guard<std::mutex> lock(mutex_);
     RocJpegStatus rocjpeg_status = ROCJPEG_STATUS_SUCCESS;
-
-    if (!jpeg_parser_.ParseJpegStream(data, length)) {
-        ERR("ERROR: Failed to parse the jpeg stream!");
-        return ROCJPEG_STATUS_BAD_JPEG;
+    if (jpeg_stream_handle == nullptr || decode_params == nullptr || destination == nullptr) {
+        return ROCJPEG_STATUS_INVALID_PARAMETER;
     }
+    auto rocjpeg_stream_handle = static_cast<RocJpegStreamParserHandle*>(jpeg_stream_handle);
+    const JpegStreamParameters *jpeg_stream_params = rocjpeg_stream_handle->rocjpeg_stream->GetJpegStreamParameters();
 
-    const JpegStreamParameters *jpeg_stream_params = jpeg_parser_.GetJpegStreamParameters();
     VASurfaceID current_surface_id;
     CHECK_ROCJPEG(jpeg_vaapi_decoder_.SubmitDecode(jpeg_stream_params, current_surface_id, decode_params->output_format));
 
@@ -129,16 +128,14 @@ RocJpegStatus ROCJpegDecoder::Decode(const uint8_t *data, size_t length, const R
 
 }
 
-RocJpegStatus ROCJpegDecoder::GetImageInfo(const uint8_t *data, size_t length, uint8_t *num_components, RocJpegChromaSubsampling *subsampling, uint32_t *widths, uint32_t *heights){
+RocJpegStatus RocJpegDecoder::GetImageInfo(RocJpegStreamHandle jpeg_stream_handle, uint8_t *num_components, RocJpegChromaSubsampling *subsampling, uint32_t *widths, uint32_t *heights){
     std::lock_guard<std::mutex> lock(mutex_);
-    if (widths == nullptr || heights == nullptr || num_components == nullptr) {
+    if (jpeg_stream_handle == nullptr || num_components == nullptr || subsampling == nullptr || widths == nullptr || heights == nullptr) {
         return ROCJPEG_STATUS_INVALID_PARAMETER;
     }
-    if (!jpeg_parser_.ParseJpegStream(data, length)) {
-        ERR("ERROR: jpeg parser failed!");
-        return ROCJPEG_STATUS_BAD_JPEG;
-    }
-    const JpegStreamParameters *jpeg_stream_params = jpeg_parser_.GetJpegStreamParameters();
+    auto rocjpeg_stream_handle = static_cast<RocJpegStreamParserHandle*>(jpeg_stream_handle);
+    const JpegStreamParameters *jpeg_stream_params = rocjpeg_stream_handle->rocjpeg_stream->GetJpegStreamParameters();
+
     *num_components = jpeg_stream_params->picture_parameter_buffer.num_components;
     widths[0] = jpeg_stream_params->picture_parameter_buffer.picture_width;
     heights[0] = jpeg_stream_params->picture_parameter_buffer.picture_height;
@@ -184,7 +181,7 @@ RocJpegStatus ROCJpegDecoder::GetImageInfo(const uint8_t *data, size_t length, u
     return ROCJPEG_STATUS_SUCCESS;
 }
 
-RocJpegStatus ROCJpegDecoder::CopyChannel(HipInteropDeviceMem& hip_interop_dev_mem, uint16_t channel_height, uint8_t channel_index, RocJpegImage *destination) {
+RocJpegStatus RocJpegDecoder::CopyChannel(HipInteropDeviceMem& hip_interop_dev_mem, uint16_t channel_height, uint8_t channel_index, RocJpegImage *destination) {
     if (hip_interop_dev_mem.pitch[channel_index] != 0 && destination->pitch[channel_index] != 0 && destination->channel[channel_index] != nullptr) {
         if (destination->pitch[channel_index] == hip_interop_dev_mem.pitch[channel_index]) {
             uint32_t channel_size = destination->pitch[channel_index] * channel_height;
@@ -197,7 +194,7 @@ RocJpegStatus ROCJpegDecoder::CopyChannel(HipInteropDeviceMem& hip_interop_dev_m
     return ROCJPEG_STATUS_SUCCESS;
 }
 
-RocJpegStatus ROCJpegDecoder::GetChromaHeight(uint32_t surface_format, uint16_t picture_height, uint16_t &chroma_height) {
+RocJpegStatus RocJpegDecoder::GetChromaHeight(uint32_t surface_format, uint16_t picture_height, uint16_t &chroma_height) {
     switch (surface_format) {
         case VA_FOURCC_NV12: /*NV12: two-plane 8-bit YUV 4:2:0*/
             chroma_height = picture_height >> 1;
@@ -217,7 +214,7 @@ RocJpegStatus ROCJpegDecoder::GetChromaHeight(uint32_t surface_format, uint16_t 
     return ROCJPEG_STATUS_SUCCESS;
 }
 
-RocJpegStatus ROCJpegDecoder::ColorConvertToRGB(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, RocJpegImage *destination) {
+RocJpegStatus RocJpegDecoder::ColorConvertToRGB(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, RocJpegImage *destination) {
     switch (hip_interop_dev_mem.surface_format) {
         case VA_FOURCC_444P:
             ColorConvertYUV444ToRGB(hip_stream_, picture_width, picture_height, destination->channel[0], destination->pitch[0],
@@ -247,7 +244,7 @@ RocJpegStatus ROCJpegDecoder::ColorConvertToRGB(HipInteropDeviceMem& hip_interop
     return ROCJPEG_STATUS_SUCCESS;
 }
 
-RocJpegStatus ROCJpegDecoder::ColorConvertToRGBPlanar(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, RocJpegImage *destination) {
+RocJpegStatus RocJpegDecoder::ColorConvertToRGBPlanar(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, RocJpegImage *destination) {
     switch (hip_interop_dev_mem.surface_format) {
         case VA_FOURCC_444P:
             ColorConvertYUV444ToRGBPlanar(hip_stream_, picture_width, picture_height, destination->channel[0], destination->channel[1], destination->channel[2], destination->pitch[0],
@@ -279,7 +276,7 @@ RocJpegStatus ROCJpegDecoder::ColorConvertToRGBPlanar(HipInteropDeviceMem& hip_i
     return ROCJPEG_STATUS_SUCCESS;
 }
 
-RocJpegStatus ROCJpegDecoder::GetPlanarYUVOutputFormat(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, uint16_t chroma_height, RocJpegImage *destination) {
+RocJpegStatus RocJpegDecoder::GetPlanarYUVOutputFormat(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, uint16_t chroma_height, RocJpegImage *destination) {
     if (hip_interop_dev_mem.surface_format == ROCJPEG_FOURCC_YUYV) {
         // Extract the packed YUYV and copy them into the first, second, and thrid channels of the destination.
         ConvertPackedYUYVToPlanarYUV(hip_stream_, picture_width, picture_height, destination->channel[0], destination->channel[1], destination->channel[2],
@@ -299,7 +296,7 @@ RocJpegStatus ROCJpegDecoder::GetPlanarYUVOutputFormat(HipInteropDeviceMem& hip_
     return ROCJPEG_STATUS_SUCCESS;
 }
 
-RocJpegStatus ROCJpegDecoder::GetYOutputFormat(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, RocJpegImage *destination) {
+RocJpegStatus RocJpegDecoder::GetYOutputFormat(HipInteropDeviceMem& hip_interop_dev_mem, uint32_t picture_width, uint32_t picture_height, RocJpegImage *destination) {
     if (hip_interop_dev_mem.surface_format == ROCJPEG_FOURCC_YUYV) {
         ExtractYFromPackedYUYV(hip_stream_, picture_width, picture_height, destination->channel[0], destination->pitch[0],
                               hip_interop_dev_mem.hip_mapped_device_mem, hip_interop_dev_mem.pitch[0]);
