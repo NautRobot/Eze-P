@@ -102,7 +102,7 @@ RocJpegStatus RocJpegDecoder::InitializeDecoder() {
  * @return The status of the JPEG decoding operation.
  */
 RocJpegStatus RocJpegDecoder::Decode(RocJpegStreamHandle jpeg_stream_handle, const RocJpegDecodeParams *decode_params, RocJpegImage *destination) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     RocJpegStatus rocjpeg_status = ROCJPEG_STATUS_SUCCESS;
     if (jpeg_stream_handle == nullptr || decode_params == nullptr || destination == nullptr) {
         return ROCJPEG_STATUS_INVALID_PARAMETER;
@@ -162,6 +162,22 @@ RocJpegStatus RocJpegDecoder::Decode(RocJpegStreamHandle jpeg_stream_handle, con
 }
 
 /**
+ * Decodes a batch of JPEG streams using the specified decode parameters and stores the decoded images in the provided destinations.
+ *
+ * @param jpeg_streams An array of RocJpegStreamHandle objects representing the JPEG streams to be decoded.
+ * @param batch_size The number of JPEG streams in the batch.
+ * @param decode_params A pointer to RocJpegDecodeParams object containing the decode parameters.
+ * @param destinations An array of RocJpegImage objects where the decoded images will be stored.
+ * @return A RocJpegStatus value indicating the success or failure of the decoding operation.
+ */
+RocJpegStatus RocJpegDecoder::DecodeBatched(RocJpegStreamHandle *jpeg_streams, int batch_size, const RocJpegDecodeParams *decode_params, RocJpegImage *destinations) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    for(int i = 0; i < batch_size; i++) {
+        CHECK_ROCJPEG(Decode(jpeg_streams[i], decode_params, &destinations[i]));
+    }
+    return ROCJPEG_STATUS_SUCCESS;
+}
+/**
  * @brief Retrieves the image information from the JPEG stream.
  *
  * This function retrieves the number of components, chroma subsampling, widths, and heights
@@ -176,7 +192,7 @@ RocJpegStatus RocJpegDecoder::Decode(RocJpegStreamHandle jpeg_stream_handle, con
  *         or ROCJPEG_STATUS_INVALID_PARAMETER if any of the input parameters are invalid.
  */
 RocJpegStatus RocJpegDecoder::GetImageInfo(RocJpegStreamHandle jpeg_stream_handle, uint8_t *num_components, RocJpegChromaSubsampling *subsampling, uint32_t *widths, uint32_t *heights){
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (jpeg_stream_handle == nullptr || num_components == nullptr || subsampling == nullptr || widths == nullptr || heights == nullptr) {
         return ROCJPEG_STATUS_INVALID_PARAMETER;
     }

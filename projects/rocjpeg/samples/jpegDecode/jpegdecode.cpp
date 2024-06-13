@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     RocJpegDecodeParams decode_params = {};
     RocJpegUtils rocjpeg_utils;
 
-    RocJpegUtils::ParseCommandLine(input_path, output_file_path, save_images, device_id, rocjpeg_backend, decode_params, nullptr, argc, argv);
+    RocJpegUtils::ParseCommandLine(input_path, output_file_path, save_images, device_id, rocjpeg_backend, decode_params, nullptr, nullptr, argc, argv);
     if (!RocJpegUtils::GetFilePaths(input_path, file_paths, is_dir, is_file)) {
         std::cerr << "ERROR: Failed to get input file paths!" << std::endl;
         return EXIT_FAILURE;
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
             std::cerr << "The chroma sub-sampling is not supported by VCN Hardware" << std::endl;
             if (is_dir) {
                 std::cout << std::endl;
-                    continue;
+                continue;
             } else
                 return EXIT_FAILURE;
         }
