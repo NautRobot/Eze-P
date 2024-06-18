@@ -76,11 +76,11 @@ if(NOT CPACK_PACKAGING_INSTALL_PREFIX)
   set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 endif()
 
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/amd-dbgapi.pc.in
-  ${CMAKE_CURRENT_BINARY_DIR}/share/pkgconfig/amd-dbgapi.pc @ONLY)
+# Allow building dbgapi as either a shared or static library,
+# depending on BUILD_SHARED_LIBS.
+option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
-add_library(amd-dbgapi SHARED
+add_library(amd-dbgapi
   src/agent.cpp
   src/architecture.cpp
   src/callbacks.cpp
@@ -193,6 +193,84 @@ find_package(amd_comgr REQUIRED CONFIG
     lib/cmake/amd_comgr
 )
 MESSAGE(STATUS "Code Object Manager found at ${amd_comgr_DIR}.")
+
+# Determine an imported target's property, from the target's imported
+# configuration.  TARGET_NAME is the target's name.  E.g., if
+# PROPERTY_TYPE is IMPORTED_LOCATION, this fetches the right
+# IMPORTED_LOCATION_<config> (e.g., IMPORTED_LOCATION_RELEASE) from
+# TARGET_NAME's properties.
+function(get_imported_property TARGET_NAME PROPERTY_TYPE PROPERTY_VAR)
+  if(NOT TARGET ${TARGET_NAME})
+    message(FATAL_ERROR "Target ${TARGET_NAME} not found.")
+  endif()
+
+  # Retrieve the list of all configurations provided by the imported
+  # target.
+  get_target_property(AVAILABLE_CONFIGS ${TARGET_NAME} IMPORTED_CONFIGURATIONS)
+
+  set(SELECTED_CONFIG "")
+
+  # If CMAKE_BUILD_TYPE is set, try an exact match.  This is what
+  # cmake does too:
+  # https://gitlab.kitware.com/cmake/cmake/blob/v3.29.6/Source/cmTarget.cxx#L3378-3387
+  if(CMAKE_BUILD_TYPE)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
+    # Check if the specified build type matches any of the available
+    # configurations.
+    if("${CMAKE_BUILD_TYPE_UPPER}" IN_LIST AVAILABLE_CONFIGS)
+      set(SELECTED_CONFIG "${CMAKE_BUILD_TYPE_UPPER}")
+      get_target_property(PROPERTY_VALUE ${TARGET_NAME} ${PROPERTY_TYPE}_${CMAKE_BUILD_TYPE_UPPER})
+      set(${PROPERTY_VAR} ${PROPERTY_VALUE} PARENT_SCOPE)
+      MESSAGE(STATUS "Selected configuration for ${TARGET_NAME}: ${SELECTED_CONFIG} (matched CMAKE_BUILD_TYPE)")
+    endif()
+  endif()
+
+  # If the build type wasn't specified or didn't match any available
+  # configurations, pick the first valid one from all available
+  # configurations.  This matches what cmake does too:
+  # https://gitlab.kitware.com/cmake/cmake/blob/v3.29.6/Source/cmTarget.cxx#L3389-3420
+  if(SELECTED_CONFIG STREQUAL "")
+    foreach(CONFIG ${AVAILABLE_CONFIGS})
+      string(TOUPPER "${CONFIG}" CONFIG_UPPER)
+      get_target_property(PROPERTY_VALUE ${TARGET_NAME} ${PROPERTY_TYPE}_${CONFIG_UPPER})
+      if(NOT ${PROPERTY_VALUE} STREQUAL "${PROPERTY_TYPE}_${CONFIG_UPPER}-NOTFOUND")
+	set(SELECTED_CONFIG ${CONFIG_UPPER})
+	MESSAGE(STATUS "Selected configuration for ${TARGET_NAME}: ${SELECTED_CONFIG}")
+	set(${PROPERTY_VAR} ${PROPERTY_VALUE} PARENT_SCOPE)
+	break()
+      endif()
+    endforeach()
+  endif()
+
+  if(SELECTED_CONFIG STREQUAL "")
+    message(FATAL_ERROR "Could not determine the appropriate configuration for ${TARGET_NAME} library.")
+  endif()
+endfunction()
+
+# If building a static library, retrieve the amd_comgr library's name
+# from the cmake package, to put in the .pc file.
+set(PC_EXTRA_LIBS "")
+if(NOT BUILD_SHARED_LIBS)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+     # On Windows, look for the import lib.  If amd_comgr was built
+     # with MSVC, then the import lib will look like e.g.,
+     # amd_comgr_2.lib.  I.e., we can't hardcode whether we have
+     # lib${name}.a or ${name}.lib, nor can we assume that ${name} is
+     # exactly "amd_comgr".
+     get_imported_property(amd_comgr IMPORTED_IMPLIB AMD_COMGR_IMPLIB)
+     cmake_path(GET AMD_COMGR_IMPLIB FILENAME AMD_COMGR_IMPLIB_BASENAME)
+     cmake_path(GET AMD_COMGR_IMPLIB PARENT_PATH AMD_COMGR_IMPLIB_DIR)
+     set(PC_EXTRA_LIBS "-L${AMD_COMGR_IMPLIB_DIR} -l:${AMD_COMGR_IMPLIB_BASENAME}")
+   else()
+     get_imported_property(amd_comgr IMPORTED_LOCATION AMD_COMGR_LOCATION)
+     cmake_path(GET AMD_COMGR_LOCATION PARENT_PATH AMD_COMGR_LOCATION_DIR)
+     set(PC_EXTRA_LIBS "-L${AMD_COMGR_LOCATION_DIR} -lamd_comgr")
+   endif()
+endif()
+
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/amd-dbgapi.pc.in
+  ${CMAKE_CURRENT_BINARY_DIR}/share/pkgconfig/amd-dbgapi.pc @ONLY)
 
 if(DEFINED ENV{ROCM_BUILD_ID})
   # ROCM_BUILD_ID is set by the ROCm-CI build environment.
