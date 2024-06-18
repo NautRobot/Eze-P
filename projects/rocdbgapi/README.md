@@ -73,10 +73,14 @@ make
 
 You may substitute a path of your own choosing for ``CMAKE_INSTALL_PREFIX``.
 
+By default, ROCdbapi is built as a shared library.  You may build it
+instead as a static library by setting the ``BUILD_SHARED_LIBS`` cmake
+variable to ``OFF``.
+
 The built ROCdbgapi library will be placed in:
 
 - ``build/include/amd-dbgapi.h``
-- ``build/librocm-dbgapi.so*``
+- ``build/librocm-dbgapi.(a|so)*``
 
 An example command-line to generate the HTML and PDF library documentation is:
 
