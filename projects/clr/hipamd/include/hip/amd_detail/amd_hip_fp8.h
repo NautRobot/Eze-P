@@ -2637,7 +2637,6 @@ struct __hip_fp8x2_e4m3 {
   __FP8_HOST__ operator float2() const {
 #endif
 #if HIP_FP8_CVT_FAST_PATH
-      return internal::cast_to_f32x2_from_f8x2(__x, __default_interpret);
 #else
     return float2(internal::cast_from_f8<float, false>(static_cast<__hip_fp8_storage_t>(__x & 0xFF),
                                                        __wm, __we),
@@ -2647,12 +2646,11 @@ struct __hip_fp8x2_e4m3 {
 }
 }
 ;
-
-/**
- * \brief struct representing four ocp fp8 numbers with e4m3 interpretation
- *
- * */
-struct __hip_fp8x4_e4m3 {
+__FP8_HOST_DEVICE__ operator float2() const {
+#else
+__FP8_HOST__ operator float2() const {
+#endif
+#if HIP_FP8_CVT_FAST_PATH
   __hip_fp8x4_storage_t __x;  //! raw storage of four fp8 numbers
   static constexpr __hip_saturation_t __default_saturation = __HIP_SATFINITE;
   static constexpr __hip_fp8_interpretation_t __default_interpret = __HIP_E4M3;
