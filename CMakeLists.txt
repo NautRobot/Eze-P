@@ -23,6 +23,7 @@ cmake_minimum_required(VERSION 3.8)
 project(amd-dbgapi VERSION 0.77.4)
 
 include(CheckIncludeFile)
+include(CheckIncludeFiles)
 include(GNUInstallDirs)
 include(CheckCXXSourceCompiles)
 
@@ -227,10 +228,29 @@ target_link_libraries(amd-dbgapi PRIVATE amd_comgr ${CMAKE_DL_LIBS})
 set_source_files_properties(src/versioning.cpp src/initialization.cpp PROPERTIES
   COMPILE_DEFINITIONS "AMD_DBGAPI_VERSION_PATCH=${PROJECT_VERSION_PATCH};AMD_DBGAPI_BUILD_INFO=\"${PROJECT_VERSION}-${build_info}\"")
 
-# We are using the HSA runtime headers, but not the runtime library. Get the HSA runtime
-# include directories from the hsa-runtime64::hsa-runtime64 interface.
-find_package(hsa-runtime64 REQUIRED CONFIG PATHS "/opt/rocm")
-get_property(HSA_RUNTIME_INCLUDE_DIRECTORIES TARGET hsa-runtime64::hsa-runtime64 PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+# We are using the HSA runtime headers, but not the runtime library.
+# Attempt to locate the HSA runtime headers, either via the
+# hsa-runtime64 package or through a user-specified path.
+
+set(HSA_RUNTIME_INCLUDE_DIRECTORIES "" CACHE PATH "Path to the HSA runtime headers")
+
+if ("${HSA_RUNTIME_INCLUDE_DIRECTORIES}" STREQUAL "" )
+  find_package(hsa-runtime64 CONFIG PATHS "/opt/rocm")
+  if(hsa-runtime64_FOUND)
+    get_target_property(HSA_RUNTIME_INCLUDE_DIRECTORIES hsa-runtime64::hsa-runtime64 INTERFACE_INCLUDE_DIRECTORIES)
+  endif()
+endif()
+
+if (HSA_RUNTIME_INCLUDE_DIRECTORIES)
+  # For check_include_headers.
+  set(CMAKE_REQUIRED_INCLUDES APPEND "${HSA_RUNTIME_INCLUDE_DIRECTORIES}")
+endif()
+
+check_include_files("hsa/hsa.h;hsa/amd_hsa_queue.h" HSA_HEADERS_FOUND)
+
+if (NOT HSA_HEADERS_FOUND)
+  message(FATAL_ERROR "Cannot find required HSA header files")
+endif()
 
 target_include_directories(amd-dbgapi
   PRIVATE
