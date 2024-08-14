@@ -105,3 +105,75 @@ add_test(
             --test-command "jpegdecodebatched"
             -i ${CMAKE_SOURCE_DIR}/data/images/
 )
+
+add_test(
+  NAME
+  jpeg-decode-crop-fmt-native
+  COMMAND
+    "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/jpegDecode"
+                              "${CMAKE_CURRENT_BINARY_DIR}/jpegDecode"
+            --build-generator "${CMAKE_GENERATOR}"
+            --test-command "jpegdecode"
+            -i ${CMAKE_SOURCE_DIR}/data/images/ -crop 960,540,2880,1620
+)
+
+add_test(
+  NAME
+    jpeg-decode-crop-fmt-yuv-planar
+  COMMAND
+    "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/jpegDecode"
+                              "${CMAKE_CURRENT_BINARY_DIR}/jpegDecode"
+            --build-generator "${CMAKE_GENERATOR}"
+            --test-command "jpegdecode"
+            -i ${CMAKE_SOURCE_DIR}/data/images/ -fmt yuv -crop 960,540,2880,1620
+)
+
+add_test(
+  NAME
+    jpeg-decode-crop-fmt-y
+  COMMAND
+    "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/jpegDecode"
+                              "${CMAKE_CURRENT_BINARY_DIR}/jpegDecode"
+            --build-generator "${CMAKE_GENERATOR}"
+            --test-command "jpegdecode"
+            -i ${CMAKE_SOURCE_DIR}/data/images/ -fmt y -crop 960,540,2880,1620
+)
+
+add_test(
+  NAME
+    jpeg-decode-crop-fmt-rgb
+  COMMAND
+    "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/jpegDecode"
+                              "${CMAKE_CURRENT_BINARY_DIR}/jpegDecode"
+            --build-generator "${CMAKE_GENERATOR}"
+            --test-command "jpegdecode"
+            -i ${CMAKE_SOURCE_DIR}/data/images/ -fmt rgb -crop 960,540,2880,1620
+)
+
+add_test(
+  NAME
+    jpeg-decode-crop-fmt-rgb-planar
+  COMMAND
+    "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/jpegDecode"
+                              "${CMAKE_CURRENT_BINARY_DIR}/jpegDecode"
+            --build-generator "${CMAKE_GENERATOR}"
+            --test-command "jpegdecode"
+            -i ${CMAKE_SOURCE_DIR}/data/images/ -fmt rgb_planar -crop 960,540,2880,1620
+)
+
+add_test(
+  NAME
+  jpeg-decode-crop-batch-fmt-native
+  COMMAND
+    "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${CMAKE_CURRENT_SOURCE_DIR}/jpegDecodeBatched"
+                              "${CMAKE_CURRENT_BINARY_DIR}/jpegDecodeBatched"
+            --build-generator "${CMAKE_GENERATOR}"
+            --test-command "jpegdecodebatched"
+            -i ${CMAKE_SOURCE_DIR}/data/images/ -crop 960,540,2880,1620
+)

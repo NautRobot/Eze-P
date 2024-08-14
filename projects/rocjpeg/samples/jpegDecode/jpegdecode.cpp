@@ -49,6 +49,13 @@ int main(int argc, char **argv) {
     RocJpegUtils rocjpeg_utils;
 
     RocJpegUtils::ParseCommandLine(input_path, output_file_path, save_images, device_id, rocjpeg_backend, decode_params, nullptr, nullptr, argc, argv);
+    
+    bool is_roi_valid = false;
+    uint32_t roi_width;
+    uint32_t roi_height;
+    roi_width = decode_params.crop_rectangle.right - decode_params.crop_rectangle.left;
+    roi_height = decode_params.crop_rectangle.bottom - decode_params.crop_rectangle.top;
+
     if (!RocJpegUtils::GetFilePaths(input_path, file_paths, is_dir, is_file)) {
         std::cerr << "ERROR: Failed to get input file paths!" << std::endl;
         return EXIT_FAILURE;
@@ -87,6 +94,10 @@ int main(int argc, char **argv) {
         CHECK_ROCJPEG(rocJpegStreamParse(reinterpret_cast<uint8_t*>(file_data.data()), file_size, rocjpeg_stream_handle));
         CHECK_ROCJPEG(rocJpegGetImageInfo(rocjpeg_handle, rocjpeg_stream_handle, &num_components, &subsampling, widths, heights));
 
+        if (roi_width > 0 && roi_height > 0 && roi_width <= widths[0] && roi_height <= heights[0]) {
+            is_roi_valid = true; 
+        }
+
         rocjpeg_utils.GetChromaSubsamplingStr(subsampling, chroma_sub_sampling);
         std::cout << "Input file name: " << base_file_name << std::endl;
         std::cout << "Input image resolution: " << widths[0] << "x" << heights[0] << std::endl;
@@ -124,6 +135,9 @@ int main(int argc, char **argv) {
             }
         }
 
+        if (is_roi_valid) {
+            std::cout << "Cropped image resolution: " << roi_width << "x" <<  roi_height << std::endl;
+        }
         std::cout << "Decoding started, please wait! ... " << std::endl;
         auto start_time = std::chrono::high_resolution_clock::now();
         CHECK_ROCJPEG(rocJpegDecode(rocjpeg_handle, rocjpeg_stream_handle, &decode_params, &output_image));
@@ -134,10 +148,13 @@ int main(int argc, char **argv) {
 
         if (save_images) {
             std::string image_save_path = output_file_path;
+            //if ROI is present, need to pass roi_width and roi_height
+            uint32_t width = is_roi_valid ? roi_width : widths[0];
+            uint32_t height = is_roi_valid ? roi_height : heights[0];
             if (is_dir) {
-                rocjpeg_utils.GetOutputFileExt(decode_params.output_format, base_file_name, widths[0], heights[0], subsampling, image_save_path);
+                rocjpeg_utils.GetOutputFileExt(decode_params.output_format, base_file_name, width, height, subsampling, image_save_path);
             }
-            rocjpeg_utils.SaveImage(image_save_path, &output_image, widths[0], heights[0], subsampling, decode_params.output_format);
+            rocjpeg_utils.SaveImage(image_save_path, &output_image, width, height, subsampling, decode_params.output_format);
         }
 
         std::cout << "Average processing time per image (ms): " << time_per_image_in_milli_sec << std::endl;

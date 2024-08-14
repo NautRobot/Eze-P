@@ -52,6 +52,13 @@ int main(int argc, char **argv) {
     RocJpegUtils rocjpeg_utils;
 
     RocJpegUtils::ParseCommandLine(input_path, output_file_path, save_images, device_id, rocjpeg_backend, decode_params, nullptr, &batch_size, argc, argv);
+    
+    bool is_roi_valid = false;
+    uint32_t roi_width;
+    uint32_t roi_height;
+    roi_width = decode_params.crop_rectangle.right - decode_params.crop_rectangle.left;
+    roi_height = decode_params.crop_rectangle.bottom - decode_params.crop_rectangle.top;
+    
     if (!RocJpegUtils::GetFilePaths(input_path, file_paths, is_dir, is_file)) {
         std::cerr << "ERROR: Failed to get input file paths!" << std::endl;
         return EXIT_FAILURE;
@@ -102,6 +109,10 @@ int main(int argc, char **argv) {
 
             CHECK_ROCJPEG(rocJpegStreamParse(reinterpret_cast<uint8_t*>(batch_images[index].data()), file_size, rocjpeg_stream_handles[index]));
             CHECK_ROCJPEG(rocJpegGetImageInfo(rocjpeg_handle, rocjpeg_stream_handles[index], &num_components, &subsamplings[index], widths[index].data(), heights[index].data()));
+
+            if (roi_width > 0 && roi_height > 0 && roi_width <= widths[index][0] && roi_height <= heights[index][0]) {
+                is_roi_valid = true; 
+            }
 
             rocjpeg_utils.GetChromaSubsamplingStr(subsamplings[index], chroma_sub_sampling);
             if (widths[index][0] < 64 || heights[index][0] < 64) {
@@ -156,10 +167,13 @@ int main(int argc, char **argv) {
         if (save_images) {
             for (int b = 0; b < current_batch_size; b++) {
                 std::string image_save_path = output_file_path;
+                //if ROI is present, need to pass roi_width and roi_height
+                uint32_t width = is_roi_valid ? roi_width : widths[b][0];
+                uint32_t height = is_roi_valid ? roi_height : heights[b][0];
                 if (is_dir) {
-                    rocjpeg_utils.GetOutputFileExt(decode_params.output_format, base_file_names[b], widths[b][0], heights[b][0], subsamplings[b], image_save_path);
+                    rocjpeg_utils.GetOutputFileExt(decode_params.output_format, base_file_names[b], width, height, subsamplings[b], image_save_path);
                 }
-                rocjpeg_utils.SaveImage(image_save_path, &output_images[b], widths[b][0], heights[b][0], subsamplings[b], decode_params.output_format);
+                rocjpeg_utils.SaveImage(image_save_path, &output_images[b], width, height, subsamplings[b], decode_params.output_format);
             }
         }
 
