@@ -4283,10 +4283,15 @@ gfx10_architecture_t::gfx10_architecture_t (elf_amdgpu_machine_t e_machine,
                { return register_class.name () == "system"; });
   dbgapi_assert (system_registers != nullptr);
 
-  system_registers->add_registers (amdgpu_regnum_t::xnack_mask_32,
-                                   amdgpu_regnum_t::xnack_mask_32);
   system_registers->remove_registers (amdgpu_regnum_t::xnack_mask_64,
                                       amdgpu_regnum_t::xnack_mask_64);
+
+  /* gfx10.1 still supports xnack_mask, but only 32bit wide.  */
+  if (e_machine == EF_AMDGPU_MACH_AMDGCN_GFX1010
+      || e_machine == EF_AMDGPU_MACH_AMDGCN_GFX1011
+      || e_machine == EF_AMDGPU_MACH_AMDGCN_GFX1012)
+    system_registers->add_registers (amdgpu_regnum_t::xnack_mask_32,
+                                     amdgpu_regnum_t::xnack_mask_32);
 
   /* General registers: [s103-s105, {vector}_32, exec_32, vcc_32]  */
   register_class_t *general_registers
