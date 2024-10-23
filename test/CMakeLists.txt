@@ -36,8 +36,18 @@ cmake_minimum_required(VERSION 3.10)
 
 project(rocm-debug-agent-test)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "/opt/rocm/lib/cmake/hip")
-find_package(HIP REQUIRED MODULE)
+# CMAKE_MODULE_PATH set to default
+set(CMAKE_MODULE_PATH "/opt/rocm/lib/cmake/hip" CACHE STRING "HIP CMAKE Module Path")
+find_package(HIP MODULE QUIET)
+# Mandate correct CMAKE_MODULE_PATH to be provided if Module not found in default
+if( NOT HIP_FOUND )
+  message(FATAL_ERROR
+          "HIP Module not found in Module Path ${CMAKE_MODULE_PATH}, \
+           Please pass the correct Module search Path \
+           'cmake -DCMAKE_MODULE_PATH=/opt/rocm-<version>/lib/cmake/hip'")
+  return()
+endif()
+
 set(CMAKE_HIP_ARCHITECTURES OFF)
 
 file(GLOB SOURCES "*.cpp")
