@@ -3,7 +3,7 @@
 Full documentation for AMD Debugger API is available at
 [rocm.docs.amd.com/rocdbgapi](https://rocm.docs.amd.com/projects/ROCdbgapi/en/latest/index.html).
 
-## rocm-dbgapi-0.77.0
+## rocm-dbgapi-0.77.0 for ROCm-6.3
 
 ### Added
 - Support for gfx1200 and gfx1201 architectures.
@@ -17,7 +17,7 @@ Full documentation for AMD Debugger API is available at
   `AMD_DBGAPI_STATUS_ERROR_RESTRICTION` for the
   `AMDGPU_DBGAPI_PROCESS_INFO_CORE_STATE` request.
 
-## rocm-dbgapi-0.75.0
+## rocm-dbgapi-0.75.0 for ROCm 6.2
 ### Changed
 - Rename (AMD_DBGAPI_EXCEPTION_WAVE,AMD_DBGAPI_WAVE_STOP_REASON)_APERTURE_VIOLATION
   -> (AMD_DBGAPI_EXCEPTION_WAVE,AMD_DBGAPI_WAVE_STOP_REASON)_ADDRESS_ERROR.
@@ -27,11 +27,11 @@ Full documentation for AMD Debugger API is available at
 ### Added
 - Added support to create and open core dumps.
 
-## rocm-dbgapi-0.71.0
+## rocm-dbgapi-0.71.0 for ROCm 6.0
 ### Added
 - Add support for gfx940, gfx941 and gfx942 architectures.
 
-## rocm-dbgapi-0.70.0
+## rocm-dbgapi-0.70.0 for ROCm 5.6
 ### Changed
 - The name reported for each agent is now based on the information stored
   in the [`pci.ids`](https://pci-ids.ucw.cz/) database.
