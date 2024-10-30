@@ -1296,6 +1296,8 @@ amdgcn_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
       trapsts_mask |= sq_wave_trapsts_excp_overflow_mask;
     if ((m & exception_mask_t::underflow) != 0)
       trapsts_mask |= sq_wave_trapsts_excp_underflow_mask;
+    if ((m & exception_mask_t::inexact) != 0)
+      trapsts_mask |= sq_wave_trapsts_excp_inexact_mask;
     if ((m & exception_mask_t::int_div0) != 0)
       trapsts_mask |= sq_wave_trapsts_excp_int_div0_mask;
     if ((m & exception_mask_t::mem_viol) != 0)
