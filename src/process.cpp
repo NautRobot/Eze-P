@@ -1012,7 +1012,7 @@ process_t::resume_queues (const std::vector<queue_t *> &queues,
       if (mask & os_queue_error_mask)
         fatal_error ("failed to resume os_queue_id %d", queue_id);
 
-      if (queue_id & os_queue_invalid_mask)
+      if (mask & os_queue_invalid_mask)
         {
           auto it = std::find_if (queues.begin (), queues.end (),
                                   [=] (const queue_t *q)
