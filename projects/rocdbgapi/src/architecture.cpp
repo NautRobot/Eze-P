@@ -6364,8 +6364,8 @@ gfx12_architecture_t::wave_set_halt (wave_t &wave, bool halt) const
   uint32_t state_priv_reg;
   wave.read_register (amdgpu_regnum_t::state_priv, &state_priv_reg);
 
-  state_priv_reg = halt ? state_priv_reg | sq_wave_status_halt_mask
-                        : state_priv_reg & ~sq_wave_status_halt_mask;
+  state_priv_reg = halt ? state_priv_reg | sq_wave_state_priv_halt_mask
+                        : state_priv_reg & ~sq_wave_state_priv_halt_mask;
 
   wave.write_register (amdgpu_regnum_t::state_priv, state_priv_reg);
 }
