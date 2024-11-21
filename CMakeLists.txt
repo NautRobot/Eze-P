@@ -24,6 +24,8 @@ project(amd-dbgapi VERSION 0.77.0)
 
 include(CheckIncludeFile)
 include(GNUInstallDirs)
+include(CheckCXXSourceCompiles)
+
 # Convert the project's name to uppercase and replace '-' with '_'.
 string(TOUPPER "${PROJECT_NAME}" AMD_DBGAPI_NAME)
 string(REPLACE "-" "_" AMD_DBGAPI_NAME ${AMD_DBGAPI_NAME})
@@ -131,6 +133,35 @@ set_source_files_properties(
   PROPERTIES
     COMPILE_DEFINITIONS "PCI_IDS_PATH=\"${PCI_IDS_PATH}\""
 )
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(CMAKE_REQUIRED_FLAGS_BKP "${CMAKE_REQUIRED_FLAGS}")
+  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
+  # For some platforms (PPC64), linux/types.h uses L64, but this code assumes
+  # LL64 (i.e.  __u64 should be a long long unsigned, not long unsigned).
+  check_cxx_source_compiles(
+    "#include <linux/types.h>
+     #include <type_traits>
+     int main () { static_assert (std::is_same_v<long long unsigned, __u64>); return 0; }"
+     LINUX_TYPES_HAS_LL64)
+
+  if(NOT LINUX_TYPES_HAS_LL64)
+    # Check if using __SANE_USERSPACE_TYPES__ gives us LL64
+    check_cxx_source_compiles(
+      "#define __SANE_USERSPACE_TYPES__
+       #include <linux/types.h>
+       #include <type_traits>
+       int main () { static_assert (std::is_same_v<long long unsigned, __u64>); return 0; }"
+       LINUX_TYPES_LL64_NEEDS_SANE_USERSPACE_TYPES)
+    if(LINUX_TYPES_LL64_NEEDS_SANE_USERSPACE_TYPES)
+      target_compile_definitions(amd-dbgapi PRIVATE "__SANE_USERSPACE_TYPES__")
+    else()
+      message(FATAL_ERROR
+              "A LL64 configuration is required for the Linux backend")
+    endif()
+  endif()
+  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS_BKP}")
+endif()
 
 find_package(amd_comgr REQUIRED CONFIG
   PATHS
