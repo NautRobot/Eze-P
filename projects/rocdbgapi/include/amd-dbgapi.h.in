@@ -290,6 +290,15 @@
  * - gfx1200
  * - gfx1201
  *
+ * The following generic AMD GPU architectures are supported:
+ *
+ * - gfx9-generic
+ * - gfx9-4-generic
+ * - gfx10-1-generic
+ * - gfx10-3-generic
+ * - gfx11-generic
+ * - gfx12-generic
+ *
  * For more information about the AMD ROCm ecosystem, please refer to:
  *
  * - https://rocm.docs.amd.com/

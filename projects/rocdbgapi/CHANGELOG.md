@@ -3,6 +3,17 @@
 Full documentation for AMD Debugger API is available at
 [rocm.docs.amd.com/rocdbgapi](https://rocm.docs.amd.com/projects/ROCdbgapi/en/latest/index.html).
 
+## rocm-dbgapi-0.77.1 for ROCm-6.4
+
+### Added
+- Support for generic code object targets:
+ - `gfx9-generic`
+ - `gfx9-4-generic`
+ - `gfx10-1-generic`
+ - `gfx10-3-generic`
+ - `gfx11-generic`
+ - `gfx12-generic`
+
 ## rocm-dbgapi-0.77.0 for ROCm-6.3
 
 ### Added
