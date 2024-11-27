@@ -1,6 +1,16 @@
 AMD ROCm Debug Agent Library (ROCdebug-agent)
 =============================================
 
+> [!NOTE]
+> The published documentation is available at [ROCR Debug
+> Agent](https://rocm.docs.amd.com/projects/rocr_debug_agent/en/latest/index.html)
+> in an organized, easy-to-read format, with search and a table of contents.
+> The documentation source files reside in the `rocr_debug_agent/docs` folder
+> of this repository.  As with all ROCm projects, the documentation is open
+> source.  For more information on contributing to the documentation, see
+> [Contribute to ROCm
+> documentation](https://rocm.docs.amd.com/en/latest/contribute/contributing.html).
+
 Introduction
 ------------
 
