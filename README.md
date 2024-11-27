@@ -189,6 +189,14 @@ The supported options are:
   When an exception occurs, precise memory ensures that the PC points to the
   instruction immediately following the one causing the exception.
 
+- __``-e``, ``--precise-alu-exceptions``__
+
+  Enables precise ALU exceptions reporting if supported by the devices.
+
+  When an exception occurs, precise ALU exceptions reporting ensures that the
+  PC points to the instruction immediately following the one causing the
+  exception.
+
 - __``-s [DIR]``, ``--save-code-objects[=DIR]``__
 
   Saves all loaded code objects.  If the directory is not specified, the code

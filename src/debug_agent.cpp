@@ -109,6 +109,7 @@ using code_object_map_t
 std::optional<std::string> g_code_objects_dir;
 bool g_all_wavefronts{ false };
 bool g_precise_emmory{ false };
+bool g_precise_alu_exceptions{ false };
 
 /* Global state accessed by the dbgapi callbacks.  */
 std::optional<amd_dbgapi_breakpoint_id_t> g_rbrk_breakpoint_id;
@@ -1044,7 +1045,8 @@ process_dbgapi_events (amd_dbgapi_process_id_t process_id, bool all_wavefronts,
    parameter is the read end of a pipe where the main application can write
    to instruct the worker thread to stop.  */
 void
-dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory)
+dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory,
+               bool precise_alu_exceptions)
 {
   amd_dbgapi_process_id_t process_id;
   amd_dbgapi_event_id_t event_id;
@@ -1126,6 +1128,20 @@ dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory)
                            "of this process.");
           else
             agent_error ("amd_dbgapi_set_memory_precision failed");
+        }
+    }
+
+  if (precise_alu_exceptions)
+    {
+      amd_dbgapi_status_t r = amd_dbgapi_set_alu_exceptions_precision (
+          process_id, AMD_DBGAPI_ALU_EXCEPTIONS_PRECISION_PRECISE);
+      if (r != AMD_DBGAPI_STATUS_SUCCESS)
+        {
+          if (r == AMD_DBGAPI_STATUS_ERROR_NOT_SUPPORTED)
+            agent_warning ("Precise ALU exceptions not supported for all the "
+                           "agents of this process.");
+          else
+            agent_error ("amd_dbgapi_set_alu_exceptions_precision failed");
         }
     }
 
@@ -1262,7 +1278,7 @@ DebugAgentWorker::DebugAgentWorker ()
   m_write_pipe = pipefd[1];
 
   m_worker_thread = std::thread (dbgapi_worker, pipefd[0], g_all_wavefronts,
-                                 g_precise_emmory);
+                                 g_precise_emmory, g_precise_alu_exceptions);
 
   /* Wait for the worker thread to have setup dbgapi.  */
   init_future.wait ();
@@ -1470,6 +1486,7 @@ OnLoad (void *table, uint64_t runtime_version, uint64_t failed_tool_count,
           { "output", required_argument, nullptr, 'o' },
           { "save-code-objects", optional_argument, nullptr, 's' },
           { "precise-memory", no_argument, nullptr, 'p' },
+          { "precise-alu-exceptions", no_argument, nullptr, 'e' },
           { "help", no_argument, nullptr, 'h' },
           { 0 } };
 
@@ -1478,7 +1495,7 @@ OnLoad (void *table, uint64_t runtime_version, uint64_t failed_tool_count,
   int saved_optind = optind;
   optind = 1;
 
-  while (int c = getopt_long (argc, argv, ":as::o:dpl:h", options, nullptr))
+  while (int c = getopt_long (argc, argv, ":as::o:dpel:h", options, nullptr))
     {
       if (c == -1)
         break;
@@ -1503,6 +1520,10 @@ OnLoad (void *table, uint64_t runtime_version, uint64_t failed_tool_count,
 
         case 'p': /* -p or --precise-memory  */
           g_precise_emmory = true;
+          break;
+
+        case 'e': /* -e or --precise-alu-exceptions  */
+          g_precise_alu_exceptions = true;
           break;
 
         case 'l': /* -l or --log-level  */
