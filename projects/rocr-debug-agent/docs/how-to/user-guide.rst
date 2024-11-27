@@ -158,6 +158,14 @@ The following table lists the supported options:
       When an exception occurs, precise memory ensures that the PC points to
       the instruction immediately following the one causing the exception.
 
+    *  __``-e``, ``--precise-alu-exceptions``__
+
+      Enables precise ALU exceptions reporting if supported by the devices.
+
+      When an exception occurs, precise ALU exceptions reporting ensures that
+      the PC points to the instruction immediately following the one causing
+      the exception.
+
     * - ``-s [DIR]``, ``--save-code-objects[=DIR]``
       - Saves all loaded code objects. If the directory is not specified, the code objects are saved in the current directory.
         The file name in which the code object is saved is the same as the code object URI with special characters replaced by '_', prefixed with a unique code object ID. For example, the code object URI
