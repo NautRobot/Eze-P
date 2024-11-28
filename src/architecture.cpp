@@ -1277,51 +1277,78 @@ amdgcn_architecture_t::signaled_exceptions (const wave_t &wave) const
   return exceptions;
 }
 
+/* For each exception bit (e) that is set in MASK find its
+   corresponding bit position (t) in "trapsts" register.  That
+   bit (t) in "trapsts" will be only set if the corresponding
+   bit (e) in EXCEPTIONS is set. Else, it will be cleared:
+
+   TRAPSTS[t] = 1 if EXCEPTIONS[e], else 0.  */
+
 void
 amdgcn_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                                        exception_mask_t exceptions) const
 {
-  uint32_t trapsts;
-
-  auto convert_mask = [] (exception_mask_t m) -> uint32_t
+  auto convert_exception = [] (exception_mask_t excp) -> uint32_t
   {
-    uint32_t trapsts_mask = 0;
-    if ((m & exception_mask_t::invalid) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_invalid_mask;
-    if ((m & exception_mask_t::input_denorm) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_input_denorm_mask;
-    if ((m & exception_mask_t::float_div0) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_div0_mask;
-    if ((m & exception_mask_t::overflow) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_overflow_mask;
-    if ((m & exception_mask_t::underflow) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_underflow_mask;
-    if ((m & exception_mask_t::inexact) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_inexact_mask;
-    if ((m & exception_mask_t::int_div0) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_int_div0_mask;
-    if ((m & exception_mask_t::xnack_error) != 0)
-      trapsts_mask |= sq_wave_trapsts_xnack_error_mask;
-    if ((m & exception_mask_t::mem_viol) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_mem_viol_mask;
-    if ((m & exception_mask_t::illegal_inst) != 0)
-      trapsts_mask |= sq_wave_trapsts_illegal_inst_mask;
-    if ((m & exception_mask_t::addr_watch0) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_addr_watch0_mask;
-    if ((m & exception_mask_t::addr_watch1) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_hi_addr_watch1_mask;
-    if ((m & exception_mask_t::addr_watch2) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_hi_addr_watch2_mask;
-    if ((m & exception_mask_t::addr_watch3) != 0)
-      trapsts_mask |= sq_wave_trapsts_excp_hi_addr_watch3_mask;
-
-    return trapsts_mask;
+    /* At most, one bit in EXCP may be set.  */
+    dbgapi_assert ((excp & (excp - 1)) == 0);
+    switch (excp)
+      {
+      case exception_mask_t::invalid:
+        return sq_wave_trapsts_excp_invalid_mask;
+      case exception_mask_t::input_denorm:
+        return sq_wave_trapsts_excp_input_denorm_mask;
+      case exception_mask_t::float_div0:
+        return sq_wave_trapsts_excp_div0_mask;
+      case exception_mask_t::overflow:
+        return sq_wave_trapsts_excp_overflow_mask;
+      case exception_mask_t::underflow:
+        return sq_wave_trapsts_excp_underflow_mask;
+      case exception_mask_t::inexact:
+        return sq_wave_trapsts_excp_inexact_mask;
+      case exception_mask_t::int_div0:
+        return sq_wave_trapsts_excp_int_div0_mask;
+      case exception_mask_t::xnack_error:
+        return sq_wave_trapsts_xnack_error_mask;
+      case exception_mask_t::mem_viol:
+        return sq_wave_trapsts_excp_mem_viol_mask;
+      case exception_mask_t::illegal_inst:
+        return sq_wave_trapsts_illegal_inst_mask;
+      case exception_mask_t::addr_watch0:
+        return sq_wave_trapsts_excp_addr_watch0_mask;
+      case exception_mask_t::addr_watch1:
+        return sq_wave_trapsts_excp_hi_addr_watch1_mask;
+      case exception_mask_t::addr_watch2:
+        return sq_wave_trapsts_excp_hi_addr_watch2_mask;
+      case exception_mask_t::addr_watch3:
+        return sq_wave_trapsts_excp_hi_addr_watch3_mask;
+      case exception_mask_t::wave_begin:
+      case exception_mask_t::wave_end:
+      case exception_mask_t::trap_after_inst:
+      case exception_mask_t::host_trap:
+        return 0;
+        /* Intentionally, no "default" is used.  So the compiler could
+           complain if a newly added exception is not handled.  */
+      }
+    return 0;
   };
-  const uint32_t trapsts_mask = convert_mask (mask);
-  const uint32_t trapsts_set = convert_mask (exceptions);
 
+  uint32_t trapsts;
   wave.read_register (amdgpu_regnum_t::trapsts, &trapsts);
-  trapsts = (trapsts & ~trapsts_mask) | (trapsts_set & trapsts_mask);
+  while (mask != 0)
+    {
+      /* Get the lowest bit that is set.  */
+      auto single_exception = mask ^ (mask & (mask - 1));
+
+      /* For each exception, set or clear the corresponding bit in TRAPSTS.  */
+      auto trapsts_bit = convert_exception (single_exception);
+      if ((exceptions & single_exception) != 0)
+        trapsts |= trapsts_bit;
+      else
+        trapsts &= ~trapsts_bit;
+
+      mask ^= single_exception;
+    }
   wave.write_register (amdgpu_regnum_t::trapsts, trapsts);
 }
 
@@ -3785,28 +3812,43 @@ void
 gfx940_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                           exception_mask_t exceptions) const
 {
-  gfx90a_t::set_exceptions (wave, mask, exceptions);
-
-  auto convert_mask = [] (exception_mask_t m) -> uint32_t
+  auto convert_exception = [] (exception_mask_t excp) -> uint32_t
   {
-    uint32_t trapsts_mask = 0;
-    if ((m & exception_mask_t::wave_begin) != 0)
-      trapsts_mask |= sq_wave_trapsts_wave_begin_mask;
-    if ((m & exception_mask_t::wave_end) != 0)
-      trapsts_mask |= sq_wave_trapsts_wave_end_mask;
-    if ((m & exception_mask_t::host_trap) != 0)
-      trapsts_mask |= sq_wave_trapsts_host_trap_mask;
-    if ((m & exception_mask_t::trap_after_inst) != 0)
-      trapsts_mask |= sq_wave_trapsts_trap_after_inst_mask;
-    return trapsts_mask;
+    /* At most, one bit in EXCP may be set.  */
+    dbgapi_assert ((excp & (excp - 1)) == 0);
+    switch (excp)
+      {
+      case exception_mask_t::wave_begin:
+        return sq_wave_trapsts_wave_begin_mask;
+      case exception_mask_t::wave_end:
+        return sq_wave_trapsts_wave_end_mask;
+      case exception_mask_t::host_trap:
+        return sq_wave_trapsts_host_trap_mask;
+      case exception_mask_t::trap_after_inst:
+        return sq_wave_trapsts_trap_after_inst_mask;
+      default:
+        return 0;
+      }
   };
 
-  uint32_t trapsts;
-  const uint32_t trapsts_mask = convert_mask (mask);
-  const uint32_t trapsts_set = convert_mask (exceptions);
+  gfx90a_t::set_exceptions (wave, mask, exceptions);
 
+  uint32_t trapsts;
   wave.read_register (amdgpu_regnum_t::trapsts, &trapsts);
-  trapsts = (trapsts & ~trapsts_mask) | (trapsts_set & trapsts_mask);
+  while (mask != 0)
+    {
+      /* Get the lowest bit that is set.  */
+      auto single_exception = mask ^ (mask & (mask - 1));
+
+      /* For each exception, set or clear the corresponding bit in TRAPSTS.  */
+      auto trapsts_bit = convert_exception (single_exception);
+      if ((exceptions & single_exception) != 0)
+        trapsts |= trapsts_bit;
+      else
+        trapsts &= ~trapsts_bit;
+
+      mask ^= single_exception;
+    }
   wave.write_register (amdgpu_regnum_t::trapsts, trapsts);
 }
 
@@ -5405,26 +5447,43 @@ void
 gfx11_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                                       exception_mask_t exceptions) const
 {
-  gfx10_architecture_t::set_exceptions (wave, mask, exceptions);
-  auto convert_mask = [] (exception_mask_t m) -> uint32_t
+  auto convert_exception = [] (exception_mask_t excp) -> uint32_t
   {
-    uint32_t trapsts_mask = 0;
-    if ((m & exception_mask_t::wave_begin) != 0)
-      trapsts_mask |= sq_wave_trapsts_wave_begin_mask;
-    if ((m & exception_mask_t::wave_end) != 0)
-      trapsts_mask |= sq_wave_trapsts_wave_end_mask;
-    if ((m & exception_mask_t::host_trap) != 0)
-      trapsts_mask |= sq_wave_trapsts_host_trap_mask;
-    if ((m & exception_mask_t::trap_after_inst) != 0)
-      trapsts_mask |= sq_wave_trapsts_trap_after_inst_mask;
-    return trapsts_mask;
+    /* At most, one bit in EXCP may be set.  */
+    dbgapi_assert ((excp & (excp - 1)) == 0);
+    switch (excp)
+      {
+      case exception_mask_t::wave_begin:
+        return sq_wave_trapsts_wave_begin_mask;
+      case exception_mask_t::wave_end:
+        return sq_wave_trapsts_wave_end_mask;
+      case exception_mask_t::host_trap:
+        return sq_wave_trapsts_host_trap_mask;
+      case exception_mask_t::trap_after_inst:
+        return sq_wave_trapsts_trap_after_inst_mask;
+      default:
+        return 0;
+      }
   };
 
+  gfx10_architecture_t::set_exceptions (wave, mask, exceptions);
+
   uint32_t trapsts;
-  const uint32_t trapsts_mask = convert_mask (mask);
-  const uint32_t trapsts_set = convert_mask (exceptions);
   wave.read_register (amdgpu_regnum_t::trapsts, &trapsts);
-  trapsts = (trapsts & ~trapsts_mask) | (trapsts_set & trapsts_mask);
+  while (mask != 0)
+    {
+      /* Get the lowest bit that is set.  */
+      auto single_exception = mask ^ (mask & (mask - 1));
+
+      /* For each exception, set or clear the corresponding bit in TRAPSTS.  */
+      auto trapsts_bit = convert_exception (single_exception);
+      if ((exceptions & single_exception) != 0)
+        trapsts |= trapsts_bit;
+      else
+        trapsts &= ~trapsts_bit;
+
+      mask ^= single_exception;
+    }
   wave.write_register (amdgpu_regnum_t::trapsts, trapsts);
 }
 
@@ -6254,73 +6313,90 @@ void
 gfx12_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                                       exception_mask_t exceptions) const
 {
+  auto convert_priv_exception = [] (exception_mask_t excp) -> uint32_t
+  {
+    /* At most, one bit in EXCP may be set.  */
+    dbgapi_assert ((excp & (excp - 1)) == 0);
+    switch (excp)
+      {
+      case exception_mask_t::mem_viol:
+        return sq_wave_excp_priv_memviol_mask;
+      case exception_mask_t::illegal_inst:
+        return sq_wave_excp_priv_illegal_inst_mask;
+      case exception_mask_t::addr_watch0:
+        return sq_wave_excp_priv_addr_watch0_mask;
+      case exception_mask_t::addr_watch1:
+        return sq_wave_excp_priv_addr_watch1_mask;
+      case exception_mask_t::addr_watch2:
+        return sq_wave_excp_priv_addr_watch2_mask;
+      case exception_mask_t::addr_watch3:
+        return sq_wave_excp_priv_addr_watch3_mask;
+      case exception_mask_t::xnack_error:
+        return sq_wave_excp_priv_xnack_error_mask;
+      case exception_mask_t::wave_begin:
+        return sq_wave_excp_priv_wave_start_mask;
+      case exception_mask_t::wave_end:
+        return sq_wave_excp_priv_wave_end_mask;
+      case exception_mask_t::trap_after_inst:
+        return sq_wave_excp_priv_trap_after_inst_mask;
+      case exception_mask_t::host_trap:
+        return sq_wave_excp_priv_host_trap_mask;
+      default:
+        return 0;
+      }
+  };
+
+  auto convert_user_exception = [] (exception_mask_t excp) -> uint32_t
+  {
+    /* At most, one bit in EXCP may be set.  */
+    dbgapi_assert ((excp & (excp - 1)) == 0);
+    switch (excp)
+      {
+      case exception_mask_t::invalid:
+        return sq_wave_excp_user_alu_invalid_mask;
+      case exception_mask_t::input_denorm:
+        return sq_wave_excp_user_alu_input_denorm_mask;
+      case exception_mask_t::float_div0:
+        return sq_wave_excp_user_alu_float_div0_mask;
+      case exception_mask_t::overflow:
+        return sq_wave_excp_user_alu_overflow_mask;
+      case exception_mask_t::underflow:
+        return sq_wave_excp_user_alu_underflow_mask;
+      case exception_mask_t::inexact:
+        return sq_wave_excp_user_alu_inexact_mask;
+      case exception_mask_t::int_div0:
+        return sq_wave_excp_user_alu_int_div0_mask;
+      default:
+        return 0;
+      }
+  };
+
   uint32_t excp_flag_priv_reg, excp_flag_user_reg;
-
-  auto convert_priv_mask = [] (exception_mask_t m) -> uint32_t
-  {
-    uint32_t excp_flag_priv_mask = 0;
-
-    if ((m & exception_mask_t::mem_viol) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_memviol_mask;
-    if ((m & exception_mask_t::illegal_inst) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_illegal_inst_mask;
-    if ((m & exception_mask_t::addr_watch0) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_addr_watch0_mask;
-    if ((m & exception_mask_t::addr_watch1) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_addr_watch1_mask;
-    if ((m & exception_mask_t::addr_watch2) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_addr_watch2_mask;
-    if ((m & exception_mask_t::addr_watch3) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_addr_watch3_mask;
-    if ((m & exception_mask_t::xnack_error) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_xnack_error_mask;
-    if ((m & exception_mask_t::wave_begin) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_wave_start_mask;
-    if ((m & exception_mask_t::wave_end) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_wave_end_mask;
-    if ((m & exception_mask_t::trap_after_inst) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_trap_after_inst_mask;
-    if ((m & exception_mask_t::host_trap) != 0)
-      excp_flag_priv_mask |= sq_wave_excp_priv_host_trap_mask;
-
-    return excp_flag_priv_mask;
-  };
-
-  auto convert_user_mask = [] (exception_mask_t m) -> uint32_t
-  {
-    uint32_t excp_flag_user_mask = 0;
-
-    if ((m & exception_mask_t::invalid) != 0)
-      excp_flag_user_mask |= sq_wave_excp_user_alu_invalid_mask;
-    if ((m & exception_mask_t::input_denorm) != 0)
-      excp_flag_user_mask |= sq_wave_excp_user_alu_input_denorm_mask;
-    if ((m & exception_mask_t::float_div0) != 0)
-      excp_flag_user_mask |= sq_wave_excp_user_alu_float_div0_mask;
-    if ((m & exception_mask_t::overflow) != 0)
-      excp_flag_user_mask |= sq_wave_excp_user_alu_overflow_mask;
-    if ((m & exception_mask_t::underflow) != 0)
-      excp_flag_user_mask |= sq_wave_excp_user_alu_underflow_mask;
-    if ((m & exception_mask_t::inexact) != 0)
-      excp_flag_user_mask |= sq_wave_excp_user_alu_inexact_mask;
-    if ((m & exception_mask_t::int_div0) != 0)
-      excp_flag_user_mask |= sq_wave_excp_user_alu_int_div0_mask;
-
-    return excp_flag_user_mask;
-  };
-
-  const uint32_t excp_flag_priv_mask = convert_priv_mask (mask);
-  const uint32_t excp_flag_priv_set = convert_priv_mask (exceptions);
-  const uint32_t excp_flag_user_mask = convert_user_mask (mask);
-  const uint32_t excp_flag_user_set = convert_user_mask (exceptions);
-
   wave.read_register (amdgpu_regnum_t::excp_flag_priv, &excp_flag_priv_reg);
   wave.read_register (amdgpu_regnum_t::excp_flag_user, &excp_flag_user_reg);
+  while (mask != 0)
+    {
+      /* Get the lowest bit that is set.  */
+      auto single_exception = mask ^ (mask & (mask - 1));
 
-  excp_flag_priv_reg = (excp_flag_priv_reg & ~excp_flag_priv_mask)
-                       | (excp_flag_priv_set & excp_flag_priv_mask);
-  excp_flag_user_reg = (excp_flag_user_reg & ~excp_flag_user_mask)
-                       | (excp_flag_user_set & excp_flag_user_mask);
-
+      /* For each exception, set or clear the corresponding bit.  */
+      auto excp_flag_priv_bit = convert_priv_exception (single_exception);
+      auto excp_flag_user_bit = convert_user_exception (single_exception);
+      /* "single_exception" may indicate a bit in either the privilege or
+         user exception flag registers, but not both.  */
+      dbgapi_assert ((!!excp_flag_priv_bit && !!excp_flag_user_bit) == false);
+      if ((exceptions & single_exception) != 0)
+        {
+          excp_flag_priv_reg |= excp_flag_priv_bit;
+          excp_flag_user_reg |= excp_flag_user_bit;
+        }
+      else
+        {
+          excp_flag_priv_reg &= ~excp_flag_priv_bit;
+          excp_flag_user_reg &= ~excp_flag_user_bit;
+        }
+      mask ^= single_exception;
+    }
   wave.write_register (amdgpu_regnum_t::excp_flag_priv, excp_flag_priv_reg);
   wave.write_register (amdgpu_regnum_t::excp_flag_user, excp_flag_user_reg);
 }
