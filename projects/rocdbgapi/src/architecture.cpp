@@ -1300,6 +1300,8 @@ amdgcn_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
       trapsts_mask |= sq_wave_trapsts_excp_inexact_mask;
     if ((m & exception_mask_t::int_div0) != 0)
       trapsts_mask |= sq_wave_trapsts_excp_int_div0_mask;
+    if ((m & exception_mask_t::xnack_error) != 0)
+      trapsts_mask |= sq_wave_trapsts_xnack_error_mask;
     if ((m & exception_mask_t::mem_viol) != 0)
       trapsts_mask |= sq_wave_trapsts_excp_mem_viol_mask;
     if ((m & exception_mask_t::illegal_inst) != 0)
