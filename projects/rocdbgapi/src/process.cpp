@@ -645,15 +645,16 @@ process_t::update_agents ()
         {
           auto [major, minor, stepping] = agent_info.gfxip;
 
-          const architecture_t *architecture
-            = architecture_t::find (string_printf (
+          const std::string arch_name = string_printf (
               "gfx%d%c%c", major,
               (minor < 10) ? (minor + '0') : (minor - 10 + 'a'),
-              (stepping < 10) ? (stepping + '0') : (stepping - 10 + 'a')));
+              (stepping < 10) ? (stepping + '0') : (stepping - 10 + 'a'));
+          const architecture_t *architecture = architecture_t::find (arch_name);
 
           if (architecture == nullptr)
-            warning ("os_agent_id %d: `%s' architecture not supported.",
-                     agent_info.os_agent_id, agent_info.name.c_str ());
+            warning ("os_agent_id %d (`%s'): architecture %s not supported.",
+                     agent_info.os_agent_id, agent_info.name.c_str (),
+                     arch_name.c_str ());
 
           if (prev_agent_count != 0)
             fatal_error ("gpu hot pluging is not supported");
