@@ -29,7 +29,7 @@ else:
     import subprocess
 
 __copyright__ = "Copyright (c) 2023 - 2024, AMD ROCm rocDecode"
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 __email__ = "mivisionx.support@amd.com"
 __status__ = "Shipping"
 
@@ -182,7 +182,6 @@ runtimeDebianPackages = [
     'vainfo'
 ]
 ffmpegDebianPackages = [
-    'ffmpeg',
     'libavcodec-dev',
     'libavformat-dev',
     'libavutil-dev'
