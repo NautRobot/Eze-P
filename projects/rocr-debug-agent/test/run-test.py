@@ -138,10 +138,43 @@ def check_test_2():
 
     return all_output_string_found
 
+# test 3: snapshot code object on load
+def check_test_3():
+    print("Starting rocm-debug-agent test 3")
+
+    p = Popen(['./rocm-debug-agent-test', '3'], stdout=PIPE, stderr=PIPE)
+    output, err = p.communicate()
+    out_str = output.decode('utf-8')
+    err_str = err.decode('utf-8')
+
+    found_error = False
+
+    # If the debug agent did not capture the code object on load, it should
+    # not be able to open it on exception, leading to the following warning:
+    #
+    #    rocm-debug-agent: warning: elf_getphdrnum failed for `memory://226967#offset=0x1651d4f0&size=3456'
+    #    rocm-debug-agent: warning: could not open code_object_1
+    if "could not open code_object" in  err_str:
+        found_error = True
+
+    # If the code object was not properly loaded, we should not have any
+    # disassembly in the output
+    if "Disassembly:" not in err_str:
+        found_error = True
+
+    if (found_error):
+        print("rocm-debug-agent test print out.")
+        print(out_str)
+        print("rocm-debug-agent test error message.")
+        print(err_str)
+
+    return not found_error
+
 test_success = True
 test_success &= check_test_0()
 test_success &= check_test_1()
 test_success &= check_test_2()
+test_success &= check_test_3()
 if (test_success):
     print("rocm-debug-agent test Pass!")
 else:

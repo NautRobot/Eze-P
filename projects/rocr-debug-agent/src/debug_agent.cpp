@@ -55,7 +55,6 @@
 #include <iostream>
 #include <iterator>
 #include <link.h>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -81,8 +80,32 @@ extern r_debug _amdgpu_r_debug;
 using namespace amd::debug_agent;
 using namespace std::string_literals;
 
+/* Specialization of std::hash for amd_dbgapi_code_object_id_t, so it can be
+   used in std::unordered_map.  */
+template <> struct std::hash<amd_dbgapi_code_object_id_t>
+{
+  std::size_t operator() (const amd_dbgapi_code_object_id_t &id) const
+  {
+    return std::hash<decltype (id.handle)>{}(id.handle);
+  }
+};
+
+/* Specialization of std::equal_to for amd_dbgapi_code_object_id_t, so it can
+   be used in std::unordered_map.  */
+template <> struct std::equal_to<amd_dbgapi_code_object_id_t>
+{
+  constexpr bool operator() (const amd_dbgapi_code_object_id_t &lhs,
+                             const amd_dbgapi_code_object_id_t &rhs) const
+  {
+    return std::equal_to<decltype (lhs.handle)>{}(lhs.handle, rhs.handle);
+  }
+};
+
 namespace
 {
+using code_object_map_t
+    = std::unordered_map<amd_dbgapi_code_object_id_t, code_object_t>;
+
 std::optional<std::string> g_code_objects_dir;
 bool g_all_wavefronts{ false };
 bool g_precise_emmory{ false };
@@ -553,7 +576,8 @@ stop_all_wavefronts (amd_dbgapi_process_id_t process_id)
 }
 
 void
-print_wavefronts (amd_dbgapi_process_id_t process_id, bool all_wavefronts)
+print_wavefronts (amd_dbgapi_process_id_t process_id, bool all_wavefronts,
+                  code_object_map_t &code_object_map)
 {
   /* This function is not thread-safe and not re-entrant.  */
   static std::mutex lock;
@@ -561,34 +585,6 @@ print_wavefronts (amd_dbgapi_process_id_t process_id, bool all_wavefronts)
     return;
   /* Make sure the lock is released when this function returns.  */
   std::scoped_lock sl (std::adopt_lock, lock);
-
-  std::map<amd_dbgapi_global_address_t, code_object_t> code_object_map;
-
-  amd_dbgapi_code_object_id_t *code_objects_id;
-  size_t code_object_count;
-  DBGAPI_CHECK (amd_dbgapi_process_code_object_list (
-      process_id, &code_object_count, &code_objects_id, nullptr));
-
-  for (size_t i = 0; i < code_object_count; ++i)
-    {
-      code_object_t code_object (code_objects_id[i]);
-
-      code_object.open ();
-      if (!code_object.is_open ())
-        {
-          agent_warning ("could not open code_object_%ld",
-                         code_objects_id[i].handle);
-          continue;
-        }
-
-      if (g_code_objects_dir && !code_object.save (*g_code_objects_dir))
-        agent_warning ("could not save code object to %s",
-                       g_code_objects_dir->c_str ());
-
-      code_object_map.emplace (code_object.load_address (),
-                               std::move (code_object));
-    }
-  free (code_objects_id);
 
   if (all_wavefronts)
     stop_all_wavefronts (process_id);
@@ -639,11 +635,13 @@ print_wavefronts (amd_dbgapi_process_id_t process_id, bool all_wavefronts)
 
       /* Find the code object that contains this pc.  */
       code_object_t *code_object_found{ nullptr };
-      if (auto it = code_object_map.upper_bound (pc);
-          it != code_object_map.begin ())
-        if (auto &&[load_address, code_object] = *std::prev (it);
-            (pc - load_address) <= code_object.mem_size ())
-          code_object_found = &code_object;
+      for (auto &iter : code_object_map)
+        {
+          auto &code_object = iter.second;
+          if (pc >= code_object.load_address ()
+              && pc < code_object.load_address () + code_object.mem_size ())
+            code_object_found = &code_object;
+        }
 
       if (i)
         agent_out << std::endl;
@@ -819,7 +817,8 @@ print_usage ()
    dbgapi and act on the required events.  */
 
 void
-process_dbgapi_events (amd_dbgapi_process_id_t process_id, bool all_wavefronts)
+process_dbgapi_events (amd_dbgapi_process_id_t process_id, bool all_wavefronts,
+                       code_object_map_t &code_object_map)
 {
   /* Consume all events available in the queue.  */
   bool need_print_waves = false;
@@ -866,8 +865,49 @@ process_dbgapi_events (amd_dbgapi_process_id_t process_id, bool all_wavefronts)
             break;
           }
 
-        case AMD_DBGAPI_EVENT_KIND_RUNTIME:
         case AMD_DBGAPI_EVENT_KIND_CODE_OBJECT_LIST_UPDATED:
+          {
+            amd_dbgapi_code_object_id_t *code_objects_ids;
+            size_t code_object_count;
+            DBGAPI_CHECK (amd_dbgapi_process_code_object_list (
+                process_id, &code_object_count, &code_objects_ids, nullptr));
+
+            code_object_map_t fresh_map;
+            for (size_t i = 0; i < code_object_count; ++i)
+              {
+                if (auto it = code_object_map.find (code_objects_ids[i]);
+                    it != code_object_map.end ())
+                  {
+                    fresh_map.emplace (code_objects_ids[i],
+                                       std::move (it->second));
+                  }
+                else
+                  {
+                    code_object_t code_object (code_objects_ids[i]);
+
+                    code_object.open ();
+                    if (!code_object.is_open ())
+                      {
+                        agent_warning ("could not open code_object_%ld",
+                                       code_objects_ids[i].handle);
+                        continue;
+                      }
+
+                    if (g_code_objects_dir
+                        && !code_object.save (*g_code_objects_dir))
+                      agent_warning ("could not save code object to %s",
+                                     g_code_objects_dir->c_str ());
+
+                    fresh_map.emplace (code_objects_ids[i],
+                                       std::move (code_object));
+                  }
+              }
+            free (code_objects_ids);
+            std::swap (code_object_map, fresh_map);
+            break;
+          }
+
+        case AMD_DBGAPI_EVENT_KIND_RUNTIME:
         case AMD_DBGAPI_EVENT_KIND_BREAKPOINT_RESUME:
           /* Ignore.  */
           break;
@@ -897,7 +937,7 @@ process_dbgapi_events (amd_dbgapi_process_id_t process_id, bool all_wavefronts)
       process_id, AMD_DBGAPI_WAVE_CREATION_STOP));
 
   if (need_print_waves)
-    print_wavefronts (process_id, all_wavefronts);
+    print_wavefronts (process_id, all_wavefronts, code_object_map);
 
   /* We now need to resume execution of the waves present.  This will allow any
      exception to be delivered to the runtime who will be able to act on it if
@@ -1089,6 +1129,9 @@ dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory)
         }
     }
 
+  /* Map containing an image of all code objects loaded by the process.  */
+  code_object_map_t code_object_map;
+
   for (bool continue_event_loop = true; continue_event_loop;)
     {
       /* We can wait for events on at most 2 file descriptors.  */
@@ -1114,7 +1157,7 @@ dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory)
               switch (buf)
                 {
                 case 'p':
-                  print_wavefronts (process_id, true);
+                  print_wavefronts (process_id, true, code_object_map);
                   break;
                 case 'q':
                   /* It is time to exit the main event loop and detach dbgapi.
@@ -1138,6 +1181,17 @@ dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory)
                     DBGAPI_CHECK (amd_dbgapi_report_breakpoint_hit (
                         g_rbrk_breakpoint_id.value (), 0, &bpaction));
 
+                    if (bpaction == AMD_DBGAPI_BREAKPOINT_ACTION_HALT)
+                      {
+                        /* At this point, dbgapi has created a
+                           AMD_DBGAPI_EVENT_KIND_CODE_OBJECT_LIST_UPDATED
+                           event, we need to process it before notifying the
+                           promise, which will cause the thread that modified
+                           the code object list to resume.  */
+                        process_dbgapi_events (process_id, all_wavefronts,
+                                               code_object_map);
+                      }
+
                     g_rbrk_sync.promise->set_value ();
                     break;
                   }
@@ -1152,7 +1206,8 @@ dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory)
                   char buf;
                   r = read (evs[i].data.fd, &buf, 1);
               } while (r >= 0 || (r == -1 && errno == EINTR));
-              process_dbgapi_events (process_id, all_wavefronts);
+              process_dbgapi_events (process_id, all_wavefronts,
+                                     code_object_map);
             }
           else
             agent_error ("Unknown file descriptor %d", evs[i].data.fd);
