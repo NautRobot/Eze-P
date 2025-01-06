@@ -22,11 +22,14 @@
 # ##############################################################################
 cmake_minimum_required(VERSION 3.10)
 
-project(ROCJPEG-test)
-
-# make test with CTest
-enable_testing()
-include(CTest)
+if(NOT DEFINED ENHANCED_MESSAGE)
+  string(ASCII 27 Esc)
+  set(ColourReset "${Esc}[m")
+  set(Red         "${Esc}[31m")
+  set(Green       "${Esc}[32m")
+  set(Yellow      "${Esc}[33m")
+  set(White       "${Esc}[37m")
+endif()
 
 # ROCM Path
 if(DEFINED ENV{ROCM_PATH})
@@ -36,15 +39,25 @@ elseif(ROCM_PATH)
 else()
   set(ROCM_PATH /opt/rocm CACHE PATH "${White}${PROJECT_NAME}: Default ROCm installation path${ColourReset}")
 endif()
-
-# find rocJPEG
-find_library(ROCJPEG_LIBRARY NAMES ROCJPEG HINTS ${ROCM_PATH}/lib)
-find_path(ROCJPEG_INCLUDE_DIR NAMES rocjpeg.h PATHS /opt/rocm/include/rocjpeg ${ROCM_PATH}/include/rocjpeg)
-
-if(ROCJPEG_LIBRARY AND ROCJPEG_INCLUDE_DIR)
-    set(ROCJPEG_FOUND TRUE)
-    message("-- ${White}Using ROCJPEG -- \n\tLibraries:${ROCJPEG_LIBRARY} \n\tIncludes:${ROCJPEG_INCLUDE_DIR}${ColourReset}")
+# Set AMD Clang as default compiler
+if (NOT DEFINED CMAKE_CXX_COMPILER)
+  set(CMAKE_C_COMPILER ${ROCM_PATH}/bin/amdclang)
+  set(CMAKE_CXX_COMPILER ${ROCM_PATH}/bin/amdclang++)
 endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
+
+project(ROCJPEG-test)
+
+# make test with CTest
+enable_testing()
+include(CTest)
+
+# add find modules
+list(APPEND CMAKE_MODULE_PATH ${ROCM_PATH}/share/rocjpeg/cmake)
+
+# find rocDecode
+find_package(rocJPEG QUIET)
 
 if(NOT ROCJPEG_FOUND)
     message("-- ${Yellow}${PROJECT_NAME} requires rocJPEG. Install rocJPEG before running CTests")

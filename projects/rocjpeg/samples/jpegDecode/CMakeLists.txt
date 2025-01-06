@@ -22,8 +22,6 @@
 ################################################################################
 
 cmake_minimum_required (VERSION 3.10)
-project(jpegdecode)
-set(CMAKE_CXX_STANDARD 17)
 
 # ROCM Path
 if(DEFINED ENV{ROCM_PATH})
@@ -33,21 +31,21 @@ elseif(ROCM_PATH)
 else()
   set(ROCM_PATH /opt/rocm CACHE PATH "Default ROCm installation path")
 endif()
+# Set AMD Clang as default compiler
+if (NOT DEFINED CMAKE_CXX_COMPILER)
+  set(CMAKE_C_COMPILER ${ROCM_PATH}/bin/amdclang)
+  set(CMAKE_CXX_COMPILER ${ROCM_PATH}/bin/amdclang++)
+endif()
+
+project(jpegdecode)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/../../cmake)
 list(APPEND CMAKE_PREFIX_PATH ${ROCM_PATH}/hip ${ROCM_PATH})
-set(CMAKE_CXX_COMPILER ${ROCM_PATH}/bin/amdclang++)
 
 find_package(HIP QUIET)
-
-# find rocJPEG
-find_library(ROCJPEG_LIBRARY NAMES rocjpeg HINTS {ROCM_PATH}/lib)
-find_path(ROCJPEG_INCLUDE_DIR NAMES rocjpeg.h PATHS /opt/rocm/include/rocjpeg {ROCM_PATH}/include/rocjpeg)
-
-if(ROCJPEG_LIBRARY AND ROCJPEG_INCLUDE_DIR)
-    set(ROCJPEG_FOUND TRUE)
-    message("-- ${White}Using rocJPEG -- \n\tLibraries:${ROCJPEG_LIBRARY} \n\tIncludes:${ROCJPEG_INCLUDE_DIR}${ColourReset}")
-endif()
+find_package(rocJPEG QUIET)
 
 if(HIP_FOUND AND ROCJPEG_FOUND)
     # HIP
@@ -55,10 +53,9 @@ if(HIP_FOUND AND ROCJPEG_FOUND)
     # rocJPEG
     include_directories (${ROCJPEG_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/..)
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} ${ROCJPEG_LIBRARY})
-    #filesystem: c++ compilers less than equal to 8.5 need explicit link with stdc++fs
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS_EQUAL "8.5")
-      set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} stdc++fs)
-    endif()
+    # std filesystem
+    set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} stdc++fs)
+
     list(APPEND SOURCES ${PROJECT_SOURCE_DIR} jpegdecode.cpp)
     add_executable(${PROJECT_NAME} ${SOURCES})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++17")
