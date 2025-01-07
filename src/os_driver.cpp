@@ -31,7 +31,6 @@
 #include <iomanip>
 #include <limits>
 #include <optional>
-#include <sstream>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -999,23 +998,24 @@ class note_builder
 {
 public:
   note_builder ()
-    : m_stream (std::stringstream::out | std::stringstream::binary)
   {
   }
 
   template <typename T, std::enable_if_t<!std::is_pointer_v<T>, int> = 0>
   void write (const T &v)
   {
-    m_stream.write (reinterpret_cast<const std::byte *> (&v), sizeof (T));
+    const auto pre_size = m_buffer.size ();
+    m_buffer.resize (m_buffer.size () + sizeof (v));
+    std::memcpy (&m_buffer[pre_size], &v, sizeof (T));
   }
 
   void write (const std::vector<std::byte> &v)
   {
-    m_stream.write (reinterpret_cast<const std::byte *> (v.data ()),
-                    v.size ());
+    m_buffer.reserve (m_buffer.size () + v.size ());
+    m_buffer.insert (m_buffer.end (), v.begin (), v.end ());
   }
 
-  size_t size () const { return m_stream.str ().size (); }
+  size_t size () const { return m_buffer.size (); }
 
   amd_dbgapi_core_state_data_t note () const
   {
@@ -1024,17 +1024,16 @@ public:
       = (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? AMD_DBGAPI_ENDIAN_LITTLE
                                                    : AMD_DBGAPI_ENDIAN_BIG);
 
-    auto str = m_stream.str ();
-    note.size = str.size ();
+    note.size = size ();
     auto buffer = amd::dbgapi::allocate_memory<std::byte> (note.size);
-    std::copy (str.begin (), str.end (), buffer.get ());
+    std::memcpy (buffer.get (), m_buffer.data (), note.size);
     note.data = buffer.release ();
 
     return note;
   }
 
 private:
-  std::basic_ostringstream<std::byte> m_stream;
+  std::vector<std::byte> m_buffer;
 };
 
 }; /* anonymous namespace.  */
