@@ -60,8 +60,8 @@ def check_test_1():
     print("Starting rocm-debug-agent test 1")
 
     #TODO: use regular expressions instead of strings
-    check_list = ['HSA_STATUS_ERROR_EXCEPTION: An HSAIL operation resulted in a hardware exception\.',
-                  '\(stopped, reason: ASSERT_TRAP\)',
+    check_list = ['HSA_STATUS_ERROR_EXCEPTION: An HSAIL operation resulted in a hardware exception\\.',
+                  '\\(stopped, reason: ASSERT_TRAP\\)',
                    'exec: (00000000)?00000001',
 #                  'status: 00012061',
 #                  'trapsts: 20000000',
@@ -69,7 +69,7 @@ def check_test_1():
                   's0:',
                   'v0:',
                   '0x0000: 22222222 11111111', # First uint64_t in LDS is '1111111122222222'
-                  'Disassembly for function vector_add_assert_trap\(int\*, int\*, int\*\)'
+                  'Disassembly for function vector_add_assert_trap\\(int\\*, int\\*, int\\*\\)'
 #                  'vector_add_assert_trap.cpp:', # Debug info may not be available on some older distributions
 #                  '53          __builtin_trap ();', # Source files not always available (When install tests from package)
 #                  's_trap 2'
@@ -105,7 +105,7 @@ def check_test_2():
     check_list = [
 #                  'System event \(HSA_AMD_GPU_MEMORY_FAULT_EVENT\)',
 #                  'Faulting page: 0x',
-                  '\(stopped, reason: MEMORY_VIOLATION\)',
+                  '\\(stopped, reason: MEMORY_VIOLATION\\)',
                   'exec: (ffffffff)?ffffffff',
 #                  'status: 00012461',
 #                  'trapsts: 30000100',
@@ -113,7 +113,7 @@ def check_test_2():
                   's0:',
                   'v0:',
                   '0x0000: 22222222 11111111', # First uint64_t in LDS is '1111111122222222'
-                  'Disassembly for function vector_add_memory_fault\(int\*, int\*, int\*\)'
+                  'Disassembly for function vector_add_memory_fault\\(int\\*, int\\*, int\\*\\)'
 #                  'vector_add_memory_fault.cpp:', Debug info may not be available on some older distributions
 #                  'global_store_dword' # Without precise memory, we can't guarantee that
                   ]
