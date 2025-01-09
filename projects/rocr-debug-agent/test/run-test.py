@@ -171,10 +171,21 @@ def check_test_3():
     return not found_error
 
 test_success = True
-test_success &= check_test_0()
-test_success &= check_test_1()
-test_success &= check_test_2()
-test_success &= check_test_3()
+
+for deferred_loading in (False, True):
+    if deferred_loading:
+        print("### Testing with HIP_ENABLE_DEFERRED_LOADING=1")
+        os.environ["HIP_ENABLE_DEFERRED_LOADING"] = "1"
+    else:
+        print("### Testing without HIP_ENABLE_DEFERRED_LOADING")
+        if "HIP_ENABLE_DEFERRED_LOADING" in os.environ:
+            del os.environ["HIP_ENABLE_DEFERRED_LOADING"]
+
+    test_success &= check_test_0()
+    test_success &= check_test_1()
+    test_success &= check_test_2()
+    test_success &= check_test_3()
+
 if (test_success):
     print("rocm-debug-agent test Pass!")
 else:
