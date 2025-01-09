@@ -1401,15 +1401,9 @@ testResult_t run() {
 
   // Free off CUDA allocated memory
   for (int i=0; i<nGpus*nThreads; i++) {
-#if NCCL_VERSION_CODE >= NCCL_VERSION(2,19,0)
-    if (sendbuffs[i]) NCCLCHECK(ncclMemFree((char*)sendbuffs[i]));
-    if (recvbuffs[i]) NCCLCHECK(ncclMemFree((char*)recvbuffs[i]));
-    if (datacheck) NCCLCHECK(ncclMemFree(expected[i]));
-#else
     if (sendbuffs[i]) CUDACHECK(cudaFree((char*)sendbuffs[i]));
     if (recvbuffs[i]) CUDACHECK(cudaFree((char*)recvbuffs[i]));
     if (datacheck) CUDACHECK(cudaFree(expected[i]));
-#endif
   }
   CUDACHECK(cudaFreeHost(delta));
 #if NCCL_VERSION_CODE >= NCCL_VERSION(2,19,0)
