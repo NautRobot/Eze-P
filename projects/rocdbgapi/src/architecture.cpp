@@ -332,8 +332,8 @@ public:
   };
 
   virtual exception_mask_t signaled_exceptions (const wave_t &) const;
-  virtual void set_exceptions (wave_t &, exception_mask_t,
-                               exception_mask_t) const;
+  virtual exception_mask_t set_exceptions (wave_t &, exception_mask_t,
+                                           exception_mask_t) const;
   void clear_stop_reasons (wave_t &) const;
 
   void record_spi_ttmps_setup (const wave_t &wave,
@@ -1284,10 +1284,12 @@ amdgcn_architecture_t::signaled_exceptions (const wave_t &wave) const
 
    TRAPSTS[t] = 1 if EXCEPTIONS[e], else 0.  */
 
-void
+amdgcn_architecture_t::exception_mask_t
 amdgcn_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                                        exception_mask_t exceptions) const
 {
+  exception_mask_t unhandled_exceptions{};
+
   auto convert_exception = [] (exception_mask_t excp) -> uint32_t
   {
     /* At most, one bit in EXCP may be set.  */
@@ -1342,14 +1344,21 @@ amdgcn_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
 
       /* For each exception, set or clear the corresponding bit in TRAPSTS.  */
       auto trapsts_bit = convert_exception (single_exception);
-      if ((exceptions & single_exception) != 0)
-        trapsts |= trapsts_bit;
+      if (trapsts_bit != 0)
+        {
+          if ((exceptions & single_exception) != 0)
+            trapsts |= trapsts_bit;
+          else
+            trapsts &= ~trapsts_bit;
+        }
       else
-        trapsts &= ~trapsts_bit;
+        unhandled_exceptions |= single_exception;
 
       mask ^= single_exception;
     }
   wave.write_register (amdgpu_regnum_t::trapsts, trapsts);
+
+  return unhandled_exceptions;
 }
 
 void
@@ -3764,8 +3773,8 @@ public:
   }
 
   exception_mask_t signaled_exceptions (const wave_t &) const override;
-  void set_exceptions (wave_t &, exception_mask_t,
-                       exception_mask_t) const override;
+  exception_mask_t set_exceptions (wave_t &, exception_mask_t,
+                                   exception_mask_t) const override;
 
   bool are_trap_handler_ttmps_initialized (const wave_t &wave) const override;
   void initialize_spi_ttmps (const wave_t &wave) const override;
@@ -3808,10 +3817,12 @@ gfx940_t::signaled_exceptions (const wave_t &wave) const
   return exceptions | gfx90a_t::signaled_exceptions (wave);
 }
 
-void
+amdgcn_architecture_t::exception_mask_t
 gfx940_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                           exception_mask_t exceptions) const
 {
+  exception_mask_t unhandled_exceptions{};
+
   auto convert_exception = [] (exception_mask_t excp) -> uint32_t
   {
     /* At most, one bit in EXCP may be set.  */
@@ -3831,7 +3842,7 @@ gfx940_t::set_exceptions (wave_t &wave, exception_mask_t mask,
       }
   };
 
-  gfx90a_t::set_exceptions (wave, mask, exceptions);
+  mask = gfx90a_t::set_exceptions (wave, mask, exceptions);
 
   uint32_t trapsts;
   wave.read_register (amdgpu_regnum_t::trapsts, &trapsts);
@@ -3842,14 +3853,21 @@ gfx940_t::set_exceptions (wave_t &wave, exception_mask_t mask,
 
       /* For each exception, set or clear the corresponding bit in TRAPSTS.  */
       auto trapsts_bit = convert_exception (single_exception);
-      if ((exceptions & single_exception) != 0)
-        trapsts |= trapsts_bit;
+      if (trapsts_bit != 0)
+        {
+          if ((exceptions & single_exception) != 0)
+            trapsts |= trapsts_bit;
+          else
+            trapsts &= ~trapsts_bit;
+        }
       else
-        trapsts &= ~trapsts_bit;
+        unhandled_exceptions |= single_exception;
 
       mask ^= single_exception;
     }
   wave.write_register (amdgpu_regnum_t::trapsts, trapsts);
+
+  return unhandled_exceptions;
 }
 
 amd_dbgapi_wave_id_t
@@ -5342,8 +5360,8 @@ protected:
 
 public:
   exception_mask_t signaled_exceptions (const wave_t &) const override;
-  void set_exceptions (wave_t &, exception_mask_t,
-                       exception_mask_t) const override;
+  exception_mask_t set_exceptions (wave_t &, exception_mask_t,
+                                   exception_mask_t) const override;
 
   std::optional<amd_dbgapi_global_address_t>
   simulate_instruction (wave_t &wave, amd_dbgapi_global_address_t pc,
@@ -5443,10 +5461,12 @@ gfx11_architecture_t::signaled_exceptions (const wave_t &wave) const
   return exceptions | gfx10_architecture_t::signaled_exceptions (wave);
 }
 
-void
+amdgcn_architecture_t::exception_mask_t
 gfx11_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                                       exception_mask_t exceptions) const
 {
+  exception_mask_t unhandled_exceptions{};
+
   auto convert_exception = [] (exception_mask_t excp) -> uint32_t
   {
     /* At most, one bit in EXCP may be set.  */
@@ -5466,7 +5486,7 @@ gfx11_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
       }
   };
 
-  gfx10_architecture_t::set_exceptions (wave, mask, exceptions);
+  mask = gfx10_architecture_t::set_exceptions (wave, mask, exceptions);
 
   uint32_t trapsts;
   wave.read_register (amdgpu_regnum_t::trapsts, &trapsts);
@@ -5477,14 +5497,21 @@ gfx11_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
 
       /* For each exception, set or clear the corresponding bit in TRAPSTS.  */
       auto trapsts_bit = convert_exception (single_exception);
-      if ((exceptions & single_exception) != 0)
-        trapsts |= trapsts_bit;
+      if (trapsts_bit != 0)
+        {
+          if ((exceptions & single_exception) != 0)
+            trapsts |= trapsts_bit;
+          else
+            trapsts &= ~trapsts_bit;
+        }
       else
-        trapsts &= ~trapsts_bit;
+        unhandled_exceptions |= single_exception;
 
       mask ^= single_exception;
     }
   wave.write_register (amdgpu_regnum_t::trapsts, trapsts);
+
+  return unhandled_exceptions;
 }
 
 uint32_t
@@ -6128,8 +6155,8 @@ protected:
 
   exception_mask_t signaled_exceptions (const wave_t &) const override;
 
-  void set_exceptions (wave_t &, exception_mask_t,
-                       exception_mask_t) const override;
+  exception_mask_t set_exceptions (wave_t &, exception_mask_t,
+                                   exception_mask_t) const override;
 
   void wave_set_state (wave_t &wave,
                        amd_dbgapi_wave_state_t state) const override;
@@ -6309,10 +6336,12 @@ gfx12_architecture_t::signaled_exceptions (const wave_t &wave) const
   return exceptions;
 }
 
-void
+amdgcn_architecture_t::exception_mask_t
 gfx12_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
                                       exception_mask_t exceptions) const
 {
+  exception_mask_t unhandled_exceptions{};
+
   auto convert_priv_exception = [] (exception_mask_t excp) -> uint32_t
   {
     /* At most, one bit in EXCP may be set.  */
@@ -6385,20 +6414,28 @@ gfx12_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
       /* "single_exception" may indicate a bit in either the privilege or
          user exception flag registers, but not both.  */
       dbgapi_assert ((!!excp_flag_priv_bit && !!excp_flag_user_bit) == false);
-      if ((exceptions & single_exception) != 0)
+      if (!!excp_flag_priv_bit || !!excp_flag_user_bit)
         {
-          excp_flag_priv_reg |= excp_flag_priv_bit;
-          excp_flag_user_reg |= excp_flag_user_bit;
+          if ((exceptions & single_exception) != 0)
+            {
+              excp_flag_priv_reg |= excp_flag_priv_bit;
+              excp_flag_user_reg |= excp_flag_user_bit;
+            }
+          else
+            {
+              excp_flag_priv_reg &= ~excp_flag_priv_bit;
+              excp_flag_user_reg &= ~excp_flag_user_bit;
+            }
         }
       else
-        {
-          excp_flag_priv_reg &= ~excp_flag_priv_bit;
-          excp_flag_user_reg &= ~excp_flag_user_bit;
-        }
+        unhandled_exceptions |= single_exception;
+
       mask ^= single_exception;
     }
   wave.write_register (amdgpu_regnum_t::excp_flag_priv, excp_flag_priv_reg);
   wave.write_register (amdgpu_regnum_t::excp_flag_user, excp_flag_user_reg);
+
+  return unhandled_exceptions;
 }
 
 void
