@@ -904,6 +904,8 @@ testResult_t AllocateBuffs(void **sendbuff, size_t sendBytes, void **recvbuff, s
     CUDACHECK(cudaMalloc(recvbuff, nbytes));
     if (datacheck) CUDACHECK(cudaMalloc(expected, recvBytes));
   }
+  CUDACHECK(hipMemset(*sendbuff, 1, nbytes));
+  if (datacheck) CUDACHECK(hipMemset(*expected, 1, recvBytes));
   return testSuccess;
 }
 
