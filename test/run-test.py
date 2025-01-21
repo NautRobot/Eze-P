@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import inspect
+import unittest.mock
 from subprocess import Popen, PIPE
 
 
@@ -172,19 +173,20 @@ def check_test_3():
 
 test_success = True
 
-for deferred_loading in (False, True):
-    if deferred_loading:
-        print("### Testing with HIP_ENABLE_DEFERRED_LOADING=1")
-        os.environ["HIP_ENABLE_DEFERRED_LOADING"] = "1"
-    else:
-        print("### Testing without HIP_ENABLE_DEFERRED_LOADING")
-        if "HIP_ENABLE_DEFERRED_LOADING" in os.environ:
-            del os.environ["HIP_ENABLE_DEFERRED_LOADING"]
+for deferred_loading in (None, "1", "0"):
+    with unittest.mock.patch.dict ('os.environ'):
+        if deferred_loading is None:
+            print(f"### Testing without HIP_ENABLE_DEFERRED_LOADING")
+            if "HIP_ENABLE_DEFERRED_LOADING" in os.environ:
+                del os.environ["HIP_ENABLE_DEFERRED_LOADING"]
+        else:
+            print(f"### Testing with HIP_ENABLE_DEFERRED_LOADING={deferred_loading}")
+            os.environ["HIP_ENABLE_DEFERRED_LOADING"] = deferred_loading
 
-    test_success &= check_test_0()
-    test_success &= check_test_1()
-    test_success &= check_test_2()
-    test_success &= check_test_3()
+        test_success &= check_test_0()
+        test_success &= check_test_1()
+        test_success &= check_test_2()
+        test_success &= check_test_3()
 
 if (test_success):
     print("rocm-debug-agent test Pass!")
