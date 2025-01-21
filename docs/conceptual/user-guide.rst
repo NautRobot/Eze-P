@@ -152,8 +152,8 @@ The following table lists the supported options:
 
     * - ``-s [DIR]``, ``--save-code-objects[=DIR]``
       - Saves all loaded code objects. If the directory is not specified, the code objects are saved in the current directory.
-        The file name in which the code object is saved is the same as the code object URI with special characters replaced by '_'. For example, the code object URI
-        ``file:///rocm-debug-agent/rocm-debug-agent-test#offset=14309&size=31336`` is saved in a file with the name ``file____rocm-debug-agent_rocm-debug-agent-test_offset_14309_size_31336``.
+        The file name in which the code object is saved is the same as the code object URI with special characters replaced by '_', prefixed with a unique code object ID. For example, the code object URI
+        ``file:///rocm-debug-agent/rocm-debug-agent-test#offset=14309&size=31336`` is saved in a file with the name ``1_file____rocm-debug-agent_rocm-debug-agent-test_offset_14309_size_31336``.
 
     * - ``-o <file-path>``, ``--output=<file-path>``
       - Saves the output produced by the ROCdebug-agent in the specified file. By default, the output is redirected to ``stderr``.

@@ -185,15 +185,15 @@ The supported options are:
   objects are saved in the current directory.
 
   The file name in which the code object is saved is the same as the code
-  object URI with special characters replaced by ``'_'``.  For example, the
-  code object URI:
+  object URI with special characters replaced by ``'_'``, prefixed with a
+  unique code object ID.  For example, the code object URI:
 
   ````
   file:///rocm-debug-agent/rocm-debug-agent-test#offset=14309&size=31336
   ````
   is saved in a file with the name:
   ````
-  file____rocm-debug-agent_rocm-debug-agent-test_offset_14309_size_31336
+  1_file____rocm-debug-agent_rocm-debug-agent-test_offset_14309_size_31336
   ````
 
 - __``-o <file-path>``, ``--output=<file-path>``__

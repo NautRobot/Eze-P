@@ -51,7 +51,14 @@ add_custom_command(
   COMMENT "Building snapshot_objfile_on_load.hipfb"
   VERBATIM)
 
-hip_add_executable(rocm-debug-agent-test ${SOURCES} snapshot_objfile_on_load.hipfb
+add_custom_command(
+  OUTPUT "save_code_objects.hipfb"
+  COMMAND ${HIP_HIPCC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/save_code_objects.cpp --genco -o save_code_objects.hipfb
+  DEPENDS "save_code_objects.cpp"
+  COMMENT "Building save_code_objects.hipfb"
+  VERBATIM)
+
+hip_add_executable(rocm-debug-agent-test ${SOURCES} snapshot_objfile_on_load.hipfb save_code_objects.hipfb
   CLANG_OPTIONS -ggdb)
 
 file(GLOB HEADERS "*.h")
