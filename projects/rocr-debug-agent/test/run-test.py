@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import inspect
+import tempfile
 import unittest.mock
 from subprocess import Popen, PIPE
 
@@ -171,6 +172,44 @@ def check_test_3():
 
     return not found_error
 
+# test 3: save code object on disk
+def check_test_4():
+    print("Starting rocm-debug-agent test 4")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with unittest.mock.patch.dict(os.environ, {"ROCM_DEBUG_AGENT_OPTIONS":
+                                                   f"-p --save-code-objects={tmpdir}"}):
+
+            p = Popen(['./rocm-debug-agent-test', '4'], stdout=PIPE, stderr=PIPE)
+            p.wait()
+
+            code_objects = os.listdir(tmpdir)
+            if (len(code_objects) == 0):
+                print(f"No code object found in {tmpdir}")
+                return False
+
+            # There should be 2 code objects which have the same address in
+            # memory and the same size (but might have different load
+            # addressed).  If the name did not have a "N_" prefix (N being a
+            # unique ID), those would be saved with the same file name, so
+            # the second saved code object would override the first one.
+            #
+            # This means that we should see 2 memory code objects:
+            # - 1_memory___PID_offset_OFF_size_SIZE
+            # - 2_memory___PID_offset_OFF_size_SIZE
+            #
+            # Trimming the "N_memory" prefix should give the same value for
+            # both, so a set containing those suffixes should have less
+            # elements than the set of initial names.
+            mem_cos = [co for co in code_objects if "memory___" in co]
+            if len(mem_cos) == len({co.split("memory")[1] for co in mem_cos}):
+                print("Unexpected number of unique code objects")
+                print("List of code objects:\n\t{}"
+                      "".format("\n\t".join(code_objects)))
+                return False
+
+            return True
+
 test_success = True
 
 for deferred_loading in (None, "1", "0"):
@@ -187,6 +226,7 @@ for deferred_loading in (None, "1", "0"):
         test_success &= check_test_1()
         test_success &= check_test_2()
         test_success &= check_test_3()
+        test_success &= check_test_4()
 
 if (test_success):
     print("rocm-debug-agent test Pass!")

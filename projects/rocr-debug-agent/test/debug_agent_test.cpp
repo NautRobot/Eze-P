@@ -36,12 +36,14 @@ extern void VectorAddNormalTest ();
 extern void VectorAddDebugTrapTest ();
 extern void VectorAddMemoryFaultTest ();
 extern void SnapshotCodeObjOnLoadTest ();
+extern void SaveCodeObjectTest ();
 
 static void PrintTestInfo (const char *header);
 static void RunVectorAddDebugTrapTest ();
 static void RunVectorAddNormalTest ();
 static void RunVectorAddMemoryFaultTest ();
 static void RunSnapshotCodeObjOnLoadTest ();
+static void RunSaveCodeObjectTest ();
 
 int
 main (int argc, char *argv[])
@@ -54,6 +56,7 @@ main (int argc, char *argv[])
       run_test_list.push_back (1);
       run_test_list.push_back (2);
       run_test_list.push_back (3);
+      run_test_list.push_back (4);
     }
   else
     {
@@ -81,6 +84,9 @@ main (int argc, char *argv[])
           break;
         case 3:
           RunSnapshotCodeObjOnLoadTest ();
+          break;
+        case 4:
+          RunSaveCodeObjectTest ();
           break;
         default:
           std::cout << "  *** Invalid Test ID ***" << std::endl;
@@ -188,4 +194,11 @@ RunSnapshotCodeObjOnLoadTest ()
     }
 
   PrintTestInfo ("VectorAddMemoryFaultTest end");
+}
+
+static void
+RunSaveCodeObjectTest ()
+{
+  PrintTestInfo ("SaveCodeObjectTest start");
+  SaveCodeObjectTest ();
 }
