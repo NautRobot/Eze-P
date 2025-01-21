@@ -45,13 +45,13 @@ file(GLOB SOURCES "*.cpp")
 set_source_files_properties(${SOURCES} PROPERTIES HIP_SOURCE_PROPERTY_FORMAT 1)
 
 add_custom_command(
-  OUTPUT "snapshot_objfile_on_load.hibfb"
-  COMMAND ${HIP_HIPCC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/snapshot_objfile_on_load.cpp --genco -o snapshot_objfile_on_load.hibfb
+  OUTPUT "snapshot_objfile_on_load.hipfb"
+  COMMAND ${HIP_HIPCC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/snapshot_objfile_on_load.cpp --genco -o snapshot_objfile_on_load.hipfb
   DEPENDS "snapshot_objfile_on_load.cpp"
-  COMMENT "Building snapshot_objfile_on_load.hibfb"
+  COMMENT "Building snapshot_objfile_on_load.hipfb"
   VERBATIM)
 
-hip_add_executable(rocm-debug-agent-test ${SOURCES} snapshot_objfile_on_load.hibfb
+hip_add_executable(rocm-debug-agent-test ${SOURCES} snapshot_objfile_on_load.hipfb
   CLANG_OPTIONS -ggdb)
 
 file(GLOB HEADERS "*.h")

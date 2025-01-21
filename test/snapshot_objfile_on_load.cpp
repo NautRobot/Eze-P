@@ -62,7 +62,7 @@ void
 SnapshotCodeObjOnLoadTest ()
 {
   /* Copy the content of the module file into a memory buffer.  */
-  const char *modpath = "snapshot_objfile_on_load.hibfb";
+  const char *modpath = "snapshot_objfile_on_load.hipfb";
   std::ifstream mod (modpath, std::ios::binary | std::ios::ate);
   size_t module_size = mod.tellg ();
   mod.seekg (0, std::ios::beg);
