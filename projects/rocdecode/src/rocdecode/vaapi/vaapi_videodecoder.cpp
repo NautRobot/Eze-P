@@ -42,16 +42,21 @@ VaapiVideoDecoder::~VaapiVideoDecoder() {
         if (va_status != VA_STATUS_SUCCESS) {
             ERR("vaDestroySurfaces failed");
         }
-        if (va_context_id_)
+        if (va_context_id_) {
             va_status = vaDestroyContext(va_display_, va_context_id_);
             if (va_status != VA_STATUS_SUCCESS) {
                 ERR("vaDestroyContext failed");
             }
-        if (va_config_id_)
+        }
+        if (va_config_id_) {
             va_status = vaDestroyConfig(va_display_, va_config_id_);
             if (va_status != VA_STATUS_SUCCESS) {
                 ERR("vaDestroyConfig failed");
             }
+        }
+        if (vaTerminate(va_display_) != VA_STATUS_SUCCESS) {
+            ERR("Failed to termiate VA");
+        }
     }
 }
 
@@ -597,7 +602,15 @@ rocDecStatus VaContext::GetVaDisplay(uint32_t va_ctx_id, VADisplay *va_display) 
         *va_display = 0;
         return ROCDEC_INVALID_PARAMETER;
     } else {
-        *va_display = va_contexts_[va_ctx_id].va_display;
+        VADisplay new_va_display = vaGetDisplayDRM(va_contexts_[va_ctx_id].drm_fd);
+        if (!new_va_display) {
+            ERR("Failed to create VA display.");
+            return ROCDEC_NOT_INITIALIZED;
+        }
+        vaSetInfoCallback(new_va_display, NULL, NULL);
+        int major_version = 0, minor_version = 0;
+        CHECK_VAAPI(vaInitialize(new_va_display, &major_version, &minor_version));
+        *va_display = new_va_display;
         return ROCDEC_SUCCESS;
     }
 }
