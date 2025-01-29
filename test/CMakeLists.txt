@@ -68,8 +68,12 @@ add_custom_command(
   COMMENT "Building save_code_objects.hipfb"
   VERBATIM)
 
-hip_add_executable(rocm-debug-agent-test ${SOURCES} snapshot_objfile_on_load.hipfb save_code_objects.hipfb
-  CLANG_OPTIONS -ggdb)
+hip_add_executable(rocm-debug-agent-test ${SOURCES} CLANG_OPTIONS -ggdb)
+
+add_custom_target(snapshot_objfile_on_load-tgt DEPENDS snapshot_objfile_on_load.hipfb)
+add_custom_target(save_code_objects-tgt DEPENDS save_code_objects.hipfb)
+
+add_dependencies(rocm-debug-agent-test snapshot_objfile_on_load-tgt save_code_objects-tgt)
 
 file(GLOB HEADERS "*.h")
 
