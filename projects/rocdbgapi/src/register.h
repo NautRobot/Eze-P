@@ -49,7 +49,7 @@ enum class amdgpu_regnum_t : uint32_t
   first_vgpr = first_raw,
   first_vgpr_64 = first_vgpr,
 
-  /* 64-bit Vector registers (vgprs) for wave32 wavefronts.  */
+  /* 32-bit Vector registers (vgprs) for wave64 wavefronts.  */
   v0_64 = first_vgpr_64,
   v255_64 = v0_64 + 255,
 
@@ -63,7 +63,7 @@ enum class amdgpu_regnum_t : uint32_t
   last_accvgpr_64 = a255_64,
   first_vgpr_32 = last_accvgpr_64 + 1,
 
-  /* 32-bit Vector registers (vgprs) for wave64 wavefronts.  */
+  /* 32-bit Vector registers (vgprs) for wave32 wavefronts.  */
   v0_32 = first_vgpr_32,
   v255_32 = v0_32 + 255,
 
@@ -146,10 +146,10 @@ enum class amdgpu_regnum_t : uint32_t
 
   flat_scratch_lo = aligned_block,   /* Flat scratch lower 32 bits.  */
   scratch_base_lo = flat_scratch_lo, /* Alias in gfx12.  */
-  flat_scratch_hi,                   /* Flat scratch lower 32 bits.  */
+  flat_scratch_hi,                   /* Flat scratch higher 32 bits.  */
   scratch_base_hi = flat_scratch_hi, /* alias in gfx12. */
   exec_lo,                           /* Execution mask lower 32bits.  */
-  exec_hi,                           /* Execution mask lower 32bits.  */
+  exec_hi,                           /* Execution mask higher 32bits.  */
   vcc_lo,                            /* Vector Condition Code lower 32
                                         bits.  */
   vcc_hi,                            /* Vector Condition Code higher 32
