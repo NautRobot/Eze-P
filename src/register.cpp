@@ -127,7 +127,9 @@ namespace
 std::optional<uint64_t>
 amdgpu_regnum_to_dwarf_register (amdgpu_regnum_t regnum)
 {
-  /* See https://llvm.org/docs/AMDGPUUsage.html#register-mapping.  */
+  /* See
+     https://llvm.org/docs/AMDGPUUsage.html#amdgpu-dwarf-register-mapping-table
+   */
   if (regnum == amdgpu_regnum_t::pseudo_exec_32)
     {
       return 1;

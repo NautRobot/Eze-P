@@ -203,7 +203,7 @@ public:
     virtual amd_dbgapi_wave_id_t id () const = 0;
     /* The 3-dimensional workgroup coordinates.  */
     virtual std::optional<std::array<uint32_t, 3>> group_ids () const = 0;
-    /* Return the record's postion in the workgroup.  */
+    /* Return the record's position in the workgroup.  */
     virtual std::optional<uint32_t> position_in_group () const = 0;
 
     /* Number of work-items in one wave.  */
@@ -219,7 +219,7 @@ public:
     virtual std::optional<amd_dbgapi_global_address_t>
     register_address (amdgpu_regnum_t regnum) const = 0;
 
-    /* Return true is a scratch slot is allocated for this record.  */
+    /* Return true if a scratch slot is allocated for this record.  */
     virtual bool is_scratch_enabled () const = 0;
 
     /* The shader engine ID this wave was created on.  */
