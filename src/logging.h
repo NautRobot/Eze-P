@@ -518,6 +518,7 @@ to_string (detail::parameter_t<detail::query_ref<T>, name, kind> param)
   F (amd_dbgapi_register_properties_t)                                        \
   F (amd_dbgapi_resume_mode_t)                                                \
   F (amd_dbgapi_runtime_state_t)                                              \
+  F (amd_dbgapi_segment_address_dependency_t)                                 \
   F (amd_dbgapi_status_t)                                                     \
   F (amd_dbgapi_wave_creation_t)                                              \
   F (amd_dbgapi_wave_id_t)                                                    \

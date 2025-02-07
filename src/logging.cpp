@@ -1481,6 +1481,22 @@ to_string (detail::query_ref<amd_dbgapi_address_space_info_t> ref)
 
 template <>
 std::string
+to_string (amd_dbgapi_segment_address_dependency_t address_dependency)
+{
+  switch (address_dependency)
+    {
+      CASE (SEGMENT_ADDRESS_DEPENDENCE_NONE);
+      CASE (SEGMENT_ADDRESS_DEPENDENCE_LANE);
+      CASE (SEGMENT_ADDRESS_DEPENDENCE_WAVE);
+      CASE (SEGMENT_ADDRESS_DEPENDENCE_WORKGROUP);
+      CASE (SEGMENT_ADDRESS_DEPENDENCE_AGENT);
+      CASE (SEGMENT_ADDRESS_DEPENDENCE_PROCESS);
+    }
+  return to_string (make_hex (address_dependency));
+}
+
+template <>
+std::string
 to_string (amd_dbgapi_address_class_state_t address_class_state)
 {
   switch (address_class_state)
