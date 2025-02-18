@@ -98,10 +98,18 @@ protected:
     cdbgsys_and_user, /* Conditional Debug for System and User is 1.  */
   };
 
+#if defined(__linux__)
   static constexpr amd_dbgapi_global_address_t local_address_aperture_base
     = amd_dbgapi_global_address_t{ 1 } << 48;
   static constexpr amd_dbgapi_global_address_t private_address_aperture_base
     = amd_dbgapi_global_address_t{ 2 } << 48;
+#elif defined(_WIN32)
+  static constexpr amd_dbgapi_global_address_t local_address_aperture_base
+    = amd_dbgapi_global_address_t{ 2 } << 60;
+  static constexpr amd_dbgapi_global_address_t private_address_aperture_base
+    = amd_dbgapi_global_address_t{ 1 } << 60;
+#endif
+
   static constexpr amd_dbgapi_global_address_t address_aperture_mask
     = utils::bit_mask<amd_dbgapi_global_address_t> (0, 15) << 48;
 
