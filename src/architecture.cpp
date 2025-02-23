@@ -3696,7 +3696,7 @@ protected:
   static constexpr int ttmp11_queue_packet_id_shift = 6;
   static constexpr uint32_t ttmp11_trap_hander_ttmps_setup_mask = 1 << 31;
 
-  class cwsr_record_t final : public gfx90a_t::cwsr_record_t
+  class cwsr_record_t : public gfx90a_t::cwsr_record_t
   {
   private:
   protected:
@@ -4166,6 +4166,48 @@ public:
   {
   }
 };
+
+class gfx950_t final : public gfx940_t
+{
+protected:
+  class cwsr_record_t final : public gfx940_t::cwsr_record_t
+  {
+  public:
+    cwsr_record_t (compute_queue_t &queue, uint32_t xcc_id,
+                   uint32_t compute_relaunch_wave,
+                   uint32_t compute_relaunch_state,
+                   amd_dbgapi_global_address_t context_save_address)
+      : gfx940_t::cwsr_record_t (queue, xcc_id, compute_relaunch_wave,
+                                 compute_relaunch_state, context_save_address)
+    {
+    }
+
+    size_t lds_size () const override;
+  };
+
+  std::unique_ptr<architecture_t::cwsr_record_t> make_gfx9_cwsr_record (
+    compute_queue_t &queue, uint32_t xcc_id, uint32_t compute_relaunch_wave,
+    uint32_t compute_relaunch_state,
+    amd_dbgapi_global_address_t context_save_address) const override
+  {
+    return std::make_unique<cwsr_record_t> (
+      queue, xcc_id, compute_relaunch_wave, compute_relaunch_state,
+      context_save_address);
+  }
+
+public:
+  gfx950_t ()
+    : gfx940_t (EF_AMDGPU_MACH_AMDGCN_GFX950, "amdgcn-amd-amdhsa--gfx950")
+  {
+  }
+};
+
+size_t
+gfx950_t::cwsr_record_t::lds_size () const
+{
+  return compute_relaunch_state_payload_lds_size (m_compute_relaunch_state)
+         * 1280;
+}
 
 class gfx10_architecture_t : public gfx9_architecture_t
 {
@@ -7563,6 +7605,7 @@ decltype (architecture_t::s_architecture_map)
       map.emplace (make_architecture<gfx940_t> ());
       map.emplace (make_architecture<gfx941_t> ());
       map.emplace (make_architecture<gfx942_t> ());
+      map.emplace (make_architecture<gfx950_t> ());
       map.emplace (make_architecture<gfx10_1_generic_t> ());
       map.emplace (make_architecture<gfx1010_t> ());
       map.emplace (make_architecture<gfx1011_t> ());
