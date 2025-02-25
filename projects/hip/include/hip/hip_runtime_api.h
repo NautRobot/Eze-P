@@ -1273,6 +1273,15 @@ typedef enum hipFuncAttribute {
       8,  ///< The maximum number of bytes requested for dynamically allocated shared memory
   hipFuncAttributePreferredSharedMemoryCarveout =
       9,  ///< Sets the percentage of total shared memory allocated as the shared memory carveout
+  hipFuncAttributeClusterDimMustBeSet =
+      10,  ///< the kernel must launch with a valid cluster size specified.
+  hipFuncAttributeRequiredClusterWidth = 11,   ///< The required cluster width in blocks
+  hipFuncAttributeRequiredClusterHeight = 12,  ///< The required cluster height in blocks
+  hipFuncAttributeRequiredClusterDepth = 13,   ///< ///< The required cluster depth in blocks
+  hipFuncAttributeNonPortableClusterSizeAllowed =
+      14,  ///< Is the function allowed to launch with non-portable cluster size.
+  hipFuncAttributeClusterSchedulingPolicyPreference =
+      15,  ///< The block scheduling policy of a function.
   hipFuncAttributeMax
 } hipFuncAttribute;
 /**
@@ -1580,15 +1589,26 @@ typedef enum hipSynchronizationPolicy {
   hipSyncPolicyYield = 3,       /**< Host spins but yields to other threads, reducing CPU usage */
   hipSyncPolicyBlockingSync = 4 /**< Host thread blocks (sleeps) until the stream completes */
 } hipSynchronizationPolicy;
+/* Cluster scheduling policies passed to hipFuncSetAttribute
+*/
+typedef enum hipClusterSchedulingPolicy {
+  hipClusterSchedulingPolicyDefault = 0,  ///< the default scheduling policy
+  hipClusterSchedulingPolicySpread = 1,   ///< distribute blocks evenly across cluster's CUs
+  hipClusterSchedulingPolicyLoadBalancing =
+      2,  ///< Dynamically balance block assignment to optimize resource usage
+} hipClusterSchedulingPolicy;
 
 /**
  *  Launch Attribute ID
  */
 typedef enum hipLaunchAttributeID {
-  hipLaunchAttributeAccessPolicyWindow = 1,     ///< Valid for Streams, graph nodes, launches
-  hipLaunchAttributeCooperative = 2,            ///< Valid for graph nodes, launches
-  hipLaunchAttributeSynchronizationPolicy = 3,  ///< Valid for streams
-  hipLaunchAttributePriority = 8,               ///< Valid for graph node, streams, launches
+  hipLaunchAttributeIgnore = 0,                ///< Ignored entry
+  hipLaunchAttributeAccessPolicyWindow = 1,    ///< Valid for Streams, graph nodes, launches
+  hipLaunchAttributeCooperative = 2,           ///< Valid for graph nodes, launches
+  hipLaunchAttributeSynchronizationPolicy = 3, ///< Valid for streams
+  hipLaunchAttributeClusterDimension = 4,      ///< Valid for graph nodes, launches
+  hipLaunchAttributeClusterSchedulingPolicyPreference = 5, ///< Valid for graph nodes, launches
+  hipLaunchAttributePriority = 8, ///< Valid for graph node, streams, launches
   hipLaunchAttributeMemSyncDomainMap = 9,       ///< Valid for streams, graph nodes, launches
   hipLaunchAttributeMemSyncDomain = 10,         ///< Valid for streams, graph nodes, launches
   hipLaunchAttributeMax
@@ -1613,6 +1633,28 @@ typedef union hipLaunchAttributeValue {
       memSyncDomainMap;  ///< Value of launch attribute hipLaunchAttributeMemSyncDomainMap
   hipLaunchMemSyncDomain
       memSyncDomain;  ///< Value of launch attribute hipLaunchAttributeMemSyncDomain
+  /**
+   * @brief Specifies the desired cluster dimensions for a kernel launch.
+   *
+   * This opaque type is used as the value for the launch attribute
+   * ::hipLaunchAttributeClusterDimension. It defines the dimensions of the
+   * compute cluster in terms of blocks, where each field must evenly divide
+   * the corresponding grid dimension:
+   *
+   *  - \p x: Number of blocks along the X-axis.
+   *  - \p y: Number of blocks along the Y-axis.
+   *  - \p z: Number of blocks along the Z-axis.
+   */
+  struct {
+    unsigned int x;
+    unsigned int y;
+    unsigned int z;
+  } clusterDim;
+
+  hipClusterSchedulingPolicy
+      clusterSchedulingPolicyPreference;  ///< Value of launch attribute ::
+                                          ///< hipLaunchAttributeClusterSchedulingPolicyPreference
+  ///< determines the preferred strategy for distributing blocks within a compute cluster
 } hipLaunchAttributeValue;
 
 /**
@@ -9712,9 +9754,7 @@ hipError_t hipCreateSurfaceObject(hipSurfaceObject_t* pSurfObject, const hipReso
  */
 hipError_t hipDestroySurfaceObject(hipSurfaceObject_t surfaceObject);
 // end of surface
-/**
- * @}
- */
+
 
 /**
  * @brief Enable HIP runtime logging.
@@ -9753,7 +9793,23 @@ hipError_t hipExtDisableLogging();
  * @see hipExtEnableLogging, hipExtDisableLogging
  */
 hipError_t hipExtSetLoggingParams(size_t log_level, size_t log_size, size_t log_mask);
-
+/**
+ * @brief Launches a HIP kernel using a generic function pointer and the specified configuration.
+ * @ingroup Execution
+ *
+ * This function is equivalent to hipLaunchKernelEx but accepts the kernel as a generic function
+ * pointer.
+ *
+ * @param [in] config                 Pointer to the kernel launch configuration structure.
+ * @param [in] fPtr                   Pointer to the device kernel function.
+ * @param [in] args                   Array of pointers to the kernel arguments.
+ *
+ * @returns #hipSuccess if the kernel is launched successfully, otherwise an appropriate error code.
+ */
+hipError_t hipLaunchKernelExC(const hipLaunchConfig_t* config, const void* fPtr, void** args);
+/**
+* @}
+*/
 #ifdef __cplusplus
 } /* extern "c" */
 #endif
