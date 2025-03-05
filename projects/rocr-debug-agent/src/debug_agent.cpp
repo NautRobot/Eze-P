@@ -1129,6 +1129,12 @@ dbgapi_worker (int listen_fd, bool all_wavefronts, bool precise_memory)
         }
     }
 
+  /* The initial setup is finished, notify the main thread it can go on.  */
+  [[maybe_unused]] bool promise_available
+    = g_rbrk_sync.guard.load (std::memory_order::memory_order_acquire);
+  agent_assert (promise_available);
+  g_rbrk_sync.promise->set_value ();
+
   /* Map containing an image of all code objects loaded by the process.  */
   code_object_map_t code_object_map;
 
@@ -1239,6 +1245,12 @@ private:
 
 DebugAgentWorker::DebugAgentWorker ()
 {
+  /* Create the promise/future pair and make sure the promise is visible by
+     the worker thread.  */
+  g_rbrk_sync.promise.emplace ();
+  auto init_future = g_rbrk_sync.promise->get_future ();
+  g_rbrk_sync.guard.store (true, std::memory_order::memory_order_release);
+
   int pipefd[2];
   if (pipe2 (pipefd, O_CLOEXEC) == -1)
     agent_error ("failed to create pipe: %s", strerror (errno));
@@ -1251,6 +1263,11 @@ DebugAgentWorker::DebugAgentWorker ()
 
   m_worker_thread = std::thread (dbgapi_worker, pipefd[0], g_all_wavefronts,
                                  g_precise_emmory);
+
+  /* Wait for the worker thread to have setup dbgapi.  */
+  init_future.wait ();
+  g_rbrk_sync.promise.reset ();
+  g_rbrk_sync.guard.store (false, std::memory_order::memory_order_release);
 
   auto pthread_thread = m_worker_thread.native_handle ();
   if (pthread_setname_np (pthread_thread, "RocrDebugAgent") == -1)
