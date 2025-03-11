@@ -109,7 +109,6 @@ private:
   std::optional<amd_dbgapi_os_queue_packet_id_t> m_read_packet_id{};
   std::optional<amd_dbgapi_os_queue_packet_id_t> m_write_packet_id{};
   amd_dbgapi_global_address_t m_scratch_backing_memory_address{ 0 };
-  amd_dbgapi_size_t m_per_xcc_scratch_backing_memory_size{ 0 };
   uint32_t m_compute_tmpring_size{ 0 };
 
   /* The memory reserved by the thunk library for the debugger is used to store
@@ -547,12 +546,6 @@ aql_queue_t::queue_state_changed ()
 
       process ().read_global_memory (
         m_os_queue_info.read_pointer_address
-          + offsetof (amd_queue_t, scratch_backing_memory_byte_size)
-          - offsetof (amd_queue_t, read_dispatch_id),
-        &m_per_xcc_scratch_backing_memory_size);
-
-      process ().read_global_memory (
-        m_os_queue_info.read_pointer_address
           + offsetof (amd_queue_t, compute_tmpring_size)
           - offsetof (amd_queue_t, read_dispatch_id),
         &m_compute_tmpring_size);
@@ -869,18 +862,10 @@ std::pair<amd_dbgapi_global_address_t /* address */,
 aql_queue_t::scratch_memory_region (uint32_t xcc_id, uint32_t shader_engine_id,
                                     uint32_t scoreboard_id) const
 {
-  /* The scratch memory for this queue is evenly divided between all XCCs, so
-     each XCC has its own scratch base.  */
-  amd_dbgapi_global_address_t xcc_scratch_base
-    = m_scratch_backing_memory_address
-      + m_per_xcc_scratch_backing_memory_size * xcc_id;
-
   auto [offset, size] = architecture ().scratch_memory_region (
-    m_compute_tmpring_size,
-    agent ().os_info ().shader_engine_count / agent ().os_info ().xcc_count,
-    shader_engine_id, scoreboard_id);
+    agent (), m_compute_tmpring_size, xcc_id, shader_engine_id, scoreboard_id);
 
-  return { xcc_scratch_base + offset, size };
+  return { m_scratch_backing_memory_address + offset, size };
 }
 
 void

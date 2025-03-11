@@ -41,12 +41,13 @@
    park the wave if stopped.
 10: New trap handler ABI. Except for gfx940: set status.skip_export before
    halting the wave.
+11: Remove scratch_backing_memory_byte_size from the aql_queue_t.
 */
 
 using rocr_rdebug_version_t = decltype (r_debug::r_version);
 
 constexpr rocr_rdebug_version_t ROCR_RDEBUG_VERSION_INVALID = 0;
 constexpr rocr_rdebug_version_t ROCR_RDEBUG_VERSION_MIN = 8;
-constexpr rocr_rdebug_version_t ROCR_RDEBUG_VERSION_MAX = 10;
+constexpr rocr_rdebug_version_t ROCR_RDEBUG_VERSION_MAX = 11;
 
 #endif /* ROCR_RDEBUG_H */
