@@ -2535,9 +2535,9 @@ public:
   }
 
   std::pair<amd_dbgapi_size_t /* offset  */, amd_dbgapi_size_t /* size  */>
-  scratch_memory_region (uint32_t compute_tmpring_size_register,
-                         uint32_t shader_engine_count,
-                         uint32_t shader_engine_id,
+  scratch_memory_region (const agent_t &agent,
+                         uint32_t compute_tmpring_size_register,
+                         uint32_t xcc_id, uint32_t shader_engine_id,
                          uint32_t scoreboard_id) const override;
 };
 
@@ -3332,8 +3332,8 @@ gfx9_architecture_t::dispatch_packet_address (
 
 std::pair<amd_dbgapi_size_t /* offset  */, amd_dbgapi_size_t /* size  */>
 gfx9_architecture_t::scratch_memory_region (
-  uint32_t compute_tmpring_size_register, uint32_t shader_engine_count,
-  uint32_t shader_engine_id, uint32_t scoreboard_id) const
+  const agent_t &agent, uint32_t compute_tmpring_size_register,
+  uint32_t xcc_id, uint32_t shader_engine_id, uint32_t scoreboard_id) const
 {
   /* Total size of allocated scratch memory in number of waves.  */
   amd_dbgapi_size_t waves
@@ -3342,6 +3342,8 @@ gfx9_architecture_t::scratch_memory_region (
   amd_dbgapi_size_t wavesize
     = utils::bit_extract (compute_tmpring_size_register, 12, 24) * 1024;
 
+  uint32_t shader_engine_count
+    = agent.os_info ().shader_engine_count / agent.os_info ().xcc_count;
   dbgapi_assert (shader_engine_count != 0);
 
   amd_dbgapi_size_t offset
@@ -3360,7 +3362,11 @@ gfx9_architecture_t::scratch_memory_region (
       wavesize = 0;
     }
 
-  return { offset, wavesize };
+  /* The scratch memory is evenly divided between all XCCs, so each XCC has its
+     own scratch base.  */
+  amd_dbgapi_size_t xcc_scratch_base = waves * wavesize * xcc_id;
+
+  return { xcc_scratch_base + offset, wavesize };
 }
 
 /* Generic gfx9 architecture.  */
@@ -5446,9 +5452,9 @@ public:
   const void *register_read_only_mask (amdgpu_regnum_t regnum) const override;
 
   std::pair<amd_dbgapi_size_t /* offset  */, amd_dbgapi_size_t /* size  */>
-  scratch_memory_region (uint32_t compute_tmpring_size_register,
-                         uint32_t shader_engine_count,
-                         uint32_t shader_engine_id,
+  scratch_memory_region (const agent_t &agent,
+                         uint32_t compute_tmpring_size_register,
+                         uint32_t xcc_id, uint32_t shader_engine_id,
                          uint32_t scoreboard_id) const override;
 
   bool can_halt_at_endpgm () const override { return true; }
@@ -5999,8 +6005,8 @@ gfx11_architecture_t::can_simulate (wave_t &wave,
 
 std::pair<amd_dbgapi_size_t /* offset  */, amd_dbgapi_size_t /* size  */>
 gfx11_architecture_t::scratch_memory_region (
-  uint32_t compute_tmpring_size_register, uint32_t /* shader_engine_count  */,
-  uint32_t shader_engine_id, uint32_t scoreboard_id) const
+  const agent_t &agent, uint32_t compute_tmpring_size_register,
+  uint32_t xcc_id, uint32_t shader_engine_id, uint32_t scoreboard_id) const
 {
   /* Total size of allocated scratch memory in number of waves.  */
   amd_dbgapi_size_t waves
@@ -6013,7 +6019,15 @@ gfx11_architecture_t::scratch_memory_region (
   amd_dbgapi_size_t offset
     = (waves * shader_engine_id + scoreboard_id) * wavesize;
 
-  return { offset, wavesize };
+  uint32_t shader_engine_count
+    = agent.os_info ().shader_engine_count / agent.os_info ().xcc_count;
+
+  /* The scratch memory is evenly divided between all XCCs, so each XCC has its
+     own scratch base.  */
+  amd_dbgapi_size_t xcc_scratch_base
+    = waves * shader_engine_count * wavesize * xcc_id;
+
+  return { xcc_scratch_base + offset, wavesize };
 }
 
 /* Generic gfx11 architecture.  */
