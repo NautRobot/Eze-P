@@ -3688,7 +3688,7 @@ gfx90a_t::cwsr_record_t::lds_size () const
          * 128 * sizeof (uint32_t);
 }
 
-class gfx940_t : public gfx90a_t
+class gfx9_4_architecture_t : public gfx90a_t
 {
 protected:
   static constexpr uint32_t sq_wave_trapsts_host_trap_mask = 1 << 22;
@@ -3767,14 +3767,9 @@ protected:
       context_save_address);
   }
 
-  gfx940_t (elf_amdgpu_machine_t e_machine, std::string target_triple)
+  gfx9_4_architecture_t (elf_amdgpu_machine_t e_machine,
+                         std::string target_triple)
     : gfx90a_t (e_machine, std::move (target_triple))
-  {
-  }
-
-public:
-  gfx940_t ()
-    : gfx90a_t (EF_AMDGPU_MACH_AMDGCN_GFX940, "amdgcn-amd-amdhsa--gfx940")
   {
   }
 
@@ -3804,7 +3799,7 @@ public:
 };
 
 amdgcn_architecture_t::exception_mask_t
-gfx940_t::signaled_exceptions (const wave_t &wave) const
+gfx9_4_architecture_t::signaled_exceptions (const wave_t &wave) const
 {
   uint32_t trapsts;
 
@@ -3824,8 +3819,8 @@ gfx940_t::signaled_exceptions (const wave_t &wave) const
 }
 
 amdgcn_architecture_t::exception_mask_t
-gfx940_t::set_exceptions (wave_t &wave, exception_mask_t mask,
-                          exception_mask_t exceptions) const
+gfx9_4_architecture_t::set_exceptions (wave_t &wave, exception_mask_t mask,
+                                       exception_mask_t exceptions) const
 {
   exception_mask_t unhandled_exceptions{};
 
@@ -3877,7 +3872,7 @@ gfx940_t::set_exceptions (wave_t &wave, exception_mask_t mask,
 }
 
 amd_dbgapi_wave_id_t
-gfx940_t::cwsr_record_t::id () const
+gfx9_4_architecture_t::cwsr_record_t::id () const
 {
   dbgapi_assert (
     process ().is_flag_set (process_t::flag_t::spi_ttmps_setup_enabled));
@@ -3901,7 +3896,8 @@ gfx940_t::cwsr_record_t::id () const
 }
 
 bool
-gfx940_t::are_trap_handler_ttmps_initialized (const wave_t &wave) const
+gfx9_4_architecture_t::are_trap_handler_ttmps_initialized (
+  const wave_t &wave) const
 {
   uint32_t ttmp11;
   wave.read_register (amdgpu_regnum_t::ttmp11, &ttmp11);
@@ -3909,7 +3905,7 @@ gfx940_t::are_trap_handler_ttmps_initialized (const wave_t &wave) const
 }
 
 void
-gfx940_t::initialize_spi_ttmps (const wave_t &wave) const
+gfx9_4_architecture_t::initialize_spi_ttmps (const wave_t &wave) const
 {
   /* Those bits should have been initialized by SPI.  */
   for (amdgpu_regnum_t regnum = amdgpu_regnum_t::ttmp8;
@@ -3918,7 +3914,7 @@ gfx940_t::initialize_spi_ttmps (const wave_t &wave) const
 }
 
 void
-gfx940_t::initialize_trap_handler_ttmps (const wave_t &wave) const
+gfx9_4_architecture_t::initialize_trap_handler_ttmps (const wave_t &wave) const
 {
   uint32_t ttmp11;
   wave.read_register (amdgpu_regnum_t::ttmp11, &ttmp11);
@@ -3944,14 +3940,15 @@ gfx940_t::initialize_trap_handler_ttmps (const wave_t &wave) const
 }
 
 std::pair<amd_dbgapi_wave_state_t, amd_dbgapi_wave_stop_reasons_t>
-gfx940_t::wave_get_state (wave_t &wave) const
+gfx9_4_architecture_t::wave_get_state (wave_t &wave) const
 {
   return amdgcn_architecture_t::wave_get_state (wave);
 }
 
 std::optional<amd_dbgapi_global_address_t>
-gfx940_t::simulate_instruction (wave_t &wave, amd_dbgapi_global_address_t pc,
-                                const instruction_t &instruction) const
+gfx9_4_architecture_t::simulate_instruction (
+  wave_t &wave, amd_dbgapi_global_address_t pc,
+  const instruction_t &instruction) const
 {
   auto next_pc = gfx90a_t::simulate_instruction (wave, pc, instruction);
 
@@ -3974,7 +3971,7 @@ gfx940_t::simulate_instruction (wave_t &wave, amd_dbgapi_global_address_t pc,
 }
 
 std::string
-gfx940_t::register_type (amdgpu_regnum_t regnum) const
+gfx9_4_architecture_t::register_type (amdgpu_regnum_t regnum) const
 {
   if (regnum >= amdgpu_regnum_t::first_accvgpr_64
       && regnum <= amdgpu_regnum_t::last_accvgpr_64)
@@ -4087,7 +4084,7 @@ gfx940_t::register_type (amdgpu_regnum_t regnum) const
 }
 
 const void *
-gfx940_t::register_read_only_mask (amdgpu_regnum_t regnum) const
+gfx9_4_architecture_t::register_read_only_mask (amdgpu_regnum_t regnum) const
 {
   switch (regnum)
     {
@@ -4117,7 +4114,7 @@ gfx940_t::register_read_only_mask (amdgpu_regnum_t regnum) const
 }
 
 std::optional<amd_dbgapi_global_address_t>
-gfx940_t::dispatch_packet_address (
+gfx9_4_architecture_t::dispatch_packet_address (
   const architecture_t::cwsr_record_t &cwsr_record) const
 {
   if (!cwsr_record.agent ().spi_ttmps_setup_enabled ()
@@ -4145,46 +4142,39 @@ gfx940_t::dispatch_packet_address (
 
 /* Generic gfx9.4 architecture.  */
 
-class gfx9_4_generic_t final : public gfx940_t
+class gfx9_4_generic_t final : public gfx9_4_architecture_t
 {
 public:
   gfx9_4_generic_t ()
-    : gfx940_t (EF_AMDGPU_MACH_AMDGCN_GFX9_4_GENERIC,
-                "amdgcn-amd-amdhsa--gfx9-4-generic")
+    : gfx9_4_architecture_t (EF_AMDGPU_MACH_AMDGCN_GFX9_4_GENERIC,
+                             "amdgcn-amd-amdhsa--gfx9-4-generic")
   {
   }
 };
 
-class gfx941_t final : public gfx940_t
-{
-public:
-  gfx941_t ()
-    : gfx940_t (EF_AMDGPU_MACH_AMDGCN_GFX941, "amdgcn-amd-amdhsa--gfx941")
-  {
-  }
-};
-
-class gfx942_t final : public gfx940_t
+class gfx942_t final : public gfx9_4_architecture_t
 {
 public:
   gfx942_t ()
-    : gfx940_t (EF_AMDGPU_MACH_AMDGCN_GFX942, "amdgcn-amd-amdhsa--gfx942")
+    : gfx9_4_architecture_t (EF_AMDGPU_MACH_AMDGCN_GFX942,
+                             "amdgcn-amd-amdhsa--gfx942")
   {
   }
 };
 
-class gfx950_t final : public gfx940_t
+class gfx950_t final : public gfx9_4_architecture_t
 {
 protected:
-  class cwsr_record_t final : public gfx940_t::cwsr_record_t
+  class cwsr_record_t final : public gfx9_4_architecture_t::cwsr_record_t
   {
   public:
     cwsr_record_t (compute_queue_t &queue, uint32_t xcc_id,
                    uint32_t compute_relaunch_wave,
                    uint32_t compute_relaunch_state,
                    amd_dbgapi_global_address_t context_save_address)
-      : gfx940_t::cwsr_record_t (queue, xcc_id, compute_relaunch_wave,
-                                 compute_relaunch_state, context_save_address)
+      : gfx9_4_architecture_t::cwsr_record_t (
+          queue, xcc_id, compute_relaunch_wave, compute_relaunch_state,
+          context_save_address)
     {
     }
 
@@ -4203,7 +4193,8 @@ protected:
 
 public:
   gfx950_t ()
-    : gfx940_t (EF_AMDGPU_MACH_AMDGCN_GFX950, "amdgcn-amd-amdhsa--gfx950")
+    : gfx9_4_architecture_t (EF_AMDGPU_MACH_AMDGCN_GFX950,
+                             "amdgcn-amd-amdhsa--gfx950")
   {
   }
 };
@@ -7616,8 +7607,6 @@ decltype (architecture_t::s_architecture_map)
       map.emplace (make_architecture<gfx908_t> ());
       map.emplace (make_architecture<gfx90a_t> ());
       map.emplace (make_architecture<gfx9_4_generic_t> ());
-      map.emplace (make_architecture<gfx940_t> ());
-      map.emplace (make_architecture<gfx941_t> ());
       map.emplace (make_architecture<gfx942_t> ());
       map.emplace (make_architecture<gfx950_t> ());
       map.emplace (make_architecture<gfx10_1_generic_t> ());
