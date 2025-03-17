@@ -167,7 +167,8 @@ enum class KernelField : uint8_t {
   Kind = 15,
   WgpMode = 16,
   UniformWrokGroupSize = 17,
-  MaxSize = 18
+  ClusterDims = 18,
+  MaxSize = 19
 };
 
 namespace amd {
@@ -202,6 +203,7 @@ class Kernel : public amd::HeapObject {
   struct WorkGroupInfo : public amd::EmbeddedObject {
     size_t size_;                   //!< kernel workgroup size
     size_t compileSize_[3];         //!< kernel compiled workgroup size
+    size_t clusterSize_[3];         //!< cluster dims size
     uint64_t localMemSize_;         //!< amount of used local memory
     size_t preferredSizeMultiple_;  //!< preferred multiple for launch
     uint64_t privateMemSize_;       //!< amount of used private memory
@@ -268,6 +270,14 @@ class Kernel : public amd::HeapObject {
   }
 
   size_t getWorkGroupSizeHint(int dim) const { return workGroupInfo_.compileSizeHint_[dim]; }
+
+  void setClusterSize(size_t x, size_t y, size_t z) {
+    workGroupInfo_.clusterSize_[0] = x;
+    workGroupInfo_.clusterSize_[1] = y;
+    workGroupInfo_.clusterSize_[2] = z;
+  }
+
+  size_t getClusterSize(int dim) const { return workGroupInfo_.clusterSize_[dim]; }
 
   //! Returns GPU device object, associated with this kernel
   const amd::Device& device() const { return dev_; }
