@@ -46,6 +46,9 @@ stages:
     workspace:
       clean: all
     steps:
+    - task: DeleteFiles@1
+      inputs:
+        Contents: '**/*'
     - template: ${{ variables.CI_TEMPLATE_PATH }}/steps/checkout.yml@pipelines_repo
       parameters:
         submoduleBehaviour: recursive

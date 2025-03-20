@@ -1,5 +1,5 @@
 import pytest
 
-def TestHelloWorld():
+def test_HelloWorld():
     greeting = "Hello, World!"
     assert greeting == "Hello, World!"
