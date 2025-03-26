@@ -506,9 +506,11 @@ class VirtualGPU : public device::VirtualDevice {
 
   bool dispatchAqlPacket(hsa_kernel_dispatch_packet_t* packet, uint16_t header, uint16_t rest,
                          bool blocking = true, bool capturing = false,
-                         const uint8_t* aqlPacket = nullptr, bool attach_signal = false);
+                         const uint8_t* aqlPacket = nullptr, bool attach_signal = false,
+                         bool cluster_launch = false);
   bool dispatchAqlPacket(hsa_barrier_and_packet_t* packet, uint16_t header, uint16_t rest,
-                         bool blocking = true, bool attach_signal = false);
+                         bool blocking = true, bool attach_signal = false,
+                         bool cluster_launch = false);
 
   //! Dispatches multiple AQL packets in a single batch operation
   bool dispatchAqlPacketBatch(const std::vector<uint8_t*>& packets,
@@ -516,7 +518,8 @@ class VirtualGPU : public device::VirtualDevice {
                               amd::AccumulateCommand* vcmd = nullptr, bool attach_signal = false);
   template <typename AqlPacket> bool dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header,
                                                               uint16_t rest, bool blocking,
-                                                              bool attach_signal = false);
+                                                              bool attach_signal = false,
+                                                              bool cluster_launch = false);
   //! Dispatches multiple AQL packets with a single doorbell ring
   template <typename AqlPacket> bool dispatchGenericAqlPacketBatch(const std::vector<AqlPacket*>& packets,
                                                                    bool blocking, bool attach_signal = false,
