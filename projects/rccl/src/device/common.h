@@ -214,7 +214,7 @@ __device__ inline void barrier_sync_aligned(int name, int nThreads) {
 
 __device__ inline bool barrier_red_or(bool vote, int name) {
   int ans;
-  asm("{ .reg .pred p;"
+  asm volatile("{ .reg .pred p;"
       "  setp.ne.s32 p, %1, 0;"
       "  barrier.red.or.pred p, %2, p; "
       "  selp.s32 %0, 1, 0, p; }"
@@ -223,7 +223,7 @@ __device__ inline bool barrier_red_or(bool vote, int name) {
 }
 __device__ inline bool barrier_red_or(bool vote, int name, int nThreads) {
   int ans;
-  asm("{ .reg .pred p;"
+  asm volatile("{ .reg .pred p;"
       "  setp.ne.s32 p, %1, 0;"
       "  barrier.red.or.pred p, %2, %3, p; "
       "  selp.s32 %0, 1, 0, p; }"
@@ -232,7 +232,7 @@ __device__ inline bool barrier_red_or(bool vote, int name, int nThreads) {
 }
 __device__ inline bool barrier_red_or_aligned(bool vote, int name) {
   int ans;
-  asm("{ .reg .pred p;"
+  asm volatile("{ .reg .pred p;"
       "  setp.ne.s32 p, %1, 0;"
       "  barrier.red.or.pred.aligned p, %2, p; "
       "  selp.s32 %0, 1, 0, p; }"
@@ -441,6 +441,9 @@ struct RunWorkBatch {
         if (work->nWarps != workPrev->nWarps) __syncthreads();
       }
       int subtn = work->nWarps*WARP_SIZE;
+      // Coverity reports a possible thread divergence due to not all threads participating in the collective.
+      // However, the code ensures that the participation is on a per-warp basis.
+      // coverity[device_thread_diverged:FALSE]
       if (tid < subtn) RunWorkColl<Fn, T, RedOp, Algo, Proto, COLL_UNROLL>().run(tid, subtn, work);
     }
   }
@@ -466,25 +469,25 @@ __device__ __forceinline__ void ncclKernelMain(struct ncclDevKernelArgs const* a
   // do better when we know all threads are querying the same bitmask.
   switch (tid/WARP_SIZE) {
   case 0:
-	//ncclShmem.channelId = blockIdx.x;
+  //ncclShmem.channelId = blockIdx.x;
     for (int i = 0; i < num; i++) {
       if (args->channelMask.masks[i] & (1ull<<x)) {
         y = __popcll(args->channelMask.masks[i] & ((1ull<<x)-1));
         y = total + y;
         if (blockIdx.x == y) {
           ncclShmem.channelId = x + total;
-	        break;
+          break;
         }
       }
       if (WARP_SIZE < 64) {
         x = WARP_SIZE + tid;
         if (args->channelMask.masks[i] & (1ull<<x)) {
-	        y = __popcll(args->channelMask.masks[i] & ((1ull<<x)-1));
-	        y = y + total;
+          y = __popcll(args->channelMask.masks[i] & ((1ull<<x)-1));
+          y = y + total;
           if (blockIdx.x == y) {
-	          ncclShmem.channelId = x + total;
-	          break;
-	        }
+            ncclShmem.channelId = x + total;
+            break;
+          }
         }
       }
       total = total + __popcll(args->channelMask.masks[i]);
@@ -529,6 +532,9 @@ __device__ __forceinline__ void ncclKernelMain(struct ncclDevKernelArgs const* a
   default:
     { int subtid = tid - 2*WARP_SIZE;
       int subtn = tn - 2*WARP_SIZE;
+      // Coverity reports a possible thread divergence due to not all threads participating in the collective.
+      // However, the code ensures that the participation is on a per-warp basis.
+      // coverity[device_thread_diverged:FALSE]
       loadWorkBatchToShmem(subtid, subtn, args, /*batchIx=*/blockIdx.x);
     } break;
   }
