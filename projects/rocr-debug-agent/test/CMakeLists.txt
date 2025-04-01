@@ -32,9 +32,11 @@
 ##
 ################################################################################
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 
 project(rocm-debug-agent-test)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # CMAKE_MODULE_PATH set to default
 set(CMAKE_MODULE_PATH "/opt/rocm/lib/cmake/hip" CACHE STRING "HIP CMAKE Module Path")
@@ -83,4 +85,4 @@ install(FILES CMakeLists.txt run-test.py ${SOURCES} ${HEADERS}
 
 enable_testing()
 add_test(NAME rocm-debug-agent-test
-  COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/run-test.py ${CMAKE_CURRENT_BINARY_DIR})
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/run-test.py ${CMAKE_CURRENT_BINARY_DIR})
