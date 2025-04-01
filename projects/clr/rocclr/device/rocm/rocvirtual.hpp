@@ -506,11 +506,9 @@ class VirtualGPU : public device::VirtualDevice {
 
   bool dispatchAqlPacket(hsa_kernel_dispatch_packet_t* packet, uint16_t header, uint16_t rest,
                          bool blocking = true, bool capturing = false,
-                         const uint8_t* aqlPacket = nullptr, bool attach_signal = false,
-                         bool cluster_launch = false);
+                         const uint8_t* aqlPacket = nullptr, bool attach_signal = false);
   bool dispatchAqlPacket(hsa_barrier_and_packet_t* packet, uint16_t header, uint16_t rest,
-                         bool blocking = true, bool attach_signal = false,
-                         bool cluster_launch = false);
+                         bool blocking = true, bool attach_signal = false);
 
   //! Dispatches multiple AQL packets in a single batch operation
   bool dispatchAqlPacketBatch(const std::vector<uint8_t*>& packets,
@@ -669,6 +667,8 @@ class VirtualGPU : public device::VirtualDevice {
 
   uint16_t dispatchPacketHeaderNoSync_;
   uint16_t dispatchPacketHeader_;
+  uint16_t vendorSpecificPacketHeaderNoSync_;
+  uint16_t vendorSpecificPacketHeader_;
 
   //!< bit-vector representing the CU mask. Each active bit represents using one CU
   const std::vector<uint32_t> cuMask_;

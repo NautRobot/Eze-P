@@ -1129,14 +1129,16 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
   auto expected_fence_state = extractAqlBits(header, HSA_PACKET_HEADER_SCRELEASE_FENCE_SCOPE,
                                              HSA_PACKET_HEADER_WIDTH_SCRELEASE_FENCE_SCOPE);
 
-  // Reset fence_dirty_ flag if we submit a packet with system scopes
-  if (expected_fence_state == amd::Device::kCacheStateSystem) {
-    setFenceDirty(false);
+  unsigned header_type = extractAqlBits(header, HSA_PACKET_HEADER_TYPE,
+                                        HSA_PACKET_HEADER_WIDTH_TYPE);
+  if (static_cast<bool>(header_type == HSA_PACKET_TYPE_VENDOR_SPECIFIC)
+      && (reinterpret_cast<hsa_amd_ext_kernel_dispatch_packet_t*>(packet)->amd_format
+           == HSA_AMD_PACKET_TYPE_EXT_KERNEL_DISPATCH)) {
+    cluster_launch = true;
   }
 
-  // Dirty optimization to save on consequent dispatch packets which have requested flushes
-  if (fence_state_ == amd::Device::kCacheStateSystem &&
-      expected_fence_state == amd::Device::kCacheStateSystem) {
+  if (!cluster_launch && fence_state_ == amd::Device::kCacheStateSystem
+      && expected_fence_state == amd::Device::kCacheStateSystem) {
     header = dispatchPacketHeader_;
     setFenceDirty(true);
   }
@@ -1183,6 +1185,8 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
   if (header != 0) {
     packet_store_release(reinterpret_cast<uint32_t*>(aql_loc), header, rest);
   }
+
+
 
   if (cluster_launch) {
     ClPrint(amd::LOG_DEBUG, amd::LOG_AQL,
@@ -1287,8 +1291,7 @@ void VirtualGPU::dispatchBlockingWait() {
 // ================================================================================================
 bool VirtualGPU::dispatchAqlPacket(hsa_kernel_dispatch_packet_t* packet, uint16_t header,
                                    uint16_t rest, bool blocking, bool capturing,
-                                   const uint8_t* aqlPacket, bool attach_signal,
-                                   bool cluster_launch) {
+                                   const uint8_t* aqlPacket, bool attach_signal) {
   if (capturing == true) {
     packet->header = header;
     packet->setup = rest;
@@ -1296,13 +1299,13 @@ bool VirtualGPU::dispatchAqlPacket(hsa_kernel_dispatch_packet_t* packet, uint16_
     return true;
   } else {
     dispatchBlockingWait();
-    return dispatchGenericAqlPacket(packet, header, rest, blocking, attach_signal, cluster_launch);
+    return dispatchGenericAqlPacket(packet, header, rest, blocking, attach_signal);
   }
 }
 // ================================================================================================
 bool VirtualGPU::dispatchAqlPacket(hsa_barrier_and_packet_t* packet, uint16_t header, uint16_t rest,
-                                   bool blocking, bool attach_signal, bool cluster_launch) {
-  return dispatchGenericAqlPacket(packet, header, rest, blocking, attach_signal, cluster_launch);
+                                   bool blocking, bool attach_signal) {
+  return dispatchGenericAqlPacket(packet, header, rest, blocking, attach_signal);
 }
 
 // ================================================================================================
@@ -1809,6 +1812,8 @@ VirtualGPU::VirtualGPU(Device& device, bool profiling, bool cooperative,
   constexpr uint16_t sysAcquireAgentReleaseHBits =
       (HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_SCACQUIRE_FENCE_SCOPE) |
       (HSA_FENCE_SCOPE_AGENT << HSA_PACKET_HEADER_SCRELEASE_FENCE_SCOPE);
+  constexpr uint16_t vendorSpecificHBits = (HSA_PACKET_TYPE_VENDOR_SPECIFIC
+                                            << HSA_PACKET_HEADER_TYPE);
 
   if (device.settings().fenceScopeAgent_) {
     const auto& isa = device.isa();
@@ -1819,9 +1824,13 @@ VirtualGPU::VirtualGPU(Device& device, bool profiling, bool cooperative,
         (kernelDispatchHBits | (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
     dispatchPacketHeader_ = (kernelDispatchHBits | barrierHBits |
                              (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
+    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | systemScopeHBits);
+                            vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | systemScopeHBits);
   } else {
     dispatchPacketHeaderNoSync_ = (kernelDispatchHBits | systemScopeHBits);
     dispatchPacketHeader_ = (kernelDispatchHBits | barrierHBits | systemScopeHBits);
+    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | agentScopeHBits);
+    vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | agentScopeHBits);
   }
 
   aqlHeader_ = dispatchPacketHeader_;
@@ -3839,6 +3848,13 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
   // Calculate local size if it wasn't provided
   devKernel->FindLocalWorkSize(sizes.dimensions(), sizes.global(), local_size);
   bool clusterLaunch = false;
+  size_t cluster_local[3];
+  if (devKernel->getClusterSize(0) != 0) {
+    clusterLaunch = true;
+    cluster_local[0] = devKernel->getClusterSize(0);
+    cluster_local[1] = devKernel->getClusterSize(1);
+    cluster_local[2] = devKernel->getClusterSize(2);
+  }
 
   uint16_t local[3] = {1, 1, 1};
   uint32_t global[3] = {1, 1, 1};
@@ -4124,15 +4140,16 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
       }
     }
 
-  // Pass the header accordingly
-  auto aqlHeaderWithOrder = aqlHeader_;
-  if (vcmd != nullptr && vcmd->getAnyOrderLaunchFlag()) {
-    constexpr uint32_t kAqlHeaderMask = ~(1 << HSA_PACKET_HEADER_BARRIER);
-    aqlHeaderWithOrder &= kAqlHeaderMask;
-  }
-  if (vcmd->getCommandEntryScope() == amd::Device::kCacheStateSystem) {
-    addSystemScope_ = true;
-  }
+    // Pass the header accordingly
+    auto aqlHeaderWithOrder = (clusterLaunch) ? vendorSpecificPacketHeader_ : aqlHeader_;
+
+    if (vcmd != nullptr && vcmd->getAnyOrderLaunchFlag()) {
+      constexpr uint32_t kAqlHeaderMask = ~(1 << HSA_PACKET_HEADER_BARRIER);
+      aqlHeaderWithOrder &= kAqlHeaderMask;
+    }
+    if (vcmd->getCommandEntryScope() == amd::Device::kCacheStateSystem) {
+      addSystemScope_ = true;
+    }
 
   // Copy scheduler's AQL packet for possible relaunch from the scheduler itself
     if (aql_packet != nullptr) {
@@ -4165,8 +4182,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     } else {
       if (!dispatchAqlPacket(&dispatchPacket, aqlHeaderWithOrder,
                              (sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS),
-                             GPU_FLUSH_ON_EXECUTION, false, nullptr, attach_signal,
-                             clusterLaunch)) {
+                             GPU_FLUSH_ON_EXECUTION, false, nullptr, attach_signal)) {
         return false;
       }
     }
