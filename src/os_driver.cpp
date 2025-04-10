@@ -390,6 +390,26 @@ os_wave_launch_trap_mask (__u32 wave_launch_trap)
   return mask;
 }
 
+/* Convert from os_watch_mode_t to the appropriate KFD type.  */
+
+static constexpr kfd_dbg_trap_address_watch_mode
+kfd_watch_mode (os_watch_mode_t mode)
+{
+  switch (mode)
+    {
+    case os_watch_mode_t::read:
+      return KFD_DBG_TRAP_ADDRESS_WATCH_MODE_READ;
+    case os_watch_mode_t::nonread:
+      return KFD_DBG_TRAP_ADDRESS_WATCH_MODE_NONREAD;
+    case os_watch_mode_t::atomic:
+      return KFD_DBG_TRAP_ADDRESS_WATCH_MODE_ATOMIC;
+    case os_watch_mode_t::all:
+      return KFD_DBG_TRAP_ADDRESS_WATCH_MODE_ALL;
+    }
+
+  dbgapi_assert_not_reached ("Invalid watch mode");
+}
+
 /* Decode a KFD queue_id.  */
 std::tuple<os_queue_id_t, os_queue_state_t>
 decode_queue_id (__u32 queue_id)
@@ -520,6 +540,7 @@ public:
         "should not call this, null_driver does not have any queues");
 
     *resumed_count = 0;
+
     return AMD_DBGAPI_STATUS_SUCCESS;
   }
 
@@ -1911,9 +1932,7 @@ kfd_driver_t::set_address_watch (os_agent_id_t os_agent_id,
 
   kfd_ioctl_dbg_trap_args args{};
   args.set_node_address_watch.address = address;
-  args.set_node_address_watch.mode
-    = static_cast<std::underlying_type_t<decltype (os_watch_mode)>> (
-      os_watch_mode);
+  args.set_node_address_watch.mode = kfd_watch_mode (os_watch_mode);
   args.set_node_address_watch.mask = mask;
   args.set_node_address_watch.gpu_id = os_agent_id;
 
