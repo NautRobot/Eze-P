@@ -134,6 +134,33 @@ trailing_zeroes_count (Integral x)
   return bit_count (v);
 }
 
+#if defined __has_builtin && __has_builtin(__builtin_ctzll)
+template <>
+constexpr int
+trailing_zeroes_count<unsigned long long> (unsigned long long x)
+{
+  return __builtin_ctzll (x);
+}
+#endif
+
+#if defined __has_builtin && __has_builtin(__builtin_ctzl)
+template <>
+constexpr int
+trailing_zeroes_count<unsigned long> (unsigned long x)
+{
+  return __builtin_ctzl (x);
+}
+#endif
+
+#if defined __has_builtin && __has_builtin(__builtin_ctz)
+template <>
+constexpr int
+trailing_zeroes_count<unsigned int> (unsigned int x)
+{
+  return __builtin_ctz (x);
+}
+#endif
+
 template <typename Integral>
 constexpr std::make_unsigned_t<Integral>
 zero_extend (Integral x, int width)
