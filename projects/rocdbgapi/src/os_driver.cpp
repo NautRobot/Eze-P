@@ -424,6 +424,28 @@ decode_queue_id (__u32 queue_id)
            queue_state };
 }
 
+/* Convert from os_wave_launch_mode_t to the appropriate KFD type.  */
+
+static constexpr kfd_dbg_trap_wave_launch_mode
+kfd_wave_launch_mode (os_wave_launch_mode_t mode)
+{
+  switch (mode)
+    {
+    case os_wave_launch_mode_t::normal:
+      return KFD_DBG_TRAP_WAVE_LAUNCH_MODE_NORMAL;
+    case os_wave_launch_mode_t::halt:
+      return KFD_DBG_TRAP_WAVE_LAUNCH_MODE_HALT;
+    case os_wave_launch_mode_t::single_step:
+      return KFD_DBG_TRAP_WAVE_LAUNCH_MODE_DEBUG;
+
+    case os_wave_launch_mode_t::kill:
+    case os_wave_launch_mode_t::disable:
+      dbgapi_assert (false && "Unsupported wave launch mode");
+    }
+
+  dbgapi_assert_not_reached ("Unknown wave launch mode");
+}
+
 /* OS driver class that implements no access that can be used if there is no
    process.  */
 
@@ -1980,8 +2002,7 @@ kfd_driver_t::set_wave_launch_mode (os_wave_launch_mode_t mode) const
   TRACE_DRIVER_BEGIN (param_in (mode));
 
   kfd_ioctl_dbg_trap_args args{};
-  args.launch_mode.launch_mode
-    = static_cast<std::underlying_type_t<decltype (mode)>> (mode);
+  args.launch_mode.launch_mode = kfd_wave_launch_mode (mode);
 
   int err = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_SET_WAVE_LAUNCH_MODE, &args);
   if (err == -ESRCH)
