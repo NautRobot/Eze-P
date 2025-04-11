@@ -128,7 +128,7 @@ add_library(rccl_common OBJECT ${HIP_COMMON_SOURCES})
 add_dependencies(rccl_common hipify git_version_check)
 target_link_libraries(rccl_common roc::rccl hip::device)
 if(USE_MPI)
-    target_link_libraries(rccl_common MPI::MPI_CXX)
+  target_link_libraries(rccl_common MPI::MPI_CXX)
 endif()
 
 # Compile tests
