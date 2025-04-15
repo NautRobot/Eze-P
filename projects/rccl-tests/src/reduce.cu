@@ -95,6 +95,10 @@ testResult_t ReduceRunTest(struct threadArgs* args, int root, ncclDataType_t typ
 
   for (int i=0; i<type_count; i++) {
     for (int j=0; j<op_count; j++) {
+#if defined(RCCL_FLOAT8)
+      if((run_types[i] == ncclFp8E4M3 || run_types[i] == ncclFp8E5M2) && run_ops[j] == ncclProd)
+        continue;
+#endif
       for (int k=begin_root; k<=end_root; k++) {
         TESTCHECK(TimeTest(args, run_types[i], run_typenames[i], run_ops[j], run_opnames[j], k));
       }
