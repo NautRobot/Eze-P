@@ -1824,13 +1824,13 @@ VirtualGPU::VirtualGPU(Device& device, bool profiling, bool cooperative,
         (kernelDispatchHBits | (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
     dispatchPacketHeader_ = (kernelDispatchHBits | barrierHBits |
                              (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
-    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | systemScopeHBits);
-                            vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | systemScopeHBits);
+    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | agentScopeHBits);
+    vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | agentScopeHBits);
   } else {
     dispatchPacketHeaderNoSync_ = (kernelDispatchHBits | systemScopeHBits);
     dispatchPacketHeader_ = (kernelDispatchHBits | barrierHBits | systemScopeHBits);
-    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | agentScopeHBits);
-    vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | agentScopeHBits);
+    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | systemScopeHBits);
+    vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | systemScopeHBits);
   }
 
   aqlHeader_ = dispatchPacketHeader_;
