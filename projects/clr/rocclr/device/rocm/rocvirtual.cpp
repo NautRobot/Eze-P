@@ -4108,9 +4108,14 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     if (clusterLaunch) {
       auto& dispatchPacketExt = dispatchPacketUnion.extKernelDispatch;
 
-      dispatchPacketExt.cluster_count_x = sizes.dimensions() > 0 ? newGlobalSize[0] : 1;
-      dispatchPacketExt.cluster_count_y = sizes.dimensions() > 1 ? newGlobalSize[1] : 1;
-      dispatchPacketExt.cluster_count_z = sizes.dimensions() > 2 ? newGlobalSize[2] : 1;
+      size_t clusterSize[3];
+
+      for (size_t i = 0; i < 3; i++)
+        clusterSize[i] = cluster_local[i] * local[i];
+
+      dispatchPacketExt.cluster_count_x = sizes.dimensions() > 0 ? (newGlobalSize[0] / clusterSize[0]) : 1;
+      dispatchPacketExt.cluster_count_y = sizes.dimensions() > 1 ? (newGlobalSize[1] / clusterSize[1]) : 1;
+      dispatchPacketExt.cluster_count_z = sizes.dimensions() > 2 ? (newGlobalSize[2] / clusterSize[2]) : 1;
 
       uint32_t clusterSize[3] = {1, 1, 1};
       dispatchPacketExt.cluster_size_x = sizes.dimensions() > 0 ? clusterSize[0] : 1;
