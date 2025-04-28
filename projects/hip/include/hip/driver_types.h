@@ -44,7 +44,6 @@ THE SOFTWARE.
  */
 
 typedef void* hipDeviceptr_t;
-typedef struct ihipStream_t* hipStream_t;
 /**
  * HIP channel format kinds
  */
@@ -612,44 +611,24 @@ static inline struct hipExtent make_hipExtent(size_t w, size_t h, size_t d) {
   return e;
 }
 
-/* Provides performance hints for the hitProp and missProp fields in a HIP_ACCESS_POLICY_WINDOW */
-typedef enum HIP_ACCESS_PROPERTY_enum {
-    HIP_ACCESS_PROPERTY_NORMAL = 0,
-    HIP_ACCESS_PROPERTY_STREAMING = 1,
-    HIP_ACCESS_PROPERTY_PERSISTING = 2,
-} HIP_ACCESS_PROPERTY;
-
-/*
- * Sets a memory access policy for a contiguous block of memory.
- * It splits the block into segments so that approximately a specified percentage (hitRatio) follow
- * one access policy (hitProp) while the remainder follow another (missProp).
- */
-typedef struct HIP_ACCESS_POLICY_WINDOW_st {
-    void* base_ptr;
-    HIP_ACCESS_PROPERTY hitProp;
-    float hitRatio;
-    HIP_ACCESS_PROPERTY missProp;
-    size_t num_bytes;
-} HIP_ACCESS_POLICY_WINDOW;
-
 typedef enum hipFunction_attribute {
-  HIP_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK,  ///< The maximum number of threads per block. Depends
-                                             ///< on function and device.
-  HIP_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES,  ///< The statically allocated shared memory size in bytes
-                                         ///< per block required by the function.
-  HIP_FUNC_ATTRIBUTE_CONST_SIZE_BYTES,   ///< The user-allocated constant memory by the function in
-                                         ///< bytes.
-  HIP_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES,   ///< The local memory usage of each thread by this function
-                                         ///< in bytes.
-  HIP_FUNC_ATTRIBUTE_NUM_REGS,  ///< The number of registers used by each thread of this function.
-  HIP_FUNC_ATTRIBUTE_PTX_VERSION,                       ///< PTX version
-  HIP_FUNC_ATTRIBUTE_BINARY_VERSION,                    ///< Binary version
-  HIP_FUNC_ATTRIBUTE_CACHE_MODE_CA,                     ///< Cache mode
-  HIP_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,     ///< The maximum dynamic shared memory per
-                                                        ///< block for this function in bytes.
-  HIP_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT,  ///< The shared memory carveout preference
-                                                        ///< in percent of the maximum shared
-                                                        ///< memory.
+  HIP_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK,                 ///< The maximum number of threads per block. Depends
+                                                            ///< on function and device.
+  HIP_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES,                     ///< The statically allocated shared memory size in bytes
+                                                            ///< per block required by the function.
+  HIP_FUNC_ATTRIBUTE_CONST_SIZE_BYTES,                      ///< The user-allocated constant memory by the function in
+                                                            ///< bytes.
+  HIP_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES,                      ///< The local memory usage of each thread by this function
+                                                            ///< in bytes.
+  HIP_FUNC_ATTRIBUTE_NUM_REGS,                              ///< The number of registers used by each thread of this function.
+  HIP_FUNC_ATTRIBUTE_PTX_VERSION,                           ///< PTX version
+  HIP_FUNC_ATTRIBUTE_BINARY_VERSION,                        ///< Binary version
+  HIP_FUNC_ATTRIBUTE_CACHE_MODE_CA,                         ///< Cache mode
+  HIP_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,         ///< The maximum dynamic shared memory per
+                                                            ///< block for this function in bytes.
+  HIP_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT,      ///< The shared memory carveout preference
+                                                            ///< in percent of the maximum shared
+                                                            ///< memory.
   HIP_FUNC_ATTRIBUTE_CLUSTER_DIM_MUST_BE_SET,               ///< the kernel must launch with a valid cluster size specified.
   HIP_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH,                ///< The required cluster width in blocks
   HIP_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT,               ///< The required cluster height in blocks
@@ -696,83 +675,6 @@ typedef enum hipPointer_attribute {
                                         ///< it was allocated from a mempool
                                         ///< @warning This attribute is not supported in HIP
 } hipPointer_attribute;
-
-/**
- *  Launch Attribute ID
- */
-typedef enum HIP_LAUNCH_ATTRIBUTE_ID_enum {
-    HIP_LAUNCH_ATTRIBUTE_IGNORE = 0,                               ///< Ignored entry
-    HIP_LAUNCH_ATTRIBUTE_ACCESS_POLICY_WINDOW = 1,                 ///< Valid for Streams, graph nodes, launches
-    HIP_LAUNCH_ATTRIBUTE_COOPERATIVE = 2,                          ///< Valid for graph nodes, launches
-    HIP_LAUNCH_ATTRIBUTE_SYNCHRONIZATION_POLICY = 3,               ///< Valid for streams
-    HIP_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION = 4,                    ///< Valid for graph nodes, launches
-    HIP_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERANCE = 5, ///< Valid for graph nodes, launches
-    HIP_LAUNCH_ATTRIBUTE_PRIORITY = 8,                             ///< Valid for graph node, streams, launches
-} HIP_LAUNCH_ATTRIBUTE_ID;
-
-/**
- * Cluster scheduling policies passed to hipFuncSetAttribute
- */
-typedef enum HIP_CLUSTER_SCHEDULING_POLICY_enum {
-    HIP_CLUSTER_SCHEDULING_POLICY_DEFAULT = 0,        ///< the default scheduling policy
-    HIP_CLUSTER_SCHEDULING_POLICY_SPREAD = 1,         ///< distribute blocks evenly across cluster's CUs
-    HIP_CLUSTER_SCHEDULING_POLICY_LOADBALANCING = 2,  ///< Dynamically balance block assignment to optimize resource usage
-} HIP_CLUSTER_SCHEDULING_POLICY;
-
-/**
- *  Launch Attribute Value
- */
-typedef union HIP_LAUNCH_ATTRIBUTE_VAL_union {
-    HIP_ACCESS_POLICY_WINDOW accessPolicyWindow;    ///< Value of launch attribute HIP_LAUNCH_ATTRIBUTE_ACCESS_POLICY_WINDOW.
-    int cooperative;                                ///< Value of launch attribute HIP_LAUNCH_ATTRIBUTE_COOPERATIVE. Indicates
-                                                    ///< whether the kernel is cooperative.
-    int priority;                                   ///< Value of launch attribute HIP_LAUNCH_ATTRIBUTE_PRIORITY. Execution priority of kernel
-    /**
-     * @brief Specifies the desired cluster dimensions for a kernel launch.
-     *
-     * This opaque type is used as the value for the launch attribute
-     * HIP_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION. It defines the dimensions of the
-     * compute cluster in terms of blocks, where each field must evenly divide
-     * the corresponding grid dimension:
-     *
-     *  - \p x: Number of blocks along the X-axis.
-     *  - \p y: Number of blocks along the Y-axis.
-     *  - \p z: Number of blocks along the Z-axis.
-     */
-    struct {
-        unsigned int x;
-        unsigned int y;
-        unsigned int z;
-    } clusterDim;
-
-  HIP_CLUSTER_SCHEDULING_POLICY clusterSchedulingPolicyPreference;  ///< Value of launch attribute HIP_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERANCE
-                                                                    ///< determines the preferred strategy for distributing blocks within a compute cluster
-} HIP_LAUNCH_ATTRIBUTE_VAL;
-
-/**
- * Used to specify custom attributes for launching kernels
- */
-typedef struct HIP_LAUNCH_ATTRIBUTE_st {
-    HIP_LAUNCH_ATTRIBUTE_ID id;                     ///< Identifier of the launch attribute
-    char pad[8 - sizeof(HIP_LAUNCH_ATTRIBUTE_ID)];  ///< Padding to align the structure to 8 bytes
-    HIP_LAUNCH_ATTRIBUTE_VAL val;                   ///< Value associated with the launch attribute
-} HIP_LAUNCH_ATTRIBUTE;
-
-/**
- * HIP driver extensible launch configuration
- */
-typedef struct HIP_LAUNCH_CONFIG_st {
-    unsigned int gridDimX;        ///< Grid width in blocks
-    unsigned int gridDimY;        ///< Grid height in blocks
-    unsigned int gridDimZ;        ///< Grid depth in blocks
-    unsigned int blockDimX;       ///< Thread block dimension in X
-    unsigned int blockDimY;       ///< Thread block dimension in Y
-    unsigned int blockDimZ;       ///< Thread block dimension in Z
-    unsigned int sharedMemBytes;  ///< Dynamic shared-memory size in bytes per block
-    hipStream_t hStream;          ///< HIP stream identifier
-    HIP_LAUNCH_ATTRIBUTE* attrs;  ///< Attribute list
-    unsigned int numAttrs;        ///< Number of attributes
-} HIP_LAUNCH_CONFIG;
 
 // doxygen end DriverTypes
 /**
