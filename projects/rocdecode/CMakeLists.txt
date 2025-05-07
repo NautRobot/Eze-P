@@ -132,6 +132,14 @@ if(HIP_FOUND AND Libva_FOUND)
   file(GLOB_RECURSE SOURCES "./src/*.cpp")
   # rocdecode.so
   add_library(${PROJECT_NAME} SHARED ${SOURCES})
+
+  # DRM
+  find_path(AMDGPU_DRM_INCLUDE_DIRS libdrm/amdgpu.h
+    PATHS /opt/amdgpu/include /usr/include /usr/ /usr/local/include
+    NO_DEFAULT_PATH
+  )
+  target_include_directories(${PROJECT_NAME} PRIVATE ${AMDGPU_DRM_INCLUDE_DIRS})
+
   # --all-warnings/-Wall       -- Enable most warning messages
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
   target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARY_LIST})
