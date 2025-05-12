@@ -16,15 +16,15 @@ wavefront's PC are printed.
 
     /opt/rocm/bin/hipcc -O0 -ggdb -o my_program my_program.cpp
 
-To use the ROCdebug-agent, set the ``HSA_TOOLS_LIB`` environment variable to the file name or path of the library and the ``HSA_ENABLE_DEBUG`` environment variable to ``1``.
+To use the ROCdebug-agent, set the ``HSA_TOOLS_LIB`` environment variable to the file name or path of the library:
 
 .. code:: shell
 
-    HSA_TOOLS_LIB=/opt/rocm/lib/librocm-debug-agent.so.2 HSA_ENABLE_DEBUG=1 ./my_program
+    HSA_TOOLS_LIB=/opt/rocm/lib/librocm-debug-agent.so.2 ./my_program
 
 If the application encounters a triggering event, ROCdebug-agent prints the state of some or all AMDGPU wavefronts.
 
-See a sample printout:
+Here is a sample printout:
 
 .. code-block:: console
 
@@ -133,12 +133,12 @@ A SIGQUIT signal can be sent to a process with the ``kill -s SIGQUIT <pid>`` com
 Options
 -----------
 
-Options are passed using the ROCM_DEBUG_AGENT_OPTIONS environment variable as shown:
+To pass options, use the ``ROCM_DEBUG_AGENT_OPTIONS`` environment variable:
 
 .. code-block:: shell
 
     ROCM_DEBUG_AGENT_OPTIONS="--all --save-code-objects" \
-    HSA_TOOLS_LIB=librocm-debug-agent.so.2 HSA_ENABLE_DEBUG=1 ./my_program
+    HSA_TOOLS_LIB=librocm-debug-agent.so.2 ./my_program
 
 The following table lists the supported options:
 
@@ -183,3 +183,10 @@ The following table lists the supported options:
 
     * - ``-h``, ``--help``
       - Displays the usage and aborts the process.
+
+Known limitations
+------------------
+
+- A disassembly of the wavefront faulting PC is only provided if it is within a code object.
+
+- A disassembly of the wavefront faulting PC only includes source text correlation and surrounding context if the ``libdw.so`` library included with the distribution supports the DWARF present in the code object. Otherwise, the disassembly might show only the instructions immediately after the faulting PC.
