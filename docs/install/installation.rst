@@ -106,6 +106,6 @@ You can run the tests individually outside of the ``CTest`` harness as shown:
 
 .. code-block:: shell
 
-    HSA_TOOLS_LIB=librocm-debug-agent.so.2 HSA_ENABLE_DEBUG=1 test/rocm-debug-agent-test 0
-    HSA_TOOLS_LIB=librocm-debug-agent.so.2 HSA_ENABLE_DEBUG=1 test/rocm-debug-agent-test 1
-    HSA_TOOLS_LIB=librocm-debug-agent.so.2 HSA_ENABLE_DEBUG=1 test/rocm-debug-agent-test 2
+    HSA_TOOLS_LIB=librocm-debug-agent.so.2 test/rocm-debug-agent-test 0
+    HSA_TOOLS_LIB=librocm-debug-agent.so.2 test/rocm-debug-agent-test 1
+    HSA_TOOLS_LIB=librocm-debug-agent.so.2 test/rocm-debug-agent-test 2
