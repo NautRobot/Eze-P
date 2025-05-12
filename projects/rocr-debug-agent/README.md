@@ -184,10 +184,10 @@ The supported options are:
 
 - __``-p``, ``--precise-memory``__
 
-  Enable precise memory operations if supported by the devices.
+  Enables precise memory operations if supported by the devices.
 
   When an exception occurs, precise memory ensures that the PC points to the
-  instruction immediately following the one that caused the exception.
+  instruction immediately following the one causing the exception.
 
 - __``-s [DIR]``, ``--save-code-objects[=DIR]``__
 
