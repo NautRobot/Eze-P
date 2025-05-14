@@ -31,6 +31,13 @@ int test_ncclVersion = 0; // init'd with ncclGetVersion()
 int32_t gpu_block3;
 size_t cache_bytes = 192 * 1024 * 1024; // Use 192MB
 
+// RCCL_FLOAT8 support
+bool rccl_float8_useFnuz = false;
+bool IsArchMatch(char const* arch, char const* target) {
+  // helper function to reduce clutter in code elsewhere.  Returns true on match.
+  return (strncmp(arch, target, strlen(target)) == 0);
+}
+
 #if NCCL_MAJOR >= 2
   ncclDataType_t test_types[ncclNumTypes] = {
     ncclInt8, ncclUint8, ncclInt32, ncclUint32, ncclInt64, ncclUint64, ncclHalf, ncclFloat, ncclDouble
@@ -38,7 +45,7 @@ size_t cache_bytes = 192 * 1024 * 1024; // Use 192MB
     , ncclBfloat16
   #endif
   #if RCCL_FLOAT8 == 1
-    , ncclFp8E4M3, ncclFp8E5M2
+    , ncclFloat8e4m3, ncclFloat8e5m2
   #endif
   };
   const char *test_typenames[ncclNumTypes] = {
@@ -196,6 +203,7 @@ void Reporter::addResult(int gpusPerRank, int ranksPerNode, int totalRanks, size
 }
 
 bool Reporter::isMainThread() { return is_main_thread == 1; }
+static int minCudaArch = 1<<30;
 
 #define NUM_BLOCKS 32
 
@@ -304,18 +312,18 @@ static bool minReqVersion(int rmajor, int rminor, int rpatch)
 }
 
 testResult_t CheckDelta(void* results, void* expected, size_t count, size_t offset, ncclDataType_t type, ncclRedOp_t op, uint64_t seed, int nranks, int64_t *wrongEltN) {
-  ncclVerifiableVerify(results, expected, count, (int)type, (int)op, nranks, seed, offset, wrongEltN, cudaStreamDefault);
+  CUDACHECK(ncclVerifiableVerify(results, expected, count, (int)type, (int)op, nranks, seed, offset, wrongEltN, cudaStreamDefault));
   CUDACHECK(cudaDeviceSynchronize());
   return testSuccess;
 }
 
 testResult_t InitDataReduce(void* data, const size_t count, const size_t offset, ncclDataType_t type, ncclRedOp_t op, uint64_t seed, int nranks) {
-  ncclVerifiablePrepareExpected(data, count, (int)type, (int)op, nranks, seed, offset, cudaStreamDefault);
+  CUDACHECK(ncclVerifiablePrepareExpected(data, count, (int)type, (int)op, nranks, seed, offset, cudaStreamDefault));
   return testSuccess;
 }
 
 testResult_t InitData(void* data, const size_t count, size_t offset, ncclDataType_t type, ncclRedOp_t op, uint64_t seed, int nranks, int rank) {
-  ncclVerifiablePrepareInput(data, count, (int)type, (int)op, nranks, rank, seed, offset, cudaStreamDefault);
+  CUDACHECK(ncclVerifiablePrepareInput(data, count, (int)type, (int)op, nranks, rank, seed, offset, cudaStreamDefault));
   return testSuccess;
 }
 
@@ -563,8 +571,8 @@ testResult_t startColl(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
       case ncclBfloat16: bf16 = ncclVerifiablePremulScalar<hip_bfloat16>(rank); break;
       #endif
       #if defined(RCCL_FLOAT8)
-      case ncclFp8E4M3: fp8_e4m3 = ncclVerifiablePremulScalar<rccl_float8>(rank); break;
-      case ncclFp8E5M2: fp8_e5m2 = ncclVerifiablePremulScalar<rccl_bfloat8>(rank); break;
+      case ncclFloat8e4m3: fp8_e4m3 = ncclVerifiablePremulScalar<rccl_float8>(rank); break;
+      case ncclFloat8e5m2 : fp8_e5m2 = ncclVerifiablePremulScalar<rccl_bfloat8>(rank); break;
       #endif
       case ncclNumTypes: break;
       }
@@ -1330,6 +1338,13 @@ testResult_t run() {
   char hostname[1024];
   getHostName(hostname, 1024);
 
+  hipDeviceProp_t devProp;
+  CUDACHECK(hipGetDeviceProperties(&devProp, 0));
+  if (IsArchMatch(devProp.gcnArchName, "gfx942")) {
+    PRINT("On gfx942 architecture, using FNUZ FP8 types");
+    rccl_float8_useFnuz = true;
+  }
+
 #ifdef MPI_SUPPORT
   MPI_Comm_size(MPI_COMM_WORLD, &totalProcs);
   MPI_Comm_rank(MPI_COMM_WORLD, &proc);
@@ -1456,12 +1471,21 @@ testResult_t run() {
     gpus[i] = ((gpu0 != -1 ? gpu0 : localRank*nThreads*nGpus) + i)%numDevices;
     CUDACHECK(cudaSetDevice(gpus[i]));
     TESTCHECK(AllocateBuffs(sendbuffs.data()+i, sendBytes, recvbuffs.data()+i, recvBytes, expected.data()+i, (size_t)maxBytes));
-    if (streamnull)
+    if (streamnull) {
       streams[i] = NULL;
-    else
+    }
+    else {
       CUDACHECK(cudaStreamCreateWithFlags(streams.data()+i, cudaStreamNonBlocking));
+    }
+    int archMajor, archMinor;
+    CUDACHECK(cudaDeviceGetAttribute(&archMajor, cudaDevAttrComputeCapabilityMajor, gpus[i]));
+    CUDACHECK(cudaDeviceGetAttribute(&archMinor, cudaDevAttrComputeCapabilityMinor, gpus[i]));
+    minCudaArch = std::min(minCudaArch, 100*archMajor + 10*archMinor);
   }
 
+#ifdef MPI_SUPPORT
+  MPI_Allreduce(MPI_IN_PLACE, &minCudaArch, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+#endif
   //if parallel init is not selected, use main thread to initialize NCCL
   ncclComm_t* comms = (ncclComm_t*)malloc(sizeof(ncclComm_t)*nThreads*nGpus);
 #if NCCL_VERSION_CODE >= NCCL_VERSION(2,19,0)
