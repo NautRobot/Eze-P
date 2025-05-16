@@ -1137,9 +1137,9 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
     cluster_launch = true;
   }
 
-  if (!cluster_launch && fence_state_ == amd::Device::kCacheStateSystem
+  if (fence_state_ == amd::Device::kCacheStateSystem
       && expected_fence_state == amd::Device::kCacheStateSystem) {
-    header = dispatchPacketHeader_;
+    header = cluster_launch ? vendorSpecificPacketHeader_ : dispatchPacketHeader_;
     setFenceDirty(true);
   }
 
@@ -1185,8 +1185,6 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
   if (header != 0) {
     packet_store_release(reinterpret_cast<uint32_t*>(aql_loc), header, rest);
   }
-
-
 
   if (cluster_launch) {
     ClPrint(amd::LOG_DEBUG, amd::LOG_AQL,
@@ -4117,12 +4115,12 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
       dispatchPacketExt.cluster_count_y = sizes.dimensions() > 1 ? (newGlobalSize[1] / clusterSize[1]) : 1;
       dispatchPacketExt.cluster_count_z = sizes.dimensions() > 2 ? (newGlobalSize[2] / clusterSize[2]) : 1;
 
-      uint32_t clusterSize[3] = {1, 1, 1};
       dispatchPacketExt.cluster_size_x = sizes.dimensions() > 0 ? clusterSize[0] : 1;
       dispatchPacketExt.cluster_size_y = sizes.dimensions() > 1 ? clusterSize[1] : 1;
       dispatchPacketExt.cluster_size_z = sizes.dimensions() > 2 ? clusterSize[2] : 1;
 
       dispatchPacketExt.amd_format = HSA_AMD_PACKET_TYPE_EXT_KERNEL_DISPATCH;
+
     } else {
       dispatchPacket.grid_size_x = sizes.dimensions() > 0 ? newGlobalSize[0] : 1;
       dispatchPacket.grid_size_y = sizes.dimensions() > 1 ? newGlobalSize[1] : 1;
@@ -4176,6 +4174,19 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
       }
     }
 
+
+    uint16_t rest = 0;
+    if (clusterLaunch) {
+      // When launching an AQL packet, the 32 bits has to be written atomically for CP to track,
+      // on normal dispatch packet, first 32 bits are header & setup. In ext dispatch packet,
+      // the first 32 bits are header, amd_format, setup. Update the "rest" of the 32 bits, so we
+      // can commit it atomically in packet_store_release.
+      rest = (HSA_AMD_PACKET_TYPE_EXT_KERNEL_DISPATCH
+              | ((sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS) << 8));
+    } else {
+      rest = (sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS);
+    }
+
     if (isGraphCapture) {
       // Dispatch the packet
       if (!dispatchAqlPacket(&dispatchPacket, aqlHeaderWithOrder,
@@ -4185,8 +4196,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
         return false;
       }
     } else {
-      if (!dispatchAqlPacket(&dispatchPacket, aqlHeaderWithOrder,
-                             (sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS),
+      if (!dispatchAqlPacket(&dispatchPacket, aqlHeaderWithOrder, rest,
                              GPU_FLUSH_ON_EXECUTION, false, nullptr, attach_signal)) {
         return false;
       }
