@@ -1040,13 +1040,13 @@ queue_t::create (std::optional<amd_dbgapi_queue_id_t> queue_id,
     }
 }
 
-os_queue_id_t
+std::optional<os_queue_id_t>
 queue_t::os_queue_id () const
 {
   if (is_valid ())
     return m_os_queue_info.queue_id;
   else
-    return m_os_queue_info.queue_id | os_queue_invalid_mask;
+    return {};
 }
 
 void
@@ -1092,6 +1092,12 @@ void
 queue_t::get_info (amd_dbgapi_queue_info_t query, size_t value_size,
                    void *value) const
 {
+  /* The caller of this method (amd_dbgapi_queue_get_info) must ensure
+     that the queue is valid.  Since the queue is retreived using
+     amd::dbgapi::handle_object_set_t<amd::dbgapi::queue_t>::find, any invalid
+     queue would have been filtered at this stage.  */
+  dbgapi_assert (is_valid ());
+
   switch (query)
     {
     case AMD_DBGAPI_QUEUE_INFO_AGENT:
@@ -1111,9 +1117,14 @@ queue_t::get_info (amd_dbgapi_queue_info_t query, size_t value_size,
       return;
 
     case AMD_DBGAPI_QUEUE_INFO_OS_ID:
-      utils::get_info (value_size, value,
-                       static_cast<amd_dbgapi_os_queue_id_t> (os_queue_id ()));
-      return;
+      {
+        std::optional<amd_dbgapi_os_queue_id_t> os_id;
+        dbgapi_assert (os_id.has_value ());
+        utils::get_info (
+          value_size, value,
+          static_cast<amd_dbgapi_os_queue_id_t> (os_id.value ()));
+        return;
+      }
 
     case AMD_DBGAPI_QUEUE_INFO_ADDRESS:
       utils::get_info (value_size, value, address ());

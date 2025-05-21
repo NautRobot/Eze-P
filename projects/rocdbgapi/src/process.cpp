@@ -863,7 +863,11 @@ process_t::suspend_queues (const std::vector<queue_t *> &queues,
           ++num_all_stopped_queues;
         }
       else
-        queue_ids.emplace_back (queue->os_queue_id ());
+        {
+          std::optional<os_queue_id_t> os_id = queue->os_queue_id ();
+          dbgapi_assert (os_id.has_value ());
+          queue_ids.emplace_back (os_id.value ());
+        }
     }
 
   auto os_queue_id_to_id = [this] (os_queue_id_t os_queue_id)
@@ -972,7 +976,11 @@ process_t::resume_queues (const std::vector<queue_t *> &queues,
           ++num_all_stopped_queues;
         }
       else
-        queue_ids.emplace_back (queue->os_queue_id ());
+        {
+          std::optional<os_queue_id_t> os_id = queue->os_queue_id ();
+          dbgapi_assert (os_id.has_value ());
+          queue_ids.emplace_back (os_id.value ());
+        }
 
       queue->set_state (queue_t::state_t::running);
     }
@@ -1239,9 +1247,10 @@ process_t::update_queues ()
                                          : queue_t::state_t::running);
           queue->set_mark (queue_mark);
 
+          std::optional<os_queue_id_t> os_id = queue->os_queue_id ();
+          dbgapi_assert (os_id.has_value ());
           log_info ("created new %s (os_queue_id=%d)",
-                    to_cstring (queue->id ()),
-                    os_queue_id_unmask (queue->os_queue_id ()));
+                    to_cstring (queue->id ()), os_id.value ());
         }
     }
   while (queue_count > snapshot_count);
@@ -1254,12 +1263,10 @@ process_t::update_queues ()
     if (it->mark () < queue_mark)
       {
         amd_dbgapi_queue_id_t queue_id = it->id ();
-        os_queue_id_t os_queue_id = os_queue_id_unmask (it->os_queue_id ());
 
         it = destroy (it);
 
-        log_info ("destroyed deleted %s (os_queue_id=%d)",
-                  to_cstring (queue_id), os_queue_id);
+        log_info ("destroyed deleted %s", to_cstring (queue_id));
       }
     else
       ++it;
