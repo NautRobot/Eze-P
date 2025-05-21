@@ -51,8 +51,8 @@ class queue_t : public detail::handle_object<amd_dbgapi_queue_id_t>
 public:
   enum class state_t
   {
-    invalid,   /* The queue is invalid. Calls to os_queue_id () will return the
-                  os_invalid_queueid.  Calls to process_t::find and
+    invalid,   /* The queue is invalid. Calls to os_queue_id () will return an
+                  empty optional.  Calls to process_t::find and
                   process_t::find_if will not return this queue.  Once a queue
                   becomes invalid, its state can no longer be changed.  */
     suspended, /* The queue is suspended, its state can be inspected.  */
@@ -95,7 +95,7 @@ public:
   bool is_suspended () const { return m_state == state_t::suspended; }
   bool is_running () const { return m_state == state_t::running; }
 
-  os_queue_id_t os_queue_id () const;
+  std::optional<os_queue_id_t> os_queue_id () const;
 
   static epoch_t next_mark ()
   {
