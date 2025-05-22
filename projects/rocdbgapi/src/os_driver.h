@@ -133,6 +133,15 @@ struct os_agent_info_t
 using os_queue_id_t = uint32_t;
 using os_watch_id_t = uint32_t;
 
+enum class os_queue_state_t : uint8_t
+{
+  error = 1 << 0,
+  invalid = 1 << 1
+};
+template <> struct is_flag<os_queue_state_t> : std::true_type
+{
+};
+
 enum class os_queue_type_t : uint32_t
 {
   unknown,
@@ -386,6 +395,7 @@ enum class os_watch_mode_t : uint32_t
 struct os_queue_snapshot_entry_t
 {
   os_queue_id_t queue_id;
+  os_queue_state_t state{};
   os_agent_id_t gpu_id;
   os_queue_type_t queue_type{ os_queue_type_t::unknown };
   os_exception_mask_t exception_status;
@@ -396,19 +406,6 @@ struct os_queue_snapshot_entry_t
   amd_dbgapi_global_address_t ctx_save_restore_address;
   amd_dbgapi_size_t ctx_save_restore_area_size;
 };
-
-constexpr os_queue_id_t os_queue_error_mask = KFD_DBG_QUEUE_ERROR_MASK;
-constexpr os_queue_id_t os_queue_invalid_mask = KFD_DBG_QUEUE_INVALID_MASK;
-constexpr os_queue_id_t os_queue_id_mask
-  = ~(os_queue_error_mask | os_queue_invalid_mask);
-
-/* Remove the error and invalid bits from OS_QUEUE_ID.  */
-
-inline constexpr os_queue_id_t
-os_queue_id_unmask (os_queue_id_t os_queue_id)
-{
-  return os_queue_id & os_queue_id_mask;
-}
 
 enum class os_wave_launch_mode_t : uint32_t
 {
@@ -496,12 +493,15 @@ public:
     os_exception_info_t *os_exception_info, bool clear_exception) const = 0;
 
   virtual amd_dbgapi_status_t
-  suspend_queues (os_queue_id_t *queues, size_t queue_count,
+  suspend_queues (const os_queue_id_t *queues, size_t queue_count,
                   os_exception_mask_t exceptions_cleared,
-                  size_t *suspended_count) const = 0;
-  virtual amd_dbgapi_status_t resume_queues (os_queue_id_t *queues,
-                                             size_t queue_count,
-                                             size_t *resumed_count) const = 0;
+                  size_t *suspended_count,
+                  os_queue_state_t *queue_states) const
+    = 0;
+  virtual amd_dbgapi_status_t
+  resume_queues (const os_queue_id_t *queues, size_t queue_count,
+                 size_t *resumed_count, os_queue_state_t *queue_states) const
+    = 0;
 
   virtual amd_dbgapi_status_t
   queue_snapshot (os_queue_snapshot_entry_t *snapshots, size_t snapshot_count,
@@ -544,6 +544,7 @@ template <> std::string to_string (os_queue_type_t queue_type);
 template <> std::string to_string (os_runtime_info_t runtime_info);
 template <> std::string to_string (os_runtime_state_t runtime_state);
 template <> std::string to_string (os_source_id_t source_id);
+template <> std::string to_string (os_queue_state_t queue_state);
 template <> std::string to_string (os_watch_mode_t watch_mode);
 template <> std::string to_string (os_wave_launch_mode_t mode);
 template <> std::string to_string (os_wave_launch_trap_override_t override);

@@ -390,6 +390,20 @@ os_wave_launch_trap_mask (__u32 wave_launch_trap)
   return mask;
 }
 
+/* Decode a KFD queue_id.  */
+std::tuple<os_queue_id_t, os_queue_state_t>
+decode_queue_id (__u32 queue_id)
+{
+  os_queue_state_t queue_state{};
+  if (queue_id & KFD_DBG_QUEUE_ERROR_MASK)
+    queue_state |= os_queue_state_t::error;
+  if (queue_id & KFD_DBG_QUEUE_INVALID_MASK)
+    queue_state |= os_queue_state_t::invalid;
+
+  return { queue_id & ~(KFD_DBG_QUEUE_ERROR_MASK | KFD_DBG_QUEUE_INVALID_MASK),
+           queue_state };
+}
+
 /* OS driver class that implements no access that can be used if there is no
    process.  */
 
@@ -479,9 +493,10 @@ public:
   }
 
   amd_dbgapi_status_t
-  suspend_queues (os_queue_id_t * /* queues  */, size_t queue_count,
+  suspend_queues (const os_queue_id_t * /* queues  */, size_t queue_count,
                   os_exception_mask_t /* exceptions_cleared  */,
-                  size_t *suspended_count) const override
+                  size_t *suspended_count,
+                  os_queue_state_t * /* queue_states  */) const override
   {
     dbgapi_assert (suspended_count != nullptr);
 
@@ -493,9 +508,10 @@ public:
     return AMD_DBGAPI_STATUS_SUCCESS;
   }
 
-  amd_dbgapi_status_t resume_queues (os_queue_id_t * /* queues  */,
-                                     size_t queue_count,
-                                     size_t *resumed_count) const override
+  amd_dbgapi_status_t
+  resume_queues (const os_queue_id_t * /* queues  */, size_t queue_count,
+                 size_t *resumed_count,
+                 os_queue_state_t * /* queue_states  */) const override
   {
     dbgapi_assert (resumed_count != nullptr);
 
@@ -836,7 +852,9 @@ kfd_driver_base_t::queue_snapshot (
 
       queue_info = {};
 
-      queue_info.queue_id = entry.queue_id;
+      auto [queue_id, queue_state] = decode_queue_id (entry.queue_id);
+      queue_info.queue_id = queue_id;
+      queue_info.state = queue_state;
       queue_info.gpu_id = entry.gpu_id;
       queue_info.queue_type = os_queue_type (entry.queue_type);
       queue_info.exception_status
@@ -1193,12 +1211,15 @@ public:
                         os_exception_info_t *os_exception_info,
                         bool clear_exception) const override;
 
-  amd_dbgapi_status_t suspend_queues (os_queue_id_t *queues,
-                                      size_t queue_count,
-                                      os_exception_mask_t exceptions_cleared,
-                                      size_t *suspended_count) const override;
-  amd_dbgapi_status_t resume_queues (os_queue_id_t *queues, size_t queue_count,
-                                     size_t *resumed_count) const override;
+  amd_dbgapi_status_t
+  suspend_queues (const os_queue_id_t *queues, size_t queue_count,
+                  os_exception_mask_t exceptions_cleared,
+                  size_t *suspended_count,
+                  os_queue_state_t *queue_states) const override;
+  amd_dbgapi_status_t
+  resume_queues (const os_queue_id_t *queues, size_t queue_count,
+                 size_t *resumed_count,
+                 os_queue_state_t *queue_states) const override;
 
   amd_dbgapi_status_t
   kfd_queue_snapshot (kfd_queue_snapshot_entry *snapshots,
@@ -1747,20 +1768,25 @@ kfd_driver_t::query_exception_info (os_exception_code_t exception,
 }
 
 amd_dbgapi_status_t
-kfd_driver_t::suspend_queues (os_queue_id_t *queues, size_t queue_count,
+kfd_driver_t::suspend_queues (const os_queue_id_t *queues, size_t queue_count,
                               os_exception_mask_t exceptions_cleared,
-                              size_t *suspended_count) const
+                              size_t *suspended_count,
+                              os_queue_state_t *queue_states) const
 {
   TRACE_DRIVER_BEGIN (make_ref (param_in (queues), queue_count),
                       param_in (queue_count), param_in (exceptions_cleared),
-                      param_in (suspended_count));
+                      param_in (suspended_count), param_in (queue_states));
 
   dbgapi_assert (suspended_count != nullptr);
   dbgapi_assert (queue_count <= std::numeric_limits<uint32_t>::max ());
 
+  auto kfd_queue_ids = std::make_unique<__u32[]> (queue_count);
+  std::copy (queues, queues + queue_count, kfd_queue_ids.get ());
+
   kfd_ioctl_dbg_trap_args args{};
   args.suspend_queues.exception_mask = kfd_exception_mask (exceptions_cleared);
-  args.suspend_queues.queue_array_ptr = reinterpret_cast<uint64_t> (queues);
+  args.suspend_queues.queue_array_ptr
+    = reinterpret_cast<uint64_t> (kfd_queue_ids.get ());
   args.suspend_queues.num_queues = static_cast<uint32_t> (queue_count);
   args.suspend_queues.grace_period = 0;
 
@@ -1771,25 +1797,41 @@ kfd_driver_t::suspend_queues (os_queue_id_t *queues, size_t queue_count,
     return AMD_DBGAPI_STATUS_ERROR;
 
   *suspended_count = ret;
+  for (size_t i = 0; i < queue_count; i++)
+    {
+      auto [queue_id, queue_state] = decode_queue_id (kfd_queue_ids[i]);
+
+      if (queue_id != queues[i])
+        fatal_error ("Unexpected queue ID, %s != %d",
+                     to_string (queues[i]).c_str (), queue_id);
+
+      queue_states[i] = queue_state;
+    }
+
   return AMD_DBGAPI_STATUS_SUCCESS;
 
-  TRACE_DRIVER_END (
-    make_ref (param_out (queues), std::min (queue_count, *suspended_count)),
-    make_ref (param_out (suspended_count)));
+  TRACE_DRIVER_END (make_ref (param_out (queue_states), queue_count),
+                    make_ref (param_out (suspended_count)));
 }
 
 amd_dbgapi_status_t
-kfd_driver_t::resume_queues (os_queue_id_t *queues, size_t queue_count,
-                             size_t *resumed_count) const
+kfd_driver_t::resume_queues (const os_queue_id_t *queues, size_t queue_count,
+                             size_t *resumed_count,
+                             os_queue_state_t *queue_states) const
 {
   TRACE_DRIVER_BEGIN (make_ref (param_in (queues), queue_count),
-                      param_in (queue_count), param_in (resumed_count));
+                      param_in (queue_count), param_in (resumed_count),
+                      param_in (queue_states));
 
   dbgapi_assert (resumed_count != nullptr);
   dbgapi_assert (queue_count <= std::numeric_limits<uint32_t>::max ());
 
+  auto kfd_queue_ids = std::make_unique<__u32[]> (queue_count);
+  std::copy (queues, queues + queue_count, kfd_queue_ids.get ());
+
   kfd_ioctl_dbg_trap_args args{};
-  args.resume_queues.queue_array_ptr = reinterpret_cast<uint64_t> (queues);
+  args.resume_queues.queue_array_ptr
+    = reinterpret_cast<uint64_t> (kfd_queue_ids.get ());
   args.resume_queues.num_queues = static_cast<uint32_t> (queue_count);
 
   int ret = kfd_dbg_trap_ioctl (KFD_IOC_DBG_TRAP_RESUME_QUEUES, &args);
@@ -1799,11 +1841,21 @@ kfd_driver_t::resume_queues (os_queue_id_t *queues, size_t queue_count,
     return AMD_DBGAPI_STATUS_ERROR;
 
   *resumed_count = ret;
+  for (size_t i = 0; i < queue_count; i++)
+    {
+      auto [queue_id, queue_state] = decode_queue_id (kfd_queue_ids[i]);
+
+      if (queue_id != queues[i])
+        fatal_error ("Unexpected queue ID, %s != %d",
+                     to_string (queues[i]).c_str (), queue_id);
+
+      queue_states[i] = queue_state;
+    }
+
   return AMD_DBGAPI_STATUS_SUCCESS;
 
-  TRACE_DRIVER_END (
-    make_ref (param_out (queues), std::min (queue_count, *resumed_count)),
-    make_ref (param_out (resumed_count)));
+  TRACE_DRIVER_END (make_ref (param_out (queue_states), queue_count),
+                    make_ref (param_out (resumed_count)));
 }
 
 amd_dbgapi_status_t
@@ -2312,6 +2364,51 @@ to_string (os_source_id_t source_id)
   return to_string (source_id.raw);
 }
 
+namespace
+{
+
+inline std::string
+one_queue_state_t_to_string (os_queue_state_t state)
+{
+  dbgapi_assert (!(state & (state - 1)) && "only 1 bit");
+
+  switch (state)
+    {
+    case os_queue_state_t::error:
+      return "error";
+    case os_queue_state_t::invalid:
+      return "invalid";
+    }
+  return to_string (
+    make_hex (static_cast<std::underlying_type_t<decltype (state)>> (state)));
+}
+
+}
+
+template <>
+std::string
+to_string (os_queue_state_t queue_state)
+{
+  std::string str;
+
+  if (!queue_state)
+    return one_queue_state_t_to_string (queue_state);
+
+  while (!!queue_state)
+    {
+      os_queue_state_t one_flag
+        = queue_state ^ (queue_state & (queue_state - 1));
+
+      if (!str.empty ())
+        str += " | ";
+      str += one_queue_state_t_to_string (one_flag);
+
+      queue_state ^= one_flag;
+    }
+
+  return str;
+}
+
 template <>
 std::string
 to_string (os_queue_snapshot_entry_t snapshot)
@@ -2319,12 +2416,13 @@ to_string (os_queue_snapshot_entry_t snapshot)
   return string_printf (
     "{ .exception_status=%s, .ring_base_address=%#" PRIx64 ", "
     ".write_pointer_address=%#" PRIx64 ", .read_pointer_address=%#" PRIx64 ", "
-    ".ctx_save_restore_address=%#" PRIx64 ", .queue_id=%d, .gpu_id=%d, "
-    ".ring_size=%" PRId64 ", .queue_type=%s }",
+    ".ctx_save_restore_address=%#" PRIx64 ", .queue_id=%d, .state=%s, "
+    ".gpu_id=%d, .ring_size=%" PRId64 ", .queue_type=%s }",
     to_string (snapshot.exception_status).c_str (), snapshot.ring_base_address,
     snapshot.write_pointer_address, snapshot.read_pointer_address,
-    snapshot.ctx_save_restore_address, snapshot.queue_id, snapshot.gpu_id,
-    snapshot.ring_size, to_string (snapshot.queue_type).c_str ());
+    snapshot.ctx_save_restore_address, snapshot.queue_id,
+    to_string (snapshot.state).c_str (), snapshot.gpu_id, snapshot.ring_size,
+    to_string (snapshot.queue_type).c_str ());
 }
 
 template <>
