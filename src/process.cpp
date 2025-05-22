@@ -883,6 +883,7 @@ process_t::suspend_queues (const std::vector<queue_t *> &queues,
               reason);
 
   size_t num_suspended_queues;
+  std::vector<os_queue_state_t> queue_states (queue_ids.size ());
   amd_dbgapi_status_t status = os_driver ().suspend_queues (
     queue_ids.data (), queue_ids.size (),
     os_exception_mask_t::queue_wave_abort
@@ -891,7 +892,7 @@ process_t::suspend_queues (const std::vector<queue_t *> &queues,
       | os_exception_mask_t::queue_wave_illegal_instruction
       | os_exception_mask_t::queue_wave_memory_violation
       | os_exception_mask_t::queue_wave_address_error,
-    &num_suspended_queues);
+    &num_suspended_queues, queue_states.data ());
   if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
     {
       for (auto &&queue : queues)
@@ -902,18 +903,18 @@ process_t::suspend_queues (const std::vector<queue_t *> &queues,
     fatal_error ("os_driver::suspend_queues failed (%s)", to_cstring (status));
 
   [[maybe_unused]] size_t num_invalid_queues = 0;
-  for (os_queue_id_t mask : queue_ids)
+  for (size_t i = 0; i < queue_ids.size (); ++i)
     {
-      os_queue_id_t queue_id = mask & os_queue_id_mask;
+      os_queue_id_t queue_id = queue_ids[i];
 
       /* Some queues may have failed to suspend because they are invalid, or
          no longer exist. Check the queue_ids returned by KFD and invalidate
          those marked as invalid.  */
 
-      if (mask & os_queue_error_mask)
+      if (!!(queue_states[i] & os_queue_state_t::error))
         fatal_error ("failed to suspend os_queue_id %d", queue_id);
 
-      if (mask & os_queue_invalid_mask)
+      if (!!(queue_states[i] & os_queue_state_t::invalid))
         {
           auto it = std::find_if (queues.begin (), queues.end (),
                                   [=] (const queue_t *q)
@@ -998,8 +999,10 @@ process_t::resume_queues (const std::vector<queue_t *> &queues,
               reason);
 
   size_t num_resumed_queues;
+  std::vector<os_queue_state_t> queue_states (queue_ids.size ());
   amd_dbgapi_status_t status = os_driver ().resume_queues (
-    queue_ids.data (), queue_ids.size (), &num_resumed_queues);
+    queue_ids.data (), queue_ids.size (), &num_resumed_queues,
+    queue_states.data ());
   if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
     {
       for (auto &&queue : queues)
@@ -1010,18 +1013,18 @@ process_t::resume_queues (const std::vector<queue_t *> &queues,
     fatal_error ("os_driver::resume_queues failed (%s)", to_cstring (status));
 
   [[maybe_unused]] size_t num_invalid_queues = 0;
-  for (os_queue_id_t mask : queue_ids)
+  for (size_t i = 0; i < queue_ids.size (); ++i)
     {
-      os_queue_id_t queue_id = os_queue_id_unmask (mask);
+      os_queue_id_t queue_id = queue_ids[i];
 
       /* Some queues may have failed to resume because they are invalid, or
          no longer exist. Check the queue_ids returned by KFD and invalidate
          those marked as invalid.  */
 
-      if (mask & os_queue_error_mask)
+      if (!!(queue_states[i] & os_queue_state_t::error))
         fatal_error ("failed to resume os_queue_id %d", queue_id);
 
-      if (mask & os_queue_invalid_mask)
+      if (!!(queue_states[i] & os_queue_state_t::invalid))
         {
           auto it = std::find_if (queues.begin (), queues.end (),
                                   [=] (const queue_t *q)
@@ -1156,7 +1159,7 @@ process_t::update_queues ()
 
                   log_info ("destroyed stale %s (os_queue_id=%d)",
                             to_cstring (destroyed_queue_id),
-                            os_queue_id_unmask (queue_info.queue_id));
+                            queue_info.queue_id);
                 }
 
               if (is_frozen ())
@@ -1912,8 +1915,7 @@ process_t::query_debug_event (os_exception_mask_t cleared_exceptions)
               queue = nullptr;
 
               log_info ("destroyed stale %s (os_queue_id=%d)",
-                        to_cstring (stale_queue_id),
-                        os_queue_id_unmask (os_queue_id));
+                        to_cstring (stale_queue_id), os_queue_id);
             }
 
           /* ABA handling: create a temporary, partially initialized, queue
