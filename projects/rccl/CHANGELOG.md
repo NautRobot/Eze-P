@@ -5,12 +5,15 @@ Full documentation for RCCL is available at [https://rccl.readthedocs.io](https:
 ## Unreleased - RCCL 2.25.1 for ROCm 7.0.0
 
 ### Resolved issues
+
 * Resolved an issue when using more than 64 channels when multiple collectives are used in the same `ncclGroup()` call.
 * Fixed unit test failures in tests ending with `ManagedMem` and `ManagedMemGraph` suffixes.
 
 ### Added
 
 * Added new GPU target `gfx950`.
+* Added support for `unroll=1` in device-code generation to improve performance
+* Set a default of 112 channels for a single node with `8 * gfx950`
 * Added MSCCL support for multinode gfx942/gfx950 (i.e., 16 and 32 GPUs). To enable, set the
   environment variable `RCCL_MSCCL_FORCE_ENABLE=1`. Max message size for MSCCL AllGather usage is `12292 * sizeof(datatype) * nGPUs`.
 
