@@ -612,9 +612,9 @@ Kernel::Kernel(const amd::Device& dev, const std::string& name, const Program& p
   workGroupInfo_.compileSize_[0] = 0;
   workGroupInfo_.compileSize_[1] = 0;
   workGroupInfo_.compileSize_[2] = 0;
-  workGroupInfo_.clusterSize_[0] = 0;
-  workGroupInfo_.clusterSize_[1] = 0;
-  workGroupInfo_.clusterSize_[2] = 0;
+  workGroupInfo_.clusterSize_[0] = 1;
+  workGroupInfo_.clusterSize_[1] = 1;
+  workGroupInfo_.clusterSize_[2] = 1;
   workGroupInfo_.localMemSize_ = 0;
   workGroupInfo_.preferredSizeMultiple_ = 0;
   workGroupInfo_.privateMemSize_ = 0;

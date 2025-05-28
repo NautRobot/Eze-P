@@ -1129,17 +1129,18 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
   auto expected_fence_state = extractAqlBits(header, HSA_PACKET_HEADER_SCRELEASE_FENCE_SCOPE,
                                              HSA_PACKET_HEADER_WIDTH_SCRELEASE_FENCE_SCOPE);
 
+  bool newDispatchPacket = false;
   unsigned header_type = extractAqlBits(header, HSA_PACKET_HEADER_TYPE,
                                         HSA_PACKET_HEADER_WIDTH_TYPE);
   if (static_cast<bool>(header_type == HSA_PACKET_TYPE_VENDOR_SPECIFIC)
       && (reinterpret_cast<hsa_amd_ext_kernel_dispatch_packet_t*>(packet)->amd_format
            == HSA_AMD_PACKET_TYPE_EXT_KERNEL_DISPATCH)) {
-    cluster_launch = true;
+    newDispatchPacket = true;
   }
 
   if (fence_state_ == amd::Device::kCacheStateSystem
       && expected_fence_state == amd::Device::kCacheStateSystem) {
-    header = cluster_launch ? vendorSpecificPacketHeader_ : dispatchPacketHeader_;
+    header = newDispatchPacket ? vendorSpecificPacketHeader_ : dispatchPacketHeader_;
     setFenceDirty(true);
   }
 
@@ -1186,7 +1187,7 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
     packet_store_release(reinterpret_cast<uint32_t*>(aql_loc), header, rest);
   }
 
-  if (cluster_launch) {
+  if (newDispatchPacket) {
     ClPrint(amd::LOG_DEBUG, amd::LOG_AQL,
       "SWq=0x%zx, HWq=0x%zx, id=%d, Dispatch Header = "
       "0x%x (type=%d, barrier=%d, acquire=%d, release=%d), "
@@ -3845,14 +3846,6 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
   address hidden_arguments = const_cast<address>(parameters);
   // Calculate local size if it wasn't provided
   devKernel->FindLocalWorkSize(sizes.dimensions(), sizes.global(), local_size);
-  bool clusterLaunch = false;
-  size_t cluster_local[3];
-  if (devKernel->getClusterSize(0) != 0) {
-    clusterLaunch = true;
-    cluster_local[0] = devKernel->getClusterSize(0);
-    cluster_local[1] = devKernel->getClusterSize(1);
-    cluster_local[2] = devKernel->getClusterSize(2);
-  }
 
   uint16_t local[3] = {1, 1, 1};
   uint32_t global[3] = {1, 1, 1};
@@ -4103,21 +4096,22 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     // dispatchPacket.header = aqlHeader_;
     // dispatchPacket.setup |= sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
 
-    if (clusterLaunch) {
+    bool useNewDispatchPacket = (sizes.cluster()[0] > 1) || dev().settings().useNewDispatchPacket_;
+    if (useNewDispatchPacket) {
       auto& dispatchPacketExt = dispatchPacketUnion.extKernelDispatch;
 
-      size_t clusterSize[3];
+      dispatchPacketExt.cluster_size_x = sizes.dimensions() > 0 ? sizes.cluster()[0] : 1;
+      dispatchPacketExt.cluster_size_y = sizes.dimensions() > 1 ? sizes.cluster()[1] : 1;
+      dispatchPacketExt.cluster_size_z = sizes.dimensions() > 2 ? sizes.cluster()[2] : 1;
 
-      for (size_t i = 0; i < 3; i++)
-        clusterSize[i] = cluster_local[i] * local[i];
-
-      dispatchPacketExt.cluster_count_x = sizes.dimensions() > 0 ? (newGlobalSize[0] / clusterSize[0]) : 1;
-      dispatchPacketExt.cluster_count_y = sizes.dimensions() > 1 ? (newGlobalSize[1] / clusterSize[1]) : 1;
-      dispatchPacketExt.cluster_count_z = sizes.dimensions() > 2 ? (newGlobalSize[2] / clusterSize[2]) : 1;
-
-      dispatchPacketExt.cluster_size_x = sizes.dimensions() > 0 ? clusterSize[0] : 1;
-      dispatchPacketExt.cluster_size_y = sizes.dimensions() > 1 ? clusterSize[1] : 1;
-      dispatchPacketExt.cluster_size_z = sizes.dimensions() > 2 ? clusterSize[2] : 1;
+      // Already validated in HIP Launch Params that newGlobalSize is perfectly divisible by local
+      // and it is divisible by cluster size.
+      dispatchPacketExt.cluster_count_x = sizes.dimensions() > 0
+                                          ? (newGlobalSize[0] / local[0] / sizes.cluster()[0]) : 1;
+      dispatchPacketExt.cluster_count_y = sizes.dimensions() > 1
+                                          ? (newGlobalSize[1] / local[1] / sizes.cluster()[1]) : 1;
+      dispatchPacketExt.cluster_count_z = sizes.dimensions() > 2
+                                          ? (newGlobalSize[2] / local[2] / sizes.cluster()[2]) : 1;
 
       dispatchPacketExt.amd_format = HSA_AMD_PACKET_TYPE_EXT_KERNEL_DISPATCH;
 
@@ -4144,7 +4138,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     }
 
     // Pass the header accordingly
-    auto aqlHeaderWithOrder = (clusterLaunch) ? vendorSpecificPacketHeader_ : aqlHeader_;
+    auto aqlHeaderWithOrder = (useNewDispatchPacket) ? vendorSpecificPacketHeader_ : aqlHeader_;
 
     if (vcmd != nullptr && vcmd->getAnyOrderLaunchFlag()) {
       constexpr uint32_t kAqlHeaderMask = ~(1 << HSA_PACKET_HEADER_BARRIER);
@@ -4157,7 +4151,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
   // Copy scheduler's AQL packet for possible relaunch from the scheduler itself
     if (aql_packet != nullptr) {
       *aql_packet = dispatchPacket;
-      if (clusterLaunch) {
+      if (useNewDispatchPacket) {
         aql_packet->header = (HSA_PACKET_TYPE_VENDOR_SPECIFIC << HSA_PACKET_HEADER_TYPE) |
                               (1 << HSA_PACKET_HEADER_BARRIER) |
                               (HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE) |
@@ -4176,7 +4170,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
 
 
     uint16_t rest = 0;
-    if (clusterLaunch) {
+    if (useNewDispatchPacket) {
       // When launching an AQL packet, the 32 bits has to be written atomically for CP to track,
       // on normal dispatch packet, first 32 bits are header & setup. In ext dispatch packet,
       // the first 32 bits are header, amd_format, setup. Update the "rest" of the 32 bits, so we
@@ -4192,7 +4186,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
       if (!dispatchAqlPacket(&dispatchPacket, aqlHeaderWithOrder,
                              (sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS),
                              GPU_FLUSH_ON_EXECUTION, command_->getPktCapturingState(),
-                             command_->getAqlPacket(), clusterLaunch)) {
+                             command_->getAqlPacket())) {
         return false;
       }
     } else {
