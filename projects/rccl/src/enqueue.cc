@@ -332,6 +332,7 @@ ncclResult_t ncclTasksRegAndEnqueue(struct ncclComm* comm) {
     devWork.redOpArg = task->opDev.scalarArg;
     devWork.redOpArgIsPtr = task->opDev.scalarArgIsPtr;
     devWork.oneNode = (comm->nNodes == 1);
+    devWork.rcclUseOneSlice = comm->rcclUseOneSlice;
     devWork.isOneRPN = comm->isOneRPN;
     devWork.netRegUsed = devWork.regUsed = 0;
     if (task->regBufType & NCCL_NET_REG_BUFFER)
