@@ -1129,18 +1129,10 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
   auto expected_fence_state = extractAqlBits(header, HSA_PACKET_HEADER_SCRELEASE_FENCE_SCOPE,
                                              HSA_PACKET_HEADER_WIDTH_SCRELEASE_FENCE_SCOPE);
 
-  bool newDispatchPacket = false;
-  unsigned header_type = extractAqlBits(header, HSA_PACKET_HEADER_TYPE,
-                                        HSA_PACKET_HEADER_WIDTH_TYPE);
-  if (static_cast<bool>(header_type == HSA_PACKET_TYPE_VENDOR_SPECIFIC)
-      && (reinterpret_cast<hsa_amd_ext_kernel_dispatch_packet_t*>(packet)->amd_format
-           == HSA_AMD_PACKET_TYPE_EXT_KERNEL_DISPATCH)) {
-    newDispatchPacket = true;
-  }
-
   if (fence_state_ == amd::Device::kCacheStateSystem
       && expected_fence_state == amd::Device::kCacheStateSystem) {
-    header = newDispatchPacket ? vendorSpecificPacketHeader_ : dispatchPacketHeader_;
+    header = dev().settings().useNewDispatchPacket_ ? vendorSpecificPacketHeader_
+                                                    : dispatchPacketHeader_;
     setFenceDirty(true);
   }
 
@@ -1187,7 +1179,7 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
     packet_store_release(reinterpret_cast<uint32_t*>(aql_loc), header, rest);
   }
 
-  if (newDispatchPacket) {
+  if (dev().settings().useNewDispatchPacket_) {
     ClPrint(amd::LOG_DEBUG, amd::LOG_AQL,
       "SWq=0x%zx, HWq=0x%zx, id=%d, Dispatch Header = "
       "0x%x (type=%d, barrier=%d, acquire=%d, release=%d), "
@@ -4112,8 +4104,6 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
                                           ? (newGlobalSize[1] / local[1] / sizes.cluster()[1]) : 1;
       dispatchPacketExt.cluster_count_z = sizes.dimensions() > 2
                                           ? (newGlobalSize[2] / local[2] / sizes.cluster()[2]) : 1;
-
-      dispatchPacketExt.amd_format = HSA_AMD_PACKET_TYPE_EXT_KERNEL_DISPATCH;
 
     } else {
       dispatchPacket.grid_size_x = sizes.dimensions() > 0 ? newGlobalSize[0] : 1;

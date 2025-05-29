@@ -187,6 +187,11 @@ bool Settings::create(bool fullProfile, const amd::Isa& isa, bool enableXNACK, b
     enableExtension(ClKhrMipMapImage);
     enableExtension(ClKhrMipMapImageWrites);
   }
+
+  if (gfxipMajor == 12 && gfxipMinor == 5) {
+    useNewDispatchPacket_ = true;
+  }
+
   // Override current device settings
   override();
 
