@@ -40,7 +40,7 @@ if (NOT DEFINED CMAKE_CXX_COMPILER)
 endif()
 
 # rocDecode Version
-set(VERSION "0.13.2")
+set(VERSION "0.14.0")
 
 # Set Project Version and Language
 project(rocdecode VERSION ${VERSION} LANGUAGES CXX)
@@ -135,6 +135,7 @@ if(HIP_FOUND AND Libva_FOUND AND Libdrm_amdgpu_FOUND)
   include_directories(api src/rocdecode src/parser src/rocdecode/vaapi)
   # source files
   file(GLOB_RECURSE SOURCES "./src/*.cpp")
+  list(FILTER SOURCES EXCLUDE REGEX "./src/rocdecode-host/*.*")
   # rocdecode.so
   add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
@@ -168,7 +169,7 @@ if(HIP_FOUND AND Libva_FOUND AND Libdrm_amdgpu_FOUND)
   # install rocDecode include files -- {ROCM_PATH}/include/rocdecode
   install(FILES api/rocdecode/rocdecode.h api/rocdecode/rocparser.h api/rocdecode/roc_bitstream_reader.h
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME} COMPONENT dev)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/rocdecode_version.h
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/rocdecode_version.h api/rocdecode/rocdecode_host.h 
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME} COMPONENT dev)
   # install rocDecode api trace include file -- {ROCM_PATH}/include/rocdecode/amd_detail
   install(FILES api/amd_detail/rocdecode_api_trace.h
@@ -252,6 +253,9 @@ if(HIP_FOUND AND Libva_FOUND AND Libdrm_amdgpu_FOUND)
   enable_testing()
   include(CTest)
   add_subdirectory(test)
+
+  #make rocdecode-host for decoding on HOST
+  add_subdirectory(src/rocdecode-host)
 
   # set package information
   set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
