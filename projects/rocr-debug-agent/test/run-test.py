@@ -390,6 +390,37 @@ def check_test_9():
     return all_output_string_found
 
 
+# test 10 check for difference in outputs for same program compiled with and
+# without -ggdb flag
+def check_test_10():
+    print("Starting rocm-debug-agent test 10")
+
+    check_list = [
+        re.compile(re.escape(s))
+        for s in ["c[gid] = a[gid] + b[gid] + (lds_check[0] >> 32);", "if (gid == 0)"]
+    ]
+
+    p_debug = Popen(["./rocm-debug-agent-test", "1"], stdout=PIPE, stderr=PIPE)
+    output, err = p_debug.communicate()
+    err_str_debug = err.decode("utf-8")
+
+    p_no_debug = Popen(["./rocm-debug-agent-test", "7"], stdout=PIPE, stderr=PIPE)
+    output, err = p_no_debug.communicate()
+    err_str_no_debug = err.decode("utf-8")
+
+    # check if string is in dissasembly of code with debug info but not in other one
+    found_in_debug = False
+    found_in_no_debug = False
+    for check_str in check_list:
+        pattern = re.compile(check_str)
+        if pattern.search(err_str_debug):
+            found_in_debug = True
+        if pattern.search(err_str_no_debug):
+            found_in_no_debug = True
+
+    return found_in_debug and not found_in_no_debug
+
+
 test_success = True
 
 for deferred_loading in (None, "1", "0"):
@@ -412,6 +443,7 @@ for deferred_loading in (None, "1", "0"):
         test_success &= check_test_7()
         test_success &= check_test_8()
         test_success &= check_test_9()
+        test_success &= check_test_10()
 
 if (test_success):
     print("rocm-debug-agent test Pass!")
