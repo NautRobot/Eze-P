@@ -314,6 +314,46 @@ def check_test_7():
         return all_output_string_found
 
 
+# test 8
+def check_test_8():
+    print("Starting rocm-debug-agent test 8")
+
+    check_list = [
+        re.compile(s)
+        for s in [
+            "wave_1",
+            "wave_2",
+            "wave_3",
+            "wave_4",
+            "wave_5",
+            "wave_6",
+            "wave_7",
+            "wave_8",
+        ]
+    ]
+
+    with unittest.mock.patch.dict(os.environ, {"ROCM_DEBUG_AGENT_OPTIONS": f"--all"}):
+        p = Popen(["./rocm-debug-agent-test", "5"], stdout=PIPE, stderr=PIPE)
+        output, err = p.communicate()
+        out_str = output.decode("utf-8")
+        err_str = err.decode("utf-8")
+
+        # check output string
+        all_output_string_found = True
+        for check_str in check_list:
+            if not (check_str.search(err_str)):
+                all_output_string_found = False
+                print('"', check_str, '" Not Found in dump.')
+
+        if not all_output_string_found:
+            print("rocm-debug-agent test print out.")
+            print(out_str)
+            print("rocm-debug-agent test error message.")
+            print(err_str)
+
+        return all_output_string_found
+
+
 test_success = True
 
 for deferred_loading in (None, "1", "0"):
@@ -334,6 +374,7 @@ for deferred_loading in (None, "1", "0"):
         test_success &= check_test_5()
         test_success &= check_test_6()
         test_success &= check_test_7()
+        test_success &= check_test_8()
 
 if (test_success):
     print("rocm-debug-agent test Pass!")
