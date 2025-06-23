@@ -303,9 +303,15 @@ __CG_STATIC_QUALIFIER__ void sync() {
 }
 
 __CG_STATIC_QUALIFIER__ void barrier_signal() {
-#if __has_builtin(__builtin_amdgcn_s_barrier_signal)
-  // Signal the cluster barrier, -3 means user cluster barrier
-  __builtin_amdgcn_s_barrier_signal(-3);
+#if __has_builtin(__builtin_amdgcn_s_barrier_signal) and                                           \
+    __has_builtin(__builtin_amdgcn_s_barrier_wait)
+  bool isfirst = __builtin_amdgcn_s_barrier_signal_isfirst(-1);  // -1 is workgroup barrier
+  __builtin_amdgcn_s_barrier_wait(-1);
+
+  if (isfirst) {
+    // Signal the cluster barrier, -3 means user cluster barrier
+    __builtin_amdgcn_s_barrier_signal(-3);
+  }
 #endif
 }
 
