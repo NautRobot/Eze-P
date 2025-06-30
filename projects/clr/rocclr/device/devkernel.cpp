@@ -640,6 +640,7 @@ Kernel::Kernel(const amd::Device& dev, const std::string& name, const Program& p
   workGroupInfo_.wavesPerSimdHint_ = 0;
   workGroupInfo_.constMemSize_ = 0;
   workGroupInfo_.maxDynamicSharedSizeBytes_ = 0;
+  workGroupInfo_.clusterSizeSet_ = false;
 }
 
 // ================================================================================================

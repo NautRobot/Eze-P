@@ -34,7 +34,8 @@ hipError_t ihipModuleLoadData(hipModule_t* module, const void* mmap_ptr, size_t 
 
 extern hipError_t ihipLaunchKernel(const void* hostFunction, dim3 gridDim, dim3 blockDim,
                                    void** args, size_t sharedMemBytes, hipStream_t stream,
-                                   hipEvent_t startEvent, hipEvent_t stopEvent, int flags);
+                                   hipEvent_t startEvent, hipEvent_t stopEvent, int flags,
+                                   dim3 clusterDim = {1, 1, 1});
 
 const std::string& FunctionName(const hipFunction_t f) {
   return hip::DeviceFunc::asFunction(f)->kernel()->name();
@@ -1257,8 +1258,7 @@ hipError_t hipDrvLaunchKernelEx(const HIP_LAUNCH_CONFIG* config, hipFunction_t f
 
   amd::HIPLaunchParams launch_params(config->gridDimX, config->gridDimY, config->gridDimZ,
                                      config->blockDimX, config->blockDimY, config->blockDimZ,
-                                     config->sharedMemBytes,  config->clusterX, config->clusterY,
-                                     config->clusterZ);
+                                     config->sharedMemBytes);
 
   if (!launch_params.IsValidConfig()) {
     HIP_RETURN(hipErrorInvalidConfiguration);

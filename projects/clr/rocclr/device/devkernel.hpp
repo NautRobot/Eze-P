@@ -226,9 +226,10 @@ class Kernel : public amd::HeapObject {
     size_t maxDynamicSharedSizeBytes_;
     std::string compileVecTypeHint_;  //!< kernel compiled vector type hint
 
-    int maxOccupancyPerCu_;      //!< Max occupancy per compute unit in threads
-    bool isWGPMode_;             //!< kernel compiled in WGP/cumode
-    bool uniformWorkGroupSize_;  //!< uniform work group size option
+    int maxOccupancyPerCu_;          //!< Max occupancy per compute unit in threads
+    bool isWGPMode_;                 //!< kernel compiled in WGP/cumode
+    bool uniformWorkGroupSize_;      //!< uniform work group size option
+    bool clusterSizeSet_;            //!< cluster metadata present in code object
   };
 
   //! Default constructor
@@ -272,12 +273,15 @@ class Kernel : public amd::HeapObject {
   size_t getWorkGroupSizeHint(int dim) const { return workGroupInfo_.compileSizeHint_[dim]; }
 
   void setClusterSize(size_t x, size_t y, size_t z) {
+    workGroupInfo_.clusterSizeSet_ = true;
     workGroupInfo_.clusterSize_[0] = x;
     workGroupInfo_.clusterSize_[1] = y;
     workGroupInfo_.clusterSize_[2] = z;
   }
 
   size_t getClusterSize(int dim) const { return workGroupInfo_.clusterSize_[dim]; }
+
+  bool clusterSizeSet() const { return workGroupInfo_.clusterSizeSet_; }
 
   //! Returns GPU device object, associated with this kernel
   const amd::Device& device() const { return dev_; }
