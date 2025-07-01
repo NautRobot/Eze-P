@@ -226,10 +226,11 @@ class Kernel : public amd::HeapObject {
     size_t maxDynamicSharedSizeBytes_;
     std::string compileVecTypeHint_;  //!< kernel compiled vector type hint
 
-    int maxOccupancyPerCu_;          //!< Max occupancy per compute unit in threads
-    bool isWGPMode_;                 //!< kernel compiled in WGP/cumode
-    bool uniformWorkGroupSize_;      //!< uniform work group size option
-    bool clusterSizeSet_;            //!< cluster metadata present in code object
+    int maxOccupancyPerCu_;           //!< Max occupancy per compute unit in threads
+    bool isWGPMode_;                  //!< kernel compiled in WGP/cumode
+    bool uniformWorkGroupSize_;       //!< uniform work group size option
+    bool clusterSizeSet_;             //!< cluster metadata present in code object
+    uint8_t groupMemCarveout_;        //!< LDS carveout
   };
 
   //! Default constructor
@@ -287,10 +288,6 @@ class Kernel : public amd::HeapObject {
   const amd::Device& device() const { return dev_; }
 
   void setVecTypeHint(const std::string& hint) { workGroupInfo_.compileVecTypeHint_ = hint; }
-
-  void setLocalMemSize(size_t size) { workGroupInfo_.localMemSize_ = size; }
-
-  void setPreferredSizeMultiple(size_t size) { workGroupInfo_.preferredSizeMultiple_ = size; }
 
   const std::string& RuntimeHandle() const { return runtimeHandle_; }
   void setRuntimeHandle(const std::string& handle) { runtimeHandle_ = handle; }

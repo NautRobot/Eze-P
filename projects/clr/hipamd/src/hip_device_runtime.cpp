@@ -609,6 +609,7 @@ hipError_t hipDeviceSetCacheConfig(hipFuncCache_t cacheConfig) {
 
   // No way to set cache config yet.
 
+  hip::getCurrentDevice()->devices()[0]->UpdateGroupMemCarveout(cacheConfig);
   HIP_RETURN(hipSuccess);
 }
 

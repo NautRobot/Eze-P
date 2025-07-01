@@ -4111,6 +4111,14 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
       dispatchPacket.grid_size_z = sizes.dimensions() > 2 ? newGlobalSize[2] : 1;
     }
 
+    if (dev().settings().groupMemCarveout_) {
+      uint8_t percent;
+      percent = devKernel->workGroupInfo()->groupMemCarveout_
+          ? devKernel->workGroupInfo()->groupMemCarveout_
+          : dev().GetGroupMemCarveout();
+      // ToDo update dispatchPacketExt.perf_hint
+    }
+
     dispatchPacket.workgroup_size_x = sizes.dimensions() > 0 ? local[0] : 1;
     dispatchPacket.workgroup_size_y = sizes.dimensions() > 1 ? local[1] : 1;
     dispatchPacket.workgroup_size_z = sizes.dimensions() > 2 ? local[2] : 1;

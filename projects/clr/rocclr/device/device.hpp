@@ -122,6 +122,13 @@ enum MemRangeAttribute : uint32_t {
   CoherencyMode = 100,       ///< Current coherency mode for the specified range
 };
 
+enum FuncCache : uint32_t  {
+  kPreferNone = 0,   ///< Default function cache configuration, no preference
+  kPreferLDS = 1,    ///< Prefer larger shared memory and smaller L1 cache
+  kPreferCache = 2,  ///< Prefer larger L1 cache and smaller shared memory
+  kPreferEqual = 3   ///< Prefer equal size L1 cache and shared memory
+};
+
 constexpr int CpuDeviceId = static_cast<int>(-1);
 constexpr int InvalidDeviceId = static_cast<int>(-2);
 
@@ -707,7 +714,8 @@ class Settings : public amd::HeapObject {
       uint gwsInitSupported_ : 1;             //!< Check if GWS is supported on this machine.
       uint kernel_arg_opt_ : 1;               //!< Enables kernel arg optimization for blit kernels
       uint kernel_arg_impl_ : 2;              //!< Kernel argument implementation
-      uint reserved_ : 14;
+      uint groupMemCarveout_ : 1;             //!< Group memory carveout functionality
+      uint reserved_ : 13;
     };
     uint value_;
   };
@@ -727,7 +735,14 @@ class Settings : public amd::HeapObject {
   //! Enable the specified extension
   void enableExtension(uint name) { extensions_ |= static_cast<uint64_t>(1) << name; }
 
-  size_t stagedXferSize_ = 0;  //!< Staged buffer size
+  size_t stagedXferSize_ = 0;     //!< Staged buffer size
+  typedef struct CarveoutPref {
+    uint8_t totalSharedBanks;
+    uint8_t preferLDSBanks;
+    uint8_t preferCacheLDSBanks;
+    uint8_t preferEqualLDSBanks;
+  } CarveoutPref;
+  CarveoutPref groupMemPref_;
 
  private:
   //! Disable copy constructor
@@ -2163,6 +2178,39 @@ class Device : public RuntimeObject {
 
   //! Returns stack size set for the device
   size_t MaxStackSize() const { return maxStackSize_; }
+  //! Return group memory carveout
+  uint8_t GetGroupMemCarveout() const { return group_mem_carveout_hint_; }
+
+  //! Sets the group memory carveout percentage hint for the device
+  void UpdateGroupMemCarveout(uint8_t percent) { group_mem_carveout_hint_ = percent; }
+
+  uint8_t GetGroupMemCarveout(amd::FuncCache cacheConfig) const {
+    uint8_t totalSharedBanks = 0;
+    uint8_t LDSBanks = 0;
+    if (settings().groupMemCarveout_) {
+      totalSharedBanks = settings_->groupMemPref_.totalSharedBanks;
+      switch (cacheConfig) {
+        case kPreferLDS:
+          LDSBanks = settings_->groupMemPref_.preferLDSBanks;
+          break;
+        case kPreferCache:
+          LDSBanks = settings_->groupMemPref_.preferCacheLDSBanks;
+          break;
+        case kPreferEqual:
+          LDSBanks = settings_->groupMemPref_.preferEqualLDSBanks;
+          break;
+        case kPreferNone:
+        default:
+          break;
+      }
+    }
+    return (totalSharedBanks != 0) ? (static_cast<double>(LDSBanks) / totalSharedBanks) * 100 : 0;
+  }
+
+  //! Sets group memory carveout percentage hint for the device for respective cacheConfig
+  void UpdateGroupMemCarveout(amd::FuncCache cacheConfig) {
+    group_mem_carveout_hint_ = GetGroupMemCarveout(cacheConfig);
+  }
 
 #if defined(__clang__)
 #if __has_feature(address_sanitizer)
@@ -2223,7 +2271,7 @@ class Device : public RuntimeObject {
   uint64_t initial_heap_size_{HIP_INITIAL_DM_SIZE};     //!< Initial device heap size
   amd::Monitor activeQueuesLock_{};                     //!< Guards access to the activeQueues set
   std::unordered_set<amd::CommandQueue*> activeQueues;  //!< The set of active queues
-
+  uint8_t group_mem_carveout_hint_; //!< LDS carveout
  private:
   const Isa* isa_;  //!< Device isa
   bool IsTypeMatching(cl_device_type type, bool offlineDevices);

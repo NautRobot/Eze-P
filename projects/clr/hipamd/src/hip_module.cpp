@@ -175,7 +175,7 @@ hipError_t hipFuncGetAttribute(int* value, hipFunction_attribute attrib, hipFunc
       *value = static_cast<int>(wrkGrpInfo->availableLDSSize_ - wrkGrpInfo->localMemSize_);
       break;
     case HIP_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT:
-      *value = 0;
+      *value = wrkGrpInfo->groupMemCarveout_;
       break;
     default:
       HIP_RETURN(hipErrorInvalidValue);
@@ -199,6 +199,31 @@ hipError_t hipFuncGetAttributes(hipFuncAttributes* attr, const void* func) {
   HIP_RETURN(hipSuccess);
 }
 
+inline hipError_t GetDeviceKernel(const void* func, device::Kernel** d_kernel) {
+  hipFunction_t h_func = nullptr;
+  const hip::DeviceFunc* function = nullptr;
+
+  hipError_t err = PlatformState::Instance().StatCO().GetFunc(&h_func, func, ihipGetDevice());
+  if (h_func == nullptr) {
+    if (PlatformState::Instance().IsValidDynFunc((func))) {
+      function = reinterpret_cast<const hip::DeviceFunc*>(func);
+    } else {
+      return hipErrorInvalidDeviceFunction;
+    }
+  } else {
+    function = reinterpret_cast<const hip::DeviceFunc*>(h_func);
+  }
+
+  amd::Kernel* kernel = function->kernel();
+
+  if (kernel == nullptr) {
+    return hipErrorInvalidDeviceFunction;
+  }
+  *(d_kernel) = const_cast<device::Kernel*>(
+      kernel->getDeviceKernel(*(hip::getCurrentDevice()->devices()[0])));
+  return hipSuccess;
+}
+
 hipError_t hipFuncSetAttribute(const void* func, hipFuncAttribute attr, int value) {
   HIP_INIT_API(hipFuncSetAttribute, func, attr, value);
 
@@ -208,6 +233,8 @@ hipError_t hipFuncSetAttribute(const void* func, hipFuncAttribute attr, int valu
   if (attr < 0 || attr > hipFuncAttributeMax) {
     HIP_RETURN(hipErrorInvalidValue);
   }
+  device::Kernel* d_kernel;
+  hipError_t status = GetDeviceKernel(func, &d_kernel);
 
   hipFunction_t h_func = nullptr;
   const hip::DeviceFunc* function = nullptr;
@@ -223,17 +250,10 @@ hipError_t hipFuncSetAttribute(const void* func, hipFuncAttribute attr, int valu
     function = reinterpret_cast<const hip::DeviceFunc*>(h_func);
   }
 
-  amd::Kernel* kernel = function->kernel();
-
-  if (kernel == nullptr) {
-    HIP_RETURN(hipErrorInvalidDeviceFunction);
-  }
-  device::Kernel* d_kernel =
-      (device::Kernel*)(kernel->getDeviceKernel(*(hip::getCurrentDevice()->devices()[0])));
-
   if (attr == hipFuncAttributeMaxDynamicSharedMemorySize) {
-    if ((value < 0) || (value > (d_kernel->workGroupInfo()->availableLDSSize_ -
-                                 d_kernel->workGroupInfo()->localMemSize_))) {
+    if ((value < 0) ||
+        (value > (d_kernel->workGroupInfo()->availableLDSSize_ -
+                  d_kernel->workGroupInfo()->localMemSize_))) {
       HIP_RETURN(hipErrorInvalidValue);
     }
     d_kernel->workGroupInfo()->maxDynamicSharedSizeBytes_ = value;
@@ -243,8 +263,8 @@ hipError_t hipFuncSetAttribute(const void* func, hipFuncAttribute attr, int valu
     if (value < -1 || value > 100) {
       HIP_RETURN(hipErrorInvalidValue);
     }
+    d_kernel->workGroupInfo()->groupMemCarveout_ = value;
   }
-
   HIP_RETURN(hipSuccess);
 }
 
@@ -258,7 +278,14 @@ hipError_t hipFuncSetCacheConfig(const void* func, hipFuncCache_t cacheConfig) {
       cacheConfig != hipFuncCachePreferL1 && cacheConfig != hipFuncCachePreferEqual) {
     HIP_RETURN(hipErrorInvalidValue);
   }
-  // No way to set cache config yet
+  device::Kernel* d_kernel;
+  hipError_t status = GetDeviceKernel(func, &d_kernel);
+
+  if (hipSuccess != status) {
+    HIP_RETURN(status);
+  }
+  d_kernel->workGroupInfo()->groupMemCarveout_ =
+      d_kernel->device().GetGroupMemCarveout(static_cast<amd::FuncCache>(cacheConfig));
 
   HIP_RETURN(hipSuccess);
 }
