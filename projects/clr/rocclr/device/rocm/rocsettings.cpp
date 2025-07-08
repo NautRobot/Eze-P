@@ -164,13 +164,18 @@ bool Settings::create(bool fullProfile, const amd::Isa& isa, bool enableXNACK, b
   setKernelArgImpl(isa, isXgmi, hasValidHDPFlush);
 
   if (gfxipMajor >= 10) {
-    enableWave32Mode_ = true;
-    enableWgpMode_ = GPU_ENABLE_WGP_MODE;
-    if (gfxipMajor == 10 && gfxipMinor == 1) {
-      // GFX10.1 HW doesn't support custom pitch. Enable double copy workaround
-      // TODO: This should be updated when ROCr support custom pitch
-      imageBufferWar_ = GPU_IMAGE_BUFFER_WAR;
-    }
+     enableWave32Mode_ = true;
+     // Disable wgp mode for gfx1250 and later
+     if (gfxipMajor == 12 && gfxipMinor >= 5) {
+        enableWgpMode_ = false;
+     } else {
+        enableWgpMode_ = GPU_ENABLE_WGP_MODE;
+     }
+     if (gfxipMinor == 1) {
+       // GFX10.1 HW doesn't support custom pitch. Enable double copy workaround
+       // TODO: This should be updated when ROCr support custom pitch
+       imageBufferWar_ = GPU_IMAGE_BUFFER_WAR;
+     }
   }
 
   if (!flagIsDefault(GPU_ENABLE_WAVE32_MODE)) {
