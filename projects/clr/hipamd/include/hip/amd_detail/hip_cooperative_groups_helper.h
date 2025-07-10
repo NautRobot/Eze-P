@@ -380,6 +380,23 @@ __CG_STATIC_QUALIFIER__ unsigned int thread_rank() {
   return block_rank() * (blockDim.x * blockDim.y * blockDim.z) +
       ((threadIdx.z * blockDim.y * blockDim.x) + (threadIdx.y * blockDim.x) + threadIdx.x);
 }
+
+template <typename T> __CG_STATIC_QUALIFIER__ T* map_shared_rank(T* in, int rank) {
+#if __has_builtin(__builtin_amdgcn_map_shared_rank)
+  return (T*)(__builtin_amdgcn_map_shared_rank((void*)in, rank));
+#else
+  return nullptr;
+#endif
+}
+
+__CG_STATIC_QUALIFIER__ unsigned int query_shared_rank(const void* in) {
+#if __has_builtin(__builtin_amdgcn_query_shared_rank)
+  return static_cast<unsigned int>(
+      __builtin_amdgcn_query_shared_rank((__attribute__((address_space(11))) const void*)in));
+#else
+  return 0;
+#endif
+}
 }  // namespace cluster
 }  // namespace internal
 }  // namespace cooperative_groups

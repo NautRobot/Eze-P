@@ -1359,6 +1359,16 @@ class cluster_group {
   // Total number of threads in the group
   __CG_STATIC_QUALIFIER__ unsigned int num_threads() { return internal::cluster::num_threads(); }
 
+  // Get address of shared memory variable in another cluster
+  template <typename T> __CG_STATIC_QUALIFIER__ T* map_shared_rank(T* in, int rank) {
+    return internal::cluster::map_shared_rank<T>(in, rank);
+  }
+
+  // Return block rank of shared memory address
+  __CG_STATIC_QUALIFIER__ unsigned int query_shared_rank(const void* in) {
+    return internal::cluster::query_shared_rank(in);
+  }
+
   // Alias of num_threads
   __CG_STATIC_QUALIFIER__ unsigned int size() { return num_threads(); }
 };
