@@ -4112,11 +4112,13 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     }
 
     if (dev().settings().groupMemCarveout_) {
-      uint8_t percent;
-      percent = devKernel->workGroupInfo()->groupMemCarveout_
+      uint8_t percent = devKernel->workGroupInfo()->groupMemCarveout_
           ? devKernel->workGroupInfo()->groupMemCarveout_
           : dev().GetGroupMemCarveout();
-      // ToDo update dispatchPacketExt.perf_hint
+      auto& dispatchPacketExt = dispatchPacketUnion.extKernelDispatch;
+      // Encodings [1, 127] represent a range from 0% (no group memory) to 100% (maximum
+      // group memory)
+      dispatchPacketExt.perf_hint.group_mem_carveout = (percent + 1) * 1.26F;
     }
 
     dispatchPacket.workgroup_size_x = sizes.dimensions() > 0 ? local[0] : 1;
