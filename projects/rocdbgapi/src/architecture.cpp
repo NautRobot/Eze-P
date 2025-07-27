@@ -6091,6 +6091,26 @@ public:
   }
 };
 
+class gfx1152_t final : public gfx11_architecture_t
+{
+public:
+  gfx1152_t ()
+    : gfx11_architecture_t (EF_AMDGPU_MACH_AMDGCN_GFX1152,
+                            "amdgcn-amd-amdhsa--gfx1152")
+  {
+  }
+};
+
+class gfx1153_t final : public gfx11_architecture_t
+{
+public:
+  gfx1153_t ()
+    : gfx11_architecture_t (EF_AMDGPU_MACH_AMDGCN_GFX1153,
+                            "amdgcn-amd-amdhsa--gfx1153")
+  {
+  }
+};
+
 class gfx12_architecture_t : public gfx11_architecture_t
 {
 private:
@@ -7669,6 +7689,8 @@ decltype (architecture_t::s_architecture_map)
       map.emplace (make_architecture<gfx1102_t> ());
       map.emplace (make_architecture<gfx1150_t> ());
       map.emplace (make_architecture<gfx1151_t> ());
+      map.emplace (make_architecture<gfx1152_t> ());
+      map.emplace (make_architecture<gfx1153_t> ());
       map.emplace (make_architecture<gfx12_generic_t> ());
       map.emplace (make_architecture<gfx1200_t> ());
       map.emplace (make_architecture<gfx1201_t> ());
