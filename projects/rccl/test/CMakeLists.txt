@@ -110,6 +110,9 @@ if(BUILD_TESTS)
     common/TestBedChild.cpp
     common/StandaloneUtils.cpp
     proxy_trace/ProxyTraceUnitTests.cpp
+    ../src/misc/proxy_trace/proxy_trace.cc
+    latency_profiler/LatencyProfilerUnitTest.cpp
+    ../src/misc/latency_profiler/CollTraceUtils.cc
     )
 
   # Due to default hidden symbol visibility, append source file if build type is not Debug.

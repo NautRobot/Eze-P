@@ -652,6 +652,15 @@ set(SRC_FILES
   src/transport/p2p.cc
   src/transport/profiler.cc
   src/transport/shm.cc
+  src/include/latency_profiler/CollTrace.h
+  src/include/latency_profiler/CollTraceEvent.h
+  src/include/latency_profiler/CollTraceFunc.h
+  src/include/latency_profiler/CollTraceUtils.h
+  src/include/latency_profiler/EventQueue.h
+  src/misc/latency_profiler/CollTrace.cc
+  src/misc/latency_profiler/CollTraceEvent.cc
+  src/misc/latency_profiler/CollTraceFunc.cc
+  src/misc/latency_profiler/CollTraceUtils.cc
 )
 
 if (ENABLE_MSCCL_KERNEL)
