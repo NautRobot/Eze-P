@@ -142,6 +142,7 @@ if(BUILD_TESTS)
       AllocTests.cpp
       ArgCheckTests.cpp
       IpcsocketTests.cpp
+      CollRegTests.cpp
       ShmTests.cpp
       P2pTests.cpp
       BitOpsTests.cpp
