@@ -372,6 +372,10 @@
  *     exception is delivered to a wave in an attached process after the
  *     wave has executed this instruction, the wave is killed.
  *
+ * 11. On Linux, all operations used to interact with a live process must be
+ *     made from a thread which is the tracer of the target process (i.e. the
+ *     calling thread must be PTRACE-attached to the process).
+ *
  * \section references References
  *
  * 1. Advanced Micro Devices: [www.amd.com] (https://www.amd.com/)
