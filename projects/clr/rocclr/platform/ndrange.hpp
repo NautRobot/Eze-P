@@ -157,7 +157,7 @@ struct LaunchParams {
     }
 
     // If cluster parameters is set, then check if it is divisble by grid (total blocks).
-    if (clusterX > 1) {
+    if (clusterX > 1 || clusterY > 1 || clusterZ > 1) {
       if (!CheckClusterDivisibility(clusterX, clusterY, clusterZ)) {
         validConfig_ = false;
       }
@@ -178,7 +178,7 @@ struct LaunchParams {
   //! Sometimes we receive cluster launch info from kernel, not through HIP launch kernel APIs.
   bool UpdateClusterLaunchParams(uint32_t clusterX, uint32_t clusterY, uint32_t clusterZ) {
     // If cluster parameters are not > 1, we dont need to update since it is the default value set.
-    if (clusterX > 1) {
+    if (clusterX > 1 || clusterY > 1 || clusterZ > 1) {
       if (!CheckClusterDivisibility(clusterX, clusterY, clusterZ)) {
         return false;
       }

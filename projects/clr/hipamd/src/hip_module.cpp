@@ -396,10 +396,11 @@ bool UpdateNumClustersFromKernel(const hip::Stream* stream, const amd::Kernel* k
   const amd::Device& device = stream->vdev()->device();
   amd::device::Kernel* devKernel = const_cast<device::Kernel*>(kernel->getDeviceKernel(device));
   // If cluster size from device kernel is > 1, then we need to update the cluster params.
-  if (devKernel->getClusterSize(0) > 1) {
+  if (devKernel->getClusterSize(0) > 1 || devKernel->getClusterSize(1) > 1 ||
+      devKernel->getClusterSize(2) > 1) {
     if (!launch_params.UpdateClusterLaunchParams(devKernel->getClusterSize(0),
                                                  devKernel->getClusterSize(1),
-                                                 devKernel->getClusterSize(1))) {
+                                                 devKernel->getClusterSize(2))) {
       LogPrintfError("This is not a valid Cluster Launch, please recheck parameters"
                      "global[0]: %d, global[1]: %d, global[2]: %d, local[0]: %d, local[1]: %d,"
                      "local[2] :%d, numClusters[0]: %d, numClusters[1]: %d, numClusters[2]: %d",
