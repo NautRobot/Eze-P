@@ -143,6 +143,7 @@ if(BUILD_TESTS)
       ArgCheckTests.cpp
       IpcsocketTests.cpp
       CollRegTests.cpp
+      RcclWrapTests.cpp
       ShmTests.cpp
       P2pTests.cpp
       BitOpsTests.cpp

@@ -40,7 +40,6 @@ option(TRACE                                   "Enable additional tracing"      
 option(FAULT_INJECTION                         "Enable fault injection"                        ON)
 option(FORCE_REDUCE_PIPELINING                 "Force reduce pipelining"                       OFF)
 option(DISABLE_CHEAP_THREADFENCE               "Compile-time killswitch for simpler fence"     OFF)
-option(RCCL_EXPOSE_STATIC                      "Expose internal static functions for testing"  OFF)
 
 # Default GPU architectures to build
 #==================================================================================================
@@ -372,9 +371,6 @@ if(ROCTX)
   endif()
 endif()
 
-if(RCCL_EXPOSE_STATIC)
-  add_definitions(-DRCCL_EXPOSE_STATIC)
-endif()
 # Determine version from makefiles/version.mk and fill in templates
 #==================================================================================================
 ## parse version from Makefile NCCL_MAJOR, NCCL_MINOR, NCCL_PATCH must exist
@@ -739,6 +735,9 @@ add_custom_target(hipify_all DEPENDS ${HIP_SOURCES})
 
 if (BUILD_TESTS)
   if (ROCM_VERSION VERSION_GREATER_EQUAL "60400" AND CMAKE_BUILD_TYPE MATCHES "Debug")
+    ## Set definition for exposing rccl static function
+    add_definitions(-DRCCL_EXPOSE_STATIC)
+
     set(HIPIFY_SRC_DIR "${PROJECT_BINARY_DIR}/hipify/src")
     set(REPLACE_SCRIPT "${CMAKE_SOURCE_DIR}/tools/scripts/replace_static.sh")
     message ("Replacing static functions in ${HIPIFY_SRC_DIR} with ${REPLACE_SCRIPT} for unit tests")
