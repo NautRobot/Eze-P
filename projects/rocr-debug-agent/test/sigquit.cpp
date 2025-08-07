@@ -34,10 +34,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <cstdio>
 
 __global__ void
-sigquit_kern ()
+sigquit_kern (int *fence)
 {
+  atomicAdd_system (fence, 1);
   while (true)
     __builtin_amdgcn_s_sleep (16);
 }
@@ -56,7 +58,21 @@ SigquitTest ()
   alarm (30);
 
   hipError_t err;
-  sigquit_kern<<<1, 1>>> ();
+  int start = 0;
+  int *fence;
+  err = hipMallocManaged (&fence, sizeof (int));
+  TEST_ASSERT (err == hipSuccess, "alloc");
+
+  __atomic_store_n (fence, 0, __ATOMIC_RELAXED);
+
+  sigquit_kern<<<1, 1>>> (fence);
+
+  while (__atomic_load_n (fence, __ATOMIC_RELAXED)  == 0)
+	 ;
+
+  printf ("Kernel started\n");
+  fflush (stdout);
+
   err = hipDeviceSynchronize ();
 
   alarm (0);
