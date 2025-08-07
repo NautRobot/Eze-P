@@ -384,11 +384,13 @@ def check_test_9():
 
     check_list = [
         re.compile(s)
-        for s in ["s0:", "v0:", "Disassembly for function sigquit_kern\\(\\)"]
+        for s in ["s0:", "v0:", "Disassembly for function sigquit_kern\\(int\\*\\)"]
     ]
 
     p = Popen(["./rocm-debug-agent-test", "6"], stdout=PIPE, stderr=PIPE)
-    time.sleep(1)
+    l = p.stdout.readline()
+    while "Kernel started" not in l.decode("utf-8"):
+        l = p.stdout.readline()
     os.kill(p.pid, signal.SIGQUIT)
     time.sleep(1)
     p.terminate()
