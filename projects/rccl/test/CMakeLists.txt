@@ -147,6 +147,7 @@ if(BUILD_TESTS)
       CommTests.cpp
       EnqueueTests.cpp
       P2pTests.cpp
+      ProxyTests.cpp
       RcclWrapTests.cpp
       ShmTests.cpp
       TransportTests.cpp
