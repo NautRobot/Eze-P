@@ -29,6 +29,12 @@ jobs:
       - name: Convert PR numbers to matrix
         id: set-matrix
         run: |
+          PRS="${{ github.event.inputs.subrepo-pr-numbers }}"
+          JSON_ARRAY=$(echo "$PRS" \
+            | tr ',' '\n'     \
+            | jq -R .         \
+            | jq -s .)
+          COMPACT=$(jq -c . <<<"$JSON_ARRAY")
           echo "matrix=$COMPACT" >> $GITHUB_OUTPUT
 
   import:
@@ -36,7 +42,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        pr_number: ${{ needs.generate-matrix.outputs.matrix }}
+        pr_number: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
       - name: Validate maintainer permissions
         env:
