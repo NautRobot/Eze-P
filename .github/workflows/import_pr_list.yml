@@ -43,6 +43,8 @@ jobs:
     strategy:
       matrix:
         pr_number: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+      fail-fast: false
+    continue-on-error: true
     steps:
       - name: Validate maintainer permissions
         env:
