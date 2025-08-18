@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        pr_number: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+        pr_number: ${{ needs.generate-matrix.outputs.matrix }}
     steps:
       - name: Validate maintainer permissions
         env:
