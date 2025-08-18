@@ -9,6 +9,8 @@ def run(cmd, **kwargs):
     subprocess.check_call(cmd, shell=True, **kwargs)
 
 def main():
+    run("git config user.name  'systems-assistant[bot]'")
+    run("git config user.email 'systems-assistant[bot]@users.noreply.github.com'")
     token       = os.environ["GITHUB_TOKEN"]
     prefix      = os.environ["SUBPREFIX"]
     subrepo     = os.environ["SUBREPO"]
