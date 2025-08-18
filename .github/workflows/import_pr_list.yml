@@ -29,10 +29,7 @@ jobs:
       - name: Convert PR numbers to matrix
         id: set-matrix
         run: |
-          PRS="${{ github.event.inputs.subrepo-pr-numbers }}"
-          PR_ARRAY=$(echo "$PRS" | tr ',' '\n' | jq -R . | jq -s .)
-          echo "matrix=$PR_ARRAY"
-          echo "matrix=$PR_ARRAY" >> $GITHUB_OUTPUT
+          echo "matrix=$COMPACT" >> $GITHUB_OUTPUT
 
   import:
     needs: generate-matrix
