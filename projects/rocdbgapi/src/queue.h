@@ -159,6 +159,10 @@ protected:
       {
       }
       amd_dbgapi_global_address_t entry_address () const override { return 0; }
+      bool is_at_kernel_entry (amd_dbgapi_global_address_t /* pc  */) const override
+      {
+        return false;
+      }
     } m_dummy_descriptor;
 
   public:

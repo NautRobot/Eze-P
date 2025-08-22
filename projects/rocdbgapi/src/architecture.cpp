@@ -208,7 +208,8 @@ protected:
       uint32_t compute_pgm_rsrc1;
       uint32_t compute_pgm_rsrc2;
       uint16_t kernel_code_properties;
-      uint8_t reserved2[6];
+      uint16_t kernarg_preload;
+      uint8_t reserved2[4];
     } m_descriptor;
 
   public:
@@ -222,6 +223,30 @@ protected:
     amd_dbgapi_global_address_t entry_address () const override
     {
       return address () + m_descriptor.kernel_code_entry_byte_offset;
+    }
+
+    bool is_at_kernel_entry (amd_dbgapi_global_address_t pc) const override
+    {
+      /* There are 2 possible entry points to a kernel, one at offset 0x0 and
+         the other at offset 0x100 from the kernel_code_entry address.  The
+         entry point at offset 0x100 relies on CP to preload some kernargs
+         in scalar registers (controlled by m_descriptor_t.kernarg_preload).
+         The entry point at offset 0x0 does not rely on preloaded kernargs.
+
+         The PC is at an entry point if it matches the kernel code entry
+         address + 0x0 regardless of m_descriptor.kernarg_preload (the CP
+         firmware may not support the feature), or if it matches offset 0x100
+         when m_descriptor.kernarg_preload != 0.
+
+         Note: This relies on the software convention that one entry point is
+         not reachable from the other entry point.  The compiler guarantees
+         it, but it is possible to write an assembly kernel that misbehaves.
+         The likely outcome would be that the debugger would unhalt a wave
+         halted by an s_sethalt instruction or an SQ command at offset 0x100.
+       */
+      return (m_descriptor.kernarg_preload != 0
+              && pc == entry_address () + 0x100)
+             || pc == entry_address ();
     }
   };
 

@@ -746,8 +746,8 @@ aql_queue_t::update_waves ()
     if (!wave->mark () /* A wave without a mark is a new wave that has not been
                           seen by queue_t::update_waves before.  */
         && wave->state () == AMD_DBGAPI_WAVE_STATE_RUN
-        && wave->pc ()
-             == wave->dispatch ().kernel_descriptor ().entry_address ()
+        && wave->dispatch ().kernel_descriptor ().is_at_kernel_entry (
+          wave->pc ())
         && wave->is_halted ())
       {
         log_verbose ("%s is halted at launch", to_cstring (wave->id ()));
