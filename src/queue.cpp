@@ -592,7 +592,7 @@ aql_queue_t::get_os_queue_packet_id (
       + (*m_read_packet_id / ring_size) * ring_size;
 
   if (os_queue_packet_id < *m_read_packet_id
-      && (*m_read_packet_id % ring_size) > (*m_write_packet_id % ring_size))
+      && (*m_read_packet_id % ring_size) >= (*m_write_packet_id % ring_size))
     os_queue_packet_id += ring_size;
 
   /* Check that the dispatch_id is between the command
