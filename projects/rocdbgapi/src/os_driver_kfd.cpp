@@ -954,8 +954,8 @@ kfd_core_driver_t::kfd_queue_snapshot (
 }
 
 amd_dbgapi_status_t
-kfd_core_driver_t::enable_debug (os_exception_mask_t exceptions_reported,
-                                 amd_dbgapi_notifier_t notifier,
+kfd_core_driver_t::enable_debug ([[maybe_unused]] os_exception_mask_t exceptions_reported,
+                                 [[maybe_unused]] amd_dbgapi_notifier_t notifier,
                                  os_runtime_info_t *runtime_info)
 {
   TRACE_DRIVER_BEGIN (param_in (exceptions_reported), param_in (notifier),
@@ -1387,7 +1387,8 @@ kfd_driver_t::create_core_state_note (const os_runtime_info_t &runtime_info,
 
 amd_dbgapi_status_t
 kfd_driver_t::kfd_agent_snapshot (kfd_dbg_device_info_entry *agents_infos,
-                                  size_t agent_info_count, size_t *agent_count,
+                                  [[maybe_unused]] size_t agent_info_count,
+                                  size_t *agent_count,
                                   os_exception_mask_t exceptions_cleared) const
 {
   TRACE_DRIVER_BEGIN (param_in (agents_infos), param_in (agent_info_count),
