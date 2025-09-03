@@ -2103,6 +2103,8 @@ static ncclResult_t topoGetAlgoInfo(
   if (info->algorithm == NCCL_ALGO_TREE) nt = NCCL_MAX_NTHREADS; // Tree now uses all threads always.
   if (info->algorithm == NCCL_ALGO_PAT) nt = NCCL_MAX_NTHREADS;
   info->nWarps = nt/comm->WarpSize;
+  rcclOverrideAlgorithm(ncclAlgoStr, table, info);
+  rcclOverrideProtocol(ncclProtoStr, table, info);
   return ncclSuccess;
 }
 
