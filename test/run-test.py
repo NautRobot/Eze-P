@@ -1,13 +1,81 @@
 import os
 import re
+import select
 import sys
 import tempfile
 import unittest.mock
+from subprocess import Popen, PIPE, TimeoutExpired
 import time
 import hashlib
 import shutil
 from subprocess import Popen, PIPE, CalledProcessError, run
 import signal
+
+DEFAULT_TIMEOUT = 30
+
+
+def run_and_communicate(
+    test_name,
+    args="0",
+    debug_agent_options="",
+):
+    # Prepare command
+    program = "./rocm-debug-agent-test"
+    cmd = [program]
+    if isinstance(args, (list, tuple)):
+        cmd += [str(a) for a in args]
+    else:
+        cmd.append(str(args))
+    with unittest.mock.patch.dict(
+        os.environ,
+        (
+            {"ROCM_DEBUG_AGENT_OPTIONS": debug_agent_options}
+            if debug_agent_options
+            else {}
+        ),
+    ):
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE)
+
+        def handle_failure(reason):
+            print(f"Test {test_name} FAIL: {reason}")
+            p.kill()
+            try:
+                # Kill first, then communicate to flush any remaining output
+                output, err = p.communicate()
+            except Exception:
+                output, err = b"", b""
+            print("rocm-debug-agent test print out.")
+            print(output.decode("utf-8"))
+            print("rocm-debug-agent test error message.")
+            print(err.decode("utf-8"))
+            return None, None, False
+
+        try:
+            output, err = p.communicate(timeout=DEFAULT_TIMEOUT)
+        except TimeoutExpired:
+            return handle_failure("Timeout reached during communicate.")
+        except Exception:
+            return handle_failure("Unknown exception.")
+
+        out_str = output.decode("utf-8")
+        err_str = err.decode("utf-8")
+        return out_str, err_str, True
+
+
+def check_errors(check_list, out_str, err_str):
+    all_strings_found = True
+    for check_str in check_list:
+        if not (check_str.search(err_str)):
+            all_strings_found = False
+            print('"', check_str, '" Not Found in dump.')
+
+    if not all_strings_found:
+        print("rocm-debug-agent test print out.")
+        print(out_str)
+        print("rocm-debug-agent test error message.")
+        print(err_str)
+
+    return all_strings_found
 
 
 def filter_warnings(err_str):
@@ -41,12 +109,11 @@ else:
     os.environ["HSA_TOOLS_LIB"] = "librocm-debug-agent.so.2"
     os.chdir(test_binary_directory)
     # pre test to check if librocm-debug-agent.so.2 can be found
-    p = Popen(["./rocm-debug-agent-test", "0"], stdout=PIPE, stderr=PIPE)
-    output, err = p.communicate()
-    out_str = output.decode("utf-8")
-    err_str = err.decode("utf-8")
+    out_str, err_str, success = run_and_communicate(
+        test_name="0: default", args="0"
+    )
 
-    if filter_warnings(err_str):
+    if success and filter_warnings(err_str):
         print(err_str)
         if '"librocm-debug-agent.so.2" failed to load' in err_str:
             print(
@@ -58,12 +125,16 @@ else:
 # test 0
 def check_test_0():
     print("Starting rocm-debug-agent-test 0")
-    p = Popen(["./rocm-debug-agent-test", "0"], stdout=PIPE, stderr=PIPE)
-    output, err = p.communicate()
-    out_str = output.decode("utf-8")
-    err_str = err.decode("utf-8")
 
-    # Only print but not throw for err_str, since debug build has print out could be ignored
+    out_str, err_str, success = run_and_communicate(
+        test_name="0: default", args="0"
+    )
+
+    if not success:
+        return False
+
+    # Only print but not throw for err_str, since debug build has print
+    # out could be ignored
     if filter_warnings(err_str):
         print(err_str)
 
@@ -93,25 +164,14 @@ def check_test_1():
         ]
     ]
 
-    p = Popen(["./rocm-debug-agent-test", "1"], stdout=PIPE, stderr=PIPE)
-    output, err = p.communicate()
-    out_str = output.decode("utf-8")
-    err_str = err.decode("utf-8")
+    out_str, err_str, success = run_and_communicate(
+        test_name="1: debug_trap", args="1"
+    )
 
-    # check output string
-    all_output_string_found = True
-    for check_str in check_list:
-        if not (check_str.search(err_str)):
-            all_output_string_found = False
-            print('"', check_str, '" Not Found in dump.')
-
-    if not all_output_string_found:
-        print("rocm-debug-agent test print out.")
-        print(out_str)
-        print("rocm-debug-agent test error message.")
-        print(err_str)
-
-    return all_output_string_found
+    if success:
+        return check_errors(check_list, out_str, err_str)
+    else:
+        return False
 
 
 # test 2
@@ -136,35 +196,25 @@ def check_test_2():
             #                  'global_store_dword' # Without precise memory, we can't guarantee that
         ]
     ]
-    p = Popen(["./rocm-debug-agent-test", "2"], stdout=PIPE, stderr=PIPE)
-    output, err = p.communicate()
-    out_str = output.decode("utf-8")
-    err_str = err.decode("utf-8")
 
-    # check output string
-    all_output_string_found = True
-    for check_str in check_list:
-        if not (check_str.search(err_str)):
-            all_output_string_found = False
-            print('"', check_str, '" Not Found in dump.')
-
-    if not all_output_string_found:
-        print("rocm-debug-agent test print out.")
-        print(out_str)
-        print("rocm-debug-agent test error message.")
-        print(err_str)
-
-    return all_output_string_found
+    out_str, err_str, success = run_and_communicate(
+        test_name="2: memory violation", args="2"
+    )
+    if success:
+        return check_errors(check_list, out_str, err_str)
+    else:
+        return False
 
 
 # test 3: snapshot code object on load
 def check_test_3():
     print("Starting rocm-debug-agent test 3")
 
-    p = Popen(["./rocm-debug-agent-test", "3"], stdout=PIPE, stderr=PIPE)
-    output, err = p.communicate()
-    out_str = output.decode("utf-8")
-    err_str = err.decode("utf-8")
+    out_str, err_str, success = run_and_communicate(
+        test_name="3: snapshot code object on load", args="3"
+    )
+    if not success:
+        return False
 
     found_error = False
 
@@ -224,79 +274,64 @@ def check_test_4():
     print("Starting rocm-debug-agent test 4")
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        with unittest.mock.patch.dict(
-            os.environ,
-            {"ROCM_DEBUG_AGENT_OPTIONS": f"-p --save-code-objects={tmpdir}"},
-        ):
-            p = Popen(
-                ["./rocm-debug-agent-test", "4"], stdout=PIPE, stderr=PIPE
-            )
-            out, err = p.communicate()
-            out_str, err_str = [
-                s.decode(errors="ignore") if s else "" for s in (out, err)
-            ]
+        run_and_communicate(
+            test_name="4: save code objects",
+            args="4",
+            debug_agent_options=f"-p --save-code-objects={tmpdir}",
+        )
 
-            if out_str:
-                print(out_str)
-            if err_str:
-                print(err_str)
+        try:
+            code_objects = os.listdir(tmpdir)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Temporary directory not found: {tmpdir}"
+            ) from e
 
-            try:
-                code_objects = os.listdir(tmpdir)
-            except FileNotFoundError as e:
-                raise FileNotFoundError(
-                    f"Temporary directory not found: {tmpdir}"
-                ) from e
+        if len(code_objects) == 0:
+            print(f"No code object found in {tmpdir}")
+            return False
 
-            if len(code_objects) == 0:
-                print(f"No code object found in {tmpdir}")
-                return False
+        # Filter to files that contain the target symbol in their
+        # symbol table.
+        full_paths = [
+            os.path.join(tmpdir, f)
+            for f in code_objects
+            if os.path.isfile(os.path.join(tmpdir, f))
+        ]
+        with_symbol = []
+        symbol_to_find = "saved_test_kernel"
+        for path in full_paths:
+            if _has_symbol_with_readelf(path, symbol_to_find):
+                with_symbol.append(path)
 
-            # Filter to files that contain the target symbol in their
-            # symbol table.
-            full_paths = [
-                os.path.join(tmpdir, f)
-                for f in code_objects
-                if os.path.isfile(os.path.join(tmpdir, f))
-            ]
-            with_symbol = []
-            symbol_to_find = "saved_test_kernel"
-            for path in full_paths:
-                if _has_symbol_with_readelf(path, symbol_to_find):
-                    with_symbol.append(path)
-
-            if len(with_symbol) != 2:
-                print(
-                    f"Expected exactly 2 code objects containing symbol"
-                    f" '{symbol_to_find}', found {len(with_symbol)}"
-                )
-                print(
-                    "All saved files:\n\t{}".format("\n\t".join(code_objects))
-                )
-                print(
-                    "Files with symbol:\n\t{}".format(
-                        "\n\t".join(os.path.basename(p) for p in with_symbol)
-                    )
-                )
-                return False
-
-            # Compare contents via checksum.
-            checksums = [(_file_checksum(p), p) for p in with_symbol]
-            unique_sums = {cs for cs, _ in checksums}
-            if len(unique_sums) != 1:
-                print(
-                    "The two code objects containing the symbol do not"
-                    " have identical contents"
-                )
-                for cs, pth in checksums:
-                    print(f"{os.path.basename(pth)} -> {cs}")
-                return False
-
+        if len(with_symbol) != 2:
             print(
-                "Found exactly two code objects with the target symbol and "
-                "identical contents; test passed"
+                f"Expected exactly 2 code objects containing symbol"
+                f" '{symbol_to_find}', found {len(with_symbol)}"
             )
-            return True
+            print(
+                "All saved files:\n\t{}".format("\n\t".join(code_objects))
+            )
+            print(
+                "Files with symbol:\n\t{}".format(
+                    "\n\t".join(os.path.basename(p) for p in with_symbol)
+                )
+            )
+            return False
+
+        # Compare contents via checksum.
+        checksums = [(_file_checksum(p), p) for p in with_symbol]
+        unique_sums = {cs for cs, _ in checksums}
+        if len(unique_sums) != 1:
+            print(
+                "The two code objects containing the symbol do not"
+                " have identical contents"
+            )
+            for cs, pth in checksums:
+                print(f"{os.path.basename(pth)} -> {cs}")
+            return False
+
+        return True
 
 
 # test 5
@@ -317,9 +352,14 @@ def check_test_5():
         with unittest.mock.patch.dict(
             os.environ, {"ROCM_DEBUG_AGENT_OPTIONS": f"-o {tmpdir}/output_log.txt"}
         ):
-            # Start process without capturing output
-            p = Popen(["./rocm-debug-agent-test", "1"])
-            p.wait()  # Wait for the process to complete
+
+            # Start process, ignore what function return since everything
+            # is written to the file
+            run_and_communicate(
+                "5: -o option",
+                args="1",
+                debug_agent_options=f"-o {tmpdir}/output_log.txt",
+            )
 
             # Read the output log
             with open(f"{tmpdir}/output_log.txt", "r") as f:
@@ -349,26 +389,14 @@ def check_test_6():
         ]
     ]
 
-    with unittest.mock.patch.dict(os.environ, {"ROCM_DEBUG_AGENT_OPTIONS": f"-h"}):
-        p = Popen(["./rocm-debug-agent-test", "0"], stdout=PIPE, stderr=PIPE)
-        output, err = p.communicate()
-        out_str = output.decode("utf-8")
-        err_str = err.decode("utf-8")
+    out_str, err_str, success = run_and_communicate(
+        test_name="6: help", args="0", debug_agent_options="-h"
+    )
 
-        # check output string
-        all_output_string_found = True
-        for check_str in check_list:
-            if not (check_str.search(err_str)):
-                all_output_string_found = False
-                print('"', check_str, '" Not Found in dump.')
-
-        if not all_output_string_found:
-            print("rocm-debug-agent test print out.")
-            print(out_str)
-            print("rocm-debug-agent test error message.")
-            print(err_str)
-
-        return all_output_string_found
+    if success:
+        return check_errors(check_list, out_str, err_str)
+    else:
+        return False
 
 
 # test 7
@@ -382,26 +410,14 @@ def check_test_7():
         ]
     ]
 
-    with unittest.mock.patch.dict(os.environ, {"ROCM_DEBUG_AGENT_OPTIONS": f"-l info"}):
-        p = Popen(["./rocm-debug-agent-test", "1"], stdout=PIPE, stderr=PIPE)
-        output, err = p.communicate()
-        out_str = output.decode("utf-8")
-        err_str = err.decode("utf-8")
+    out_str, err_str, success = run_and_communicate(
+        test_name="7: -l option", args="1", debug_agent_options="-l info"
+    )
 
-        # check output string
-        all_output_string_found = True
-        for check_str in check_list:
-            if not (check_str.search(err_str)):
-                all_output_string_found = False
-                print('"', check_str, '" Not Found in dump.')
-
-        if not all_output_string_found:
-            print("rocm-debug-agent test print out.")
-            print(out_str)
-            print("rocm-debug-agent test error message.")
-            print(err_str)
-
-        return all_output_string_found
+    if success:
+        return check_errors(check_list, out_str, err_str)
+    else:
+        return False
 
 
 # test 8
@@ -422,26 +438,14 @@ def check_test_8():
         ]
     ]
 
-    with unittest.mock.patch.dict(os.environ, {"ROCM_DEBUG_AGENT_OPTIONS": f"--all"}):
-        p = Popen(["./rocm-debug-agent-test", "5"], stdout=PIPE, stderr=PIPE)
-        output, err = p.communicate()
-        out_str = output.decode("utf-8")
-        err_str = err.decode("utf-8")
+    out_str, err_str, success = run_and_communicate(
+        test_name="8: --all option", args="5", debug_agent_options="--all"
+    )
 
-        # check output string
-        all_output_string_found = True
-        for check_str in check_list:
-            if not (check_str.search(err_str)):
-                all_output_string_found = False
-                print('"', check_str, '" Not Found in dump.')
-
-        if not all_output_string_found:
-            print("rocm-debug-agent test print out.")
-            print(out_str)
-            print("rocm-debug-agent test error message.")
-            print(err_str)
-
-        return all_output_string_found
+    if success:
+        return check_errors(check_list, out_str, err_str)
+    else:
+        return False
 
 
 # test 9 SIGQUIT
@@ -450,7 +454,11 @@ def check_test_9():
 
     check_list = [
         re.compile(s)
-        for s in ["s0:", "v0:", "Disassembly for function sigquit_kern\\(int\\*\\)"]
+        for s in [
+            "s0:",
+            "v0:",
+            "Disassembly for function sigquit_kern\\(int\\*\\)",
+        ]
     ]
 
     p = Popen(["./rocm-debug-agent-test", "6"], stdout=PIPE, stderr=PIPE)
@@ -490,13 +498,15 @@ def check_test_10():
         for s in ["c[gid] = a[gid] + b[gid] + (lds_check[0] >> 32);", "if (gid == 0)"]
     ]
 
-    p_debug = Popen(["./rocm-debug-agent-test", "1"], stdout=PIPE, stderr=PIPE)
-    output, err = p_debug.communicate()
-    err_str_debug = err.decode("utf-8")
+    out_str_debug, err_str_debug, success_debug = run_and_communicate(
+        test_name="10: debug info", args="1"
+    )
+    out_str_no_debug, err_str_no_debug, success_no_debug = run_and_communicate(
+        test_name="10: no debug info", args="7"
+    )
 
-    p_no_debug = Popen(["./rocm-debug-agent-test", "7"], stdout=PIPE, stderr=PIPE)
-    output, err = p_no_debug.communicate()
-    err_str_no_debug = err.decode("utf-8")
+    if not (success_no_debug and success_debug):
+        return False
 
     # check if string is in dissasembly of code with debug info but not in other one
     found_in_debug = False
