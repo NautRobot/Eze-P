@@ -461,18 +461,98 @@ def check_test_9():
         ]
     ]
 
-    p = Popen(["./rocm-debug-agent-test", "6"], stdout=PIPE, stderr=PIPE)
-    l = p.stdout.readline()
-    while "Kernel started" not in l.decode("utf-8"):
-        l = p.stdout.readline()
-    os.kill(p.pid, signal.SIGQUIT)
-    time.sleep(1)
-    p.terminate()
-    output, err = p.communicate()
-    out_str = output.decode("utf-8")
-    err_str = err.decode("utf-8")
+    LOOP_TIMEOUT = DEFAULT_TIMEOUT  # seconds
 
-    # check output string
+    p = Popen(["./rocm-debug-agent-test", "6"], stdout=PIPE, stderr=PIPE)
+
+    kernel_started = False
+    wave_seen = False
+    timeout_seen = False
+
+    consumed_out = []
+    consumed_err = []
+
+    deadline = time.monotonic() + LOOP_TIMEOUT
+    streams_to_read = [p.stdout, p.stderr]
+
+    while time.monotonic() < deadline and streams_to_read:
+
+        rlist, _, _ = select.select(streams_to_read, [], [], 1)
+        if not rlist:
+            continue
+
+        for r in rlist:
+            line = r.readline()
+
+            if line == b"":
+                # Reading "" means that we reached EOF on this stream.
+                # Remove it from the streams of interest so every stream
+                # can be fully flushed before we exit the loop.
+                del streams_to_read[streams_to_read.index(r)]
+                continue
+
+            s = line.decode("utf-8")
+            if r is p.stdout:
+                consumed_out.append(s)
+            else:
+                consumed_err.append(s)
+
+            if not kernel_started and "Kernel started" in s:
+                kernel_started = True
+                os.kill(p.pid, signal.SIGQUIT)
+                # We give our program 30 secs to start the kernel.
+                # Once we know that the kernel is running, we give it
+                # extra 30 seconds to process SIGQUIT.
+                deadline = deadline + LOOP_TIMEOUT
+
+            if kernel_started:
+                if s.lstrip().startswith(
+                    "Disassembly for function sigquit_kern(int*):"
+                ):
+                    wave_seen = True
+                    break
+            if "Timeout reached. Exiting." in s:
+                timeout_seen = True
+        if wave_seen or timeout_seen:
+            break
+
+    p.terminate()
+    try:
+        output, err = p.communicate(timeout=3)
+    except TimeoutExpired:
+        print("Timeout reached during final communicate.")
+        output, err = b"", b""
+    except Exception:
+        print("Unexpected exception during final communicate.")
+        output, err = b"", b""
+
+    out_str = "".join(consumed_out) + output.decode("utf-8")
+    err_str = "".join(consumed_err) + err.decode("utf-8")
+
+    if not kernel_started:
+        print("Timeout waiting for 'Kernel started'. Terminating process.")
+        print("rocm-debug-agent test print out.")
+        print(out_str)
+        print("rocm-debug-agent test error message.")
+        print(err_str)
+        return False
+
+    if timeout_seen or not wave_seen:
+        if timeout_seen:
+            print("Timeout reached. Exiting. Failing test.")
+        else:
+            print(
+                (
+                    "Loop timed out without receiving expected message. "
+                    "Failing test."
+                )
+            )
+        print("rocm-debug-agent test print out.")
+        print(out_str)
+        print("rocm-debug-agent test error message.")
+        print(err_str)
+        return False
+
     all_output_string_found = True
     for check_str in check_list:
         if not (check_str.search(err_str)):
