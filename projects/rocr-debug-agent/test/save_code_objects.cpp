@@ -48,7 +48,7 @@
 
 /* Use an empty kernel.  */
 extern "C" __global__ void
-kernel ()
+saved_test_kernel ()
 {
 }
 
