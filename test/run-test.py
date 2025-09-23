@@ -1,11 +1,12 @@
 import os
 import re
 import sys
-import inspect
 import tempfile
 import unittest.mock
-from subprocess import Popen, PIPE
 import time
+import hashlib
+import shutil
+from subprocess import Popen, PIPE, CalledProcessError, run
 import signal
 
 
@@ -192,44 +193,109 @@ def check_test_3():
     return not found_error
 
 
+def _file_checksum(path: str, algo: str = "sha256") -> str:
+    h = hashlib.new(algo)
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _has_symbol_with_readelf(path: str, symbol: str) -> bool:
+    # Use readelf -s (symbol table). Return True if symbol name appears.
+    try:
+        res = run(["readelf", "-sW", path], stdout=PIPE, stderr=PIPE, check=True)
+        out = res.stdout.decode(errors="ignore")
+        return symbol in out
+    except (CalledProcessError):
+        return False
+
+
 # test 4: save code object on disk
 def check_test_4():
+    if not shutil.which("readelf"):
+        print(
+            "Tool readelf not found, could not run test 4, but don't know if"
+            " that is an error."
+        )
+        unsupported_tests.append(check_test_4)
+        return True
+
     print("Starting rocm-debug-agent test 4")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with unittest.mock.patch.dict(
-            os.environ, {"ROCM_DEBUG_AGENT_OPTIONS": f"-p --save-code-objects={tmpdir}"}
+            os.environ,
+            {"ROCM_DEBUG_AGENT_OPTIONS": f"-p --save-code-objects={tmpdir}"},
         ):
+            p = Popen(
+                ["./rocm-debug-agent-test", "4"], stdout=PIPE, stderr=PIPE
+            )
+            out, err = p.communicate()
+            out_str, err_str = [
+                s.decode(errors="ignore") if s else "" for s in (out, err)
+            ]
 
-            p = Popen(["./rocm-debug-agent-test", "4"], stdout=PIPE, stderr=PIPE)
-            p.wait()
+            if out_str:
+                print(out_str)
+            if err_str:
+                print(err_str)
 
-            code_objects = os.listdir(tmpdir)
+            try:
+                code_objects = os.listdir(tmpdir)
+            except FileNotFoundError as e:
+                raise FileNotFoundError(
+                    f"Temporary directory not found: {tmpdir}"
+                ) from e
+
             if len(code_objects) == 0:
                 print(f"No code object found in {tmpdir}")
                 return False
 
-            # There should be 2 code objects which have the same address in
-            # memory and the same size (but might have different load
-            # addressed).  If the name did not have a "N_" prefix (N being a
-            # unique ID), those would be saved with the same file name, so
-            # the second saved code object would override the first one.
-            #
-            # This means that we should see 2 memory code objects:
-            # - 1_memory___PID_offset_OFF_size_SIZE
-            # - 2_memory___PID_offset_OFF_size_SIZE
-            #
-            # Trimming the "N_memory" prefix should give the same value for
-            # both, so a set containing those suffixes should have less
-            # elements than the set of initial names.
-            mem_cos = [co for co in code_objects if "memory___" in co]
-            if len(mem_cos) == len({co.split("memory")[1] for co in mem_cos}):
-                print("Unexpected number of unique code objects")
+            # Filter to files that contain the target symbol in their
+            # symbol table.
+            full_paths = [
+                os.path.join(tmpdir, f)
+                for f in code_objects
+                if os.path.isfile(os.path.join(tmpdir, f))
+            ]
+            with_symbol = []
+            symbol_to_find = "saved_test_kernel"
+            for path in full_paths:
+                if _has_symbol_with_readelf(path, symbol_to_find):
+                    with_symbol.append(path)
+
+            if len(with_symbol) != 2:
                 print(
-                    "List of code objects:\n\t{}" "".format("\n\t".join(code_objects))
+                    f"Expected exactly 2 code objects containing symbol"
+                    f" '{symbol_to_find}', found {len(with_symbol)}"
+                )
+                print(
+                    "All saved files:\n\t{}".format("\n\t".join(code_objects))
+                )
+                print(
+                    "Files with symbol:\n\t{}".format(
+                        "\n\t".join(os.path.basename(p) for p in with_symbol)
+                    )
                 )
                 return False
 
+            # Compare contents via checksum.
+            checksums = [(_file_checksum(p), p) for p in with_symbol]
+            unique_sums = {cs for cs, _ in checksums}
+            if len(unique_sums) != 1:
+                print(
+                    "The two code objects containing the symbol do not"
+                    " have identical contents"
+                )
+                for cs, pth in checksums:
+                    print(f"{os.path.basename(pth)} -> {cs}")
+                return False
+
+            print(
+                "Found exactly two code objects with the target symbol and "
+                "identical contents; test passed"
+            )
             return True
 
 
@@ -446,6 +512,7 @@ def check_test_10():
 
 
 test_success = True
+unsupported_tests = []
 
 for deferred_loading in (None, "1", "0"):
     with unittest.mock.patch.dict("os.environ"):
@@ -474,7 +541,9 @@ for deferred_loading in (None, "1", "0"):
         for i, test in enumerate(test_list, start=0):
             result = test()
             test_success &= result
-            if result:
+            if test in unsupported_tests:
+                print(f"Test {i} UNSUPPORTED")
+            elif result:
                 print(f"Test {i} PASS")
             else:
                 print(f"Test {i} FAIL")
