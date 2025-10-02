@@ -119,15 +119,26 @@ target_compile_options(amd-dbgapi PRIVATE
 target_compile_definitions(amd-dbgapi
   PRIVATE __STDC_LIMIT_MACROS __STDC_CONSTANT_MACROS __STDC_FORMAT_MACROS)
 
-check_include_file(backtrace.h BACKTRACE_H)
-if(BACKTRACE_H)
-  target_compile_definitions(amd-dbgapi PRIVATE HAVE_BACKTRACE_H)
-  find_library(BACKTRACE_LIB "backtrace" ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
-endif()
+execute_process(
+  COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} --print-file-name libbacktrace.a
+  RESULT_VARIABLE libbacktrace_check
+  OUTPUT_VARIABLE libbacktrace_path
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 
-if(BACKTRACE_LIB)
-  target_compile_definitions(amd-dbgapi PRIVATE ENABLE_BACKTRACE)
-  target_link_libraries(amd-dbgapi PRIVATE ${BACKTRACE_LIB})
+if(${libbacktrace_check} EQUAL 0)
+  get_filename_component(BACKTRACE_PREFIX ${libbacktrace_path} DIRECTORY)
+  find_path(BACKTRACE_INCLUDE_DIR backtrace-supported.h PATHS ${BACKTRACE_PREFIX}/include)
+
+  if(BACKTRACE_INCLUDE_DIR)
+    find_library(BACKTRACE_LIB "backtrace" PATHS ${BACKTRACE_PREFIX})
+  endif()
+
+  if(BACKTRACE_LIB)
+    target_compile_definitions(amd-dbgapi PRIVATE HAVE_BACKTRACE)
+    target_include_directories(amd-dbgapi PRIVATE ${BACKTRACE_INCLUDE_DIR})
+    target_link_libraries(amd-dbgapi PRIVATE ${BACKTRACE_LIB})
+  endif()
 endif()
 
 option(API_TRACING "Enable API tracing" ON)
