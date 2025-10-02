@@ -28,14 +28,18 @@
 #include <sstream>
 #include <string>
 
-#if defined(ENABLE_BACKTRACE)
+#if defined(HAVE_BACKTRACE)
+#include <backtrace-supported.h>
+#endif /* defined(HAVE_BACKTRACE) */
+
+#if BACKTRACE_SUPPORTED
 #include <cxxabi.h>
 #include <backtrace.h>
-#endif /* defined (ENABLE_BACKTRACE) */
+#endif /* BACKTRACE_SUPPORTED */
 
 namespace amd::dbgapi
 {
-#if defined(ENABLE_BACKTRACE)
+#if BACKTRACE_SUPPORTED
 namespace detail
 {
 
@@ -100,7 +104,7 @@ full_callback (void *data, uintptr_t pc, const char *filename, int lineno,
 }
 
 } /* namespace detail */
-#endif /* defined (ENABLE_BACKTRACE) */
+#endif /* BACKTRACE_SUPPORTED */
 
 void
 warning (const char *format, ...)
@@ -120,7 +124,7 @@ fatal_error (const char *format, ...)
   std::string message = string_vprintf (format, va);
   va_end (va);
 
-#if defined(ENABLE_BACKTRACE)
+#if BACKTRACE_SUPPORTED
   detail::backtrace_info info;
 
   info.sstream << std::endl << "Backtrace:";
@@ -130,7 +134,7 @@ fatal_error (const char *format, ...)
                   &info);
 
   message += info.sstream.str ();
-#endif /* defined (ENABLE_BACKTRACE) */
+#endif /* BACKTRACE_SUPPORTED */
 
   /* TODO: We should return a FATAL error here, and put the API
      in a finalized state (maybe the catch should do that).  */
