@@ -53,8 +53,8 @@ agent_t::agent_t (amd_dbgapi_agent_id_t agent_id, process_t &process,
             global_address_t{ address }, read, write, size);
 
         amd_dbgapi_status_t status
-          = m_process.os_driver ().xfer_global_memory_partial (address, read,
-                                                               write, &size);
+          = m_process.os_driver ().xfer_agent_memory_partial (
+            os_agent_id (), address, read, write, &size);
 
         if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
           throw process_exited_exception_t (m_process.id ());

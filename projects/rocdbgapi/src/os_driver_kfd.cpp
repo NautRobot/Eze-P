@@ -490,6 +490,17 @@ protected:
                       os_exception_mask_t exceptions_cleared) const
     = 0;
 
+  amd_dbgapi_status_t xfer_agent_memory_partial (os_agent_id_t /* agent  */,
+                                                 agent_address_t address,
+                                                 void *read, const void *write,
+                                                 size_t *size) const override
+  {
+    /* We have a unified address space, so just use the global memory access
+       to handle agent memory.  */
+    return xfer_global_memory_partial (global_address_t{ address }, read,
+                                       write, size);
+  }
+
 private:
   static std::string marketing_name (uint32_t vendor_id, uint32_t device_id,
                                      uint32_t revision_id);
@@ -1114,7 +1125,7 @@ public:
   amd_dbgapi_status_t
   set_process_flags (os_process_flags_t flags) const override;
 
-  amd_dbgapi_status_t xfer_global_memory_partial (agent_address_t address,
+  amd_dbgapi_status_t xfer_global_memory_partial (global_address_t address,
                                                   void *read,
                                                   const void *write,
                                                   size_t *size) const override;
@@ -1898,7 +1909,7 @@ kfd_driver_t::set_process_flags (os_process_flags_t flags) const
 }
 
 amd_dbgapi_status_t
-kfd_driver_t::xfer_global_memory_partial (agent_address_t address, void *read,
+kfd_driver_t::xfer_global_memory_partial (global_address_t address, void *read,
                                           const void *write,
                                           size_t *size) const
 {
