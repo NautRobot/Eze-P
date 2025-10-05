@@ -129,7 +129,7 @@ HIPCUFLAGS += -DMPI_SUPPORT -I${MPI_HOME}/include -I${MPI_HOME}/mpich/include -I
 HIPLDFLAGS += -L${MPI_HOME}/lib -L${MPI_HOME}/mpich/lib -lmpich
 endif
 
-LIBRARIES += rccl
+LIBRARIES += rccl dl
 HIPLDFLAGS += $(LIBRARIES:%=-l%)
 
 DST_DIR := $(BUILDDIR)
