@@ -28,6 +28,9 @@ include(GNUInstallDirs)
 include(CheckCXXSourceCompiles)
 
 set(CPACK_PACKAGE_NAME rocm-dbgapi)
+include( utils.cmake )
+set( BUILD_ENABLE_LINTIAN_OVERRIDES ON CACHE BOOL "Enable/Disable Lintian Overrides" )
+set( BUILD_DEBIAN_PKGING_FLAG ON CACHE BOOL "Internal Status Flag to indicate Debian Packaging Build" )
 
 # Convert the project's name to uppercase and replace '-' with '_'.
 string(TOUPPER "${PROJECT_NAME}" AMD_DBGAPI_NAME)
@@ -426,12 +429,14 @@ install(EXPORT amd-dbgapi-export
   COMPONENT dev)
 
 # Add packaging directives for amd-dbgapi
+set(PKG_MAINTAINER_NM  "ROCm Debugger Support")
+set(PKG_MAINTAINER_EMAIL  "rocm-gdb.support@amd.com")
 set(CPACK_PACKAGE_VENDOR "Advanced Micro Devices, Inc.")
 set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
-set(CPACK_PACKAGE_CONTACT "ROCm Debugger Support <rocm-gdb.support@amd.com>")
+set(CPACK_PACKAGE_CONTACT "${PKG_MAINTAINER_NM} <${PKG_MAINTAINER_EMAIL}>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Library to provide AMD GPU debugger API")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
 
@@ -509,13 +514,17 @@ endif()
 if(ENABLE_ASAN_PACKAGING)
   # ASAN Package requires only asan component with libraries and license file
   set(CPACK_COMPONENTS_ALL asan)
+  set( COMP_TYPE "asan" )
 else()
   set(CPACK_COMPONENTS_ALL dev)
+  set( COMP_TYPE "dev" )
 endif()
 
 if(NOT CPack_CMake_INCLUDED)
   include(CPack)
 endif()
+
+configure_pkg( ${CPACK_PACKAGE_NAME} ${COMP_TYPE} ${CPACK_PACKAGE_VERSION} ${PKG_MAINTAINER_NM} ${PKG_MAINTAINER_EMAIL} )
 
 cpack_add_component(
   dev
