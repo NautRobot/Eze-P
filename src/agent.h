@@ -138,7 +138,7 @@ agent_t::read_agent_memory (agent_address_t address, T *ptr, size_t size) const
         throw memory_access_error_t (agent_address_space (),
                                      address + xfer_size);
     }
-  catch (const memory_access_error_t &e)
+  catch (const memory_error_t &e)
     {
       fatal_error ("process_t::read_agent_memory failed: %s", e.what ());
     }
@@ -156,7 +156,7 @@ agent_t::write_agent_memory (agent_address_t address, const T *ptr,
         throw memory_access_error_t (agent_address_space (),
                                      address + xfer_size);
     }
-  catch (const memory_access_error_t &e)
+  catch (const memory_error_t &e)
     {
       fatal_error ("process_t::write_agent_memory failed: %s", e.what ());
     }

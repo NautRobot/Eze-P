@@ -80,19 +80,37 @@ public:
   amd_dbgapi_status_t code () const noexcept { return m_code; }
 };
 
-class memory_access_error_t : public api_error_t
+class memory_error_t : public api_error_t
 {
 private:
   std::optional<
     std::pair<const address_space_t &, amd_dbgapi_segment_address_t>>
     m_address;
 
+protected:
+  memory_error_t (amd_dbgapi_status_t code,
+                  const address_space_t &address_space,
+                  amd_dbgapi_segment_address_t segment_address,
+                  std::string message);
+
+public:
+  const auto &address () const noexcept { return m_address; }
+};
+
+class memory_access_error_t : public memory_error_t
+{
 public:
   memory_access_error_t (const address_space_t &address_space,
                          amd_dbgapi_segment_address_t segment_address,
                          std::string message = {});
+};
 
-  const auto &address () const noexcept { return m_address; }
+class memory_unavailable_error_t : public memory_error_t
+{
+public:
+  memory_unavailable_error_t (const address_space_t &address_space,
+                              amd_dbgapi_segment_address_t segment_address,
+                              std::string message = {});
 };
 
 class fatal_error_t : public api_error_t

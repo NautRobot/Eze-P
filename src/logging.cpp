@@ -356,6 +356,7 @@ to_string (amd_dbgapi_status_t status)
       CASE (STATUS_ERROR_PROCESS_FROZEN);
       CASE (STATUS_ERROR_PROCESS_ALREADY_FROZEN);
       CASE (STATUS_ERROR_PROCESS_NOT_FROZEN);
+      CASE (STATUS_ERROR_MEMORY_UNAVAILABLE);
     }
   return to_string (make_hex (status));
 }
