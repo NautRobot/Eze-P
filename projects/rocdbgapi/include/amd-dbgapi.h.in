@@ -619,6 +619,12 @@ extern "C" {
  */
 #define AMD_DBGAPI_VERSION_0_77
 
+/**
+ * The function was introduced in version 0.77 of the interface and has the
+ * symbol version string of ``"@AMD_DBGAPI_NAME@_0.78"``.
+ */
+#define AMD_DBGAPI_VERSION_0_78
+
 /** @} */
 
 /** \ingroup callbacks_group
@@ -1038,6 +1044,10 @@ typedef enum
    * This operation is not allowed when the process is not frozen.
    */
   AMD_DBGAPI_STATUS_ERROR_PROCESS_NOT_FROZEN = -49,
+  /**
+   * The requested memory location is valid but currently unreachable.
+   */
+  AMD_DBGAPI_STATUS_ERROR_MEMORY_UNAVAILABLE = -50,
 } amd_dbgapi_status_t;
 
 /**
@@ -6511,13 +6521,17 @@ amd_dbgapi_status_t AMD_DBGAPI amd_dbgapi_address_is_in_address_class (
  * \retval ::AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS The input \p value_size was
  * greater than 0 and no bytes were successfully read.  The output \p
  * value_size is set to 0.  \p value is unaltered.
+ *
+ * \retval ::AMD_DBGAPI_STATUS_ERROR_MEMORY_UNAVAILABLE The address \p
+ * segment_address is a valid address in the address space \p address_space_id
+ * but is currently unavailable.  \p value_size and \p value are unaltered.
  */
 amd_dbgapi_status_t AMD_DBGAPI amd_dbgapi_read_memory (
     amd_dbgapi_process_id_t process_id, amd_dbgapi_wave_id_t wave_id,
     amd_dbgapi_lane_id_t lane_id,
     amd_dbgapi_address_space_id_t address_space_id,
     amd_dbgapi_segment_address_t segment_address,
-    amd_dbgapi_size_t *value_size, void *value) AMD_DBGAPI_VERSION_0_54;
+    amd_dbgapi_size_t *value_size, void *value) AMD_DBGAPI_VERSION_0_78;
 
 /**
  * Write memory.
@@ -6620,13 +6634,17 @@ amd_dbgapi_status_t AMD_DBGAPI amd_dbgapi_read_memory (
  * \retval ::AMD_DBGAPI_STATUS_ERROR_PROCESS_FROZEN This operation is not
  * permitted because the process is frozen.  The memory and \p value_size are
  * unaltered.
+ *
+ * \retval ::AMD_DBGAPI_STATUS_ERROR_MEMORY_UNAVAILABLE The address \p
+ * segment_address is a valid address in the address space \p address_space_id
+ * but is currently unavailable.  \p value_size and \p value are unaltered.
  */
 amd_dbgapi_status_t AMD_DBGAPI amd_dbgapi_write_memory (
     amd_dbgapi_process_id_t process_id, amd_dbgapi_wave_id_t wave_id,
     amd_dbgapi_lane_id_t lane_id,
     amd_dbgapi_address_space_id_t address_space_id,
     amd_dbgapi_segment_address_t segment_address,
-    amd_dbgapi_size_t *value_size, const void *value) AMD_DBGAPI_VERSION_0_76;
+    amd_dbgapi_size_t *value_size, const void *value) AMD_DBGAPI_VERSION_0_78;
 
 /**
  * Memory access precision.

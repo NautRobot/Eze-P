@@ -218,7 +218,7 @@ process_t::detach ()
           for (auto &&agent : range<agent_t> ())
             agent.memory_cache ().write_back ();
         }
-      catch (const memory_access_error_t &)
+      catch (const memory_error_t &)
         {
           /* If there is no real underlying process, writes can fail.  This
              can happen when trying to write back to a read-only core dump

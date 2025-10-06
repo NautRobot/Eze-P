@@ -208,6 +208,8 @@ public:
       throw process_exited_exception_t (id ());
     else if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
       throw memory_access_error_t (address_space_t::global (), address);
+    else if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_UNAVAILABLE)
+      throw memory_unavailable_error_t (address_space_t::global (), address);
     else if (status != AMD_DBGAPI_STATUS_SUCCESS)
       fatal_error ("xfer_global_memory_partial failed (%s)",
                    to_cstring (status));
@@ -447,7 +449,7 @@ process_t::read_global_memory (host_address_t address, T *ptr,
         throw memory_access_error_t (address_space_t::global (),
                                      address + xfer_size);
     }
-  catch (const memory_access_error_t &e)
+  catch (const memory_error_t &e)
     {
       fatal_error ("process_t::read_global_memory failed: %s", e.what ());
     }
@@ -465,7 +467,7 @@ process_t::write_global_memory (host_address_t address, const T *ptr,
         throw memory_access_error_t (address_space_t::global (),
                                      address + xfer_size);
     }
-  catch (const memory_access_error_t &e)
+  catch (const memory_error_t &e)
     {
       fatal_error ("process_t::write_global_memory failed: %s", e.what ());
     }

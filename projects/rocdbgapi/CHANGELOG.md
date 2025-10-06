@@ -3,6 +3,12 @@
 Full documentation for AMD Debugger API is available at
 [rocm.docs.amd.com/rocdbgapi](https://rocm.docs.amd.com/projects/ROCdbgapi/en/latest/index.html).
 
+## rocm-dbgapi-0.78 for ROCm-X
+
+### Changed
+- The `amd_dbgapi_read_memory` and `amd_dbgapi_write_memory` methods can return
+  the new `AMD_DBGAPI_STATUS_ERROR_MEMORY_UNAVAILABLE` error code.
+
 ## rocm-dbgapi-0.77.4 for ROCm-7.0
 ### Added
 - Support for the following architectures:

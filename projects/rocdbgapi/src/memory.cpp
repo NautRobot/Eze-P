@@ -570,7 +570,7 @@ memory_cache_t<AddressType>::prefetch (AddressType address,
       m_xfer_global_memory (cache_line_begin, &staging_buffer[0], nullptr,
                             cache_line_end - cache_line_begin);
     }
-  catch (const memory_access_error_t &)
+  catch (const memory_error_t &)
     {
       /* If a memory access error exception is raised while prefetching, simply
          drop the prefetch.  */
@@ -668,7 +668,7 @@ memory_cache_t<AddressType>::write_back (AddressType address,
         {
           /* The process has exited, simply discard the dirty cached bytes.  */
         }
-      catch (const memory_access_error_t &e)
+      catch (const memory_error_t &e)
         {
           /* If we see memory errors, continue to try to write back all dirty
              lines.  The first exception seen will be rethrown at the end of
@@ -1278,7 +1278,7 @@ xfer_memory (amd_dbgapi_process_id_t process_id, amd_dbgapi_wave_id_t wave_id,
           dbgapi_assert_not_reached ("unsupported address dependency");
         }
     }
-  catch (const memory_access_error_t &)
+  catch (const memory_error_t &)
     {
       /* The API specification requires the value_size to return 0 if a memory
          access error is reported.  */
@@ -1314,7 +1314,8 @@ amd_dbgapi_read_memory (amd_dbgapi_process_id_t process_id,
          AMD_DBGAPI_STATUS_ERROR_WAVE_NOT_STOPPED,
          AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT,
          AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT_COMPATIBILITY,
-         AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS);
+         AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS,
+         AMD_DBGAPI_STATUS_ERROR_MEMORY_UNAVAILABLE);
   TRACE_END (make_ref (param_out (value_size)),
              make_hex (make_ref (param_out (value), *value_size)));
 }
@@ -1346,7 +1347,8 @@ amd_dbgapi_write_memory (amd_dbgapi_process_id_t process_id,
          AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT,
          AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT_COMPATIBILITY,
          AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS,
-         AMD_DBGAPI_STATUS_ERROR_PROCESS_FROZEN);
+         AMD_DBGAPI_STATUS_ERROR_PROCESS_FROZEN,
+         AMD_DBGAPI_STATUS_ERROR_MEMORY_UNAVAILABLE);
   TRACE_END (make_ref (param_out (value_size)));
 }
 
