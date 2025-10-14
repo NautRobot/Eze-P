@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include "graph/topo.h"
 #include "enqueue.h"
 #include "rocm_smi/rocm_smi.h"
-
+#include <algorithm>
 // Use this param to experiment pipelining new data types besides bfloat16
 // Make sure you generate the device code with the new data type (i.e. in generate.py)
 RCCL_PARAM(PipelineAllDTypes, "PIPELINE_ALL_DATA_TYPES", 0);
@@ -106,6 +106,56 @@ ncclResult_t rcclGetAlgoProtoIndex(const char *envStr, const char* algoProtoStri
     }
   }
   return ncclInvalidUsage;
+}
+
+extern int64_t ncclParamMinNchannels();
+extern int64_t ncclParamMaxNchannels();
+RCCL_PARAM(ChannelTuningEnable, "CHANNEL_TUNING_ENABLE", 1);
+
+ncclResult_t rcclOverrideChannels(struct ncclComm* comm, ncclFunc_t coll, size_t nBytes, int& nc){
+  if(comm->nNodes < 2 || !rcclParamChannelTuningEnable()){
+    INFO(NCCL_TUNING, "RCCL Channel Tuning not applied");
+    return ncclSuccess;
+  }
+
+  auto tunableIndex = rcclGetTunableIndex(coll);
+  if(tunableIndex == RCCL_UNSUPPORTED_TUNABLE){
+    INFO(NCCL_TUNING, "tunableIndex:%i not supported", tunableIndex);
+    return ncclSuccess;
+  }
+
+  int minCTAs = comm->config.minCTAs;
+  int maxCTAs = comm->config.maxCTAs;
+  int minNChannels = ncclParamMinNchannels();
+  int maxNChannels = std::max(comm->nChannels, static_cast<int>(ncclParamMaxNchannels()));
+  size_t bytesPerRank = divUp(nBytes, comm->nRanks);
+
+  for(int channelCountIndex = 0; channelCountIndex < RCCL_CHANNELS_TUNABLE_ENTRIES; ++channelCountIndex){    
+    size_t minByteThreshold = comm->minMaxChannelThresholds[tunableIndex][channelCountIndex][0];
+    size_t maxByteThreshold = comm->minMaxChannelThresholds[tunableIndex][channelCountIndex][1];
+    INFO(NCCL_TUNING, "nBytes:%lu bytesPerRank:%lu minByteThreshold:%lu maxByteThreshold:%lu  NCCL_MIN_NCHANNELS:%i or NCCL_MAX_NCHANNELS:%i minCTAs:%i maxCTAs:%i", nBytes, bytesPerRank, minByteThreshold, maxByteThreshold, minNChannels, maxNChannels, minCTAs, maxCTAs);
+    if(minByteThreshold == CHAN_THRESHOLDS_UNDEFINED || maxByteThreshold == CHAN_THRESHOLDS_UNDEFINED) {
+      INFO(NCCL_TUNING, "RCCL tuning model does not define threshold for coll:%i and nbytes:%lu", coll, nBytes);
+      break; // Skip undefined thresholds
+    }
+    
+    if(bytesPerRank > minByteThreshold && bytesPerRank <= maxByteThreshold){
+      int channelCount = comm->minMaxChannelThresholds[tunableIndex][channelCountIndex][2];
+
+      //honor user's min/max channels defined through NCCL_MIN_NCHANNELS and NCCL_MAX_NCHANNELS
+      if(channelCount >= minNChannels && channelCount <= maxNChannels && channelCount >= minCTAs && channelCount <= maxCTAs){
+        nc = comm->minMaxChannelThresholds[tunableIndex][channelCountIndex][2];
+        INFO(NCCL_TUNING, "RCCL tuning model overrides nchannels to %i, channels may be decreased further due to MinTrafficPerchannel thresholds", channelCount);
+      }
+      else{
+        INFO(NCCL_TUNING, "RCCL tuning model cannot override nchannels to %i due to conflicting NCCL_MIN_NCHANNELS:%i or NCCL_MAX_NCHANNELS:%i minCTAs:%i maxCTAs:%i", channelCount, minNChannels, maxNChannels, minCTAs, maxCTAs);
+      }
+
+      break;
+    }
+
+  }
+  return ncclSuccess;
 }
 
 ncclResult_t rcclOverrideProtocol(const char* ncclProtoStr[], float table[][NCCL_NUM_PROTOCOLS], struct ncclTaskColl* info) {
