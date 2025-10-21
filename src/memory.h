@@ -107,6 +107,8 @@ public:
   std::optional<uint64_t> dwarf_value () const { return m_dwarf_value; }
   const std::string &name () const { return m_name; }
   kind_t kind () const { return m_kind; }
+  bool is_internal () const { return !dwarf_value ().has_value (); }
+  bool is_valid () const { return !is_internal (); }
 
   amd_dbgapi_size_t address_size () const { return m_address_size; }
   amd_dbgapi_segment_address_t null_address () const { return m_null_address; }

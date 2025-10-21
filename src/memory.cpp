@@ -889,10 +889,11 @@ amd_dbgapi_architecture_address_space_list (
     size_t pos = 0;
     space_ids[pos++] = AMD_DBGAPI_ADDRESS_SPACE_GLOBAL;
     for (auto &&address_space : architecture->range<address_space_t> ())
-      space_ids[pos++] = address_space.id ();
+      if (address_space.is_valid ())
+        space_ids[pos++] = address_space.id ();
 
-    dbgapi_assert (pos == count);
-    *address_space_count = count;
+    dbgapi_assert (pos <= count);
+    *address_space_count = pos;
     *address_spaces = space_ids.release ();
   }
   CATCH (AMD_DBGAPI_STATUS_ERROR_NOT_INITIALIZED,
