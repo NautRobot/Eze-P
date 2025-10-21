@@ -112,8 +112,15 @@ address_space_t::get_info (amd_dbgapi_address_space_info_t query,
       return;
 
     case AMD_DBGAPI_ADDRESS_SPACE_INFO_DWARF:
-      utils::get_info (value_size, value, dwarf_value ());
-      return;
+      {
+        /* Address spaces without a DWARF number are internal only,
+           and they should never be seen by the client.  We should
+           only get here from the public API, so it would be invalid
+           to have an internal-only object at this stage.  */
+        dbgapi_assert (dwarf_value ().has_value ());
+        utils::get_info (value_size, value, *dwarf_value ());
+        return;
+      }
     }
 
   throw api_error_t (AMD_DBGAPI_STATUS_ERROR_INVALID_ARGUMENT);
@@ -344,7 +351,7 @@ generic_address_space_t::generic_address_space_t (
   amd_dbgapi_address_space_id_t address_space_id, std::string name,
   std::vector<aperture_t> apertures)
   : address_space_t (address_space_id, kind_t::generic, std::move (name),
-                     DW_ASPACE_AMDGPU_generic, 64,
+                     { DW_ASPACE_AMDGPU_generic }, 64,
                      /* generic NULL is the same as global NULL  */
                      global ().null_address (),
                      AMD_DBGAPI_ADDRESS_SPACE_ACCESS_ALL),
