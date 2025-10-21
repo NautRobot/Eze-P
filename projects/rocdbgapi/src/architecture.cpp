@@ -2568,6 +2568,7 @@ gfx9_architecture_t::gfx9_architecture_t (elf_amdgpu_machine_t e_machine,
 {
   /* Create address spaces.  */
 
+  create<agent_address_space_t> ("agent");
   auto &local = create<local_address_space_t> ("local");
   auto &private_lane = create<private_swizzled_address_space_t> (
     "private_lane", /* interleave_size  */ sizeof (uint32_t));

@@ -136,7 +136,8 @@ public:
     local,
     global,
     private_swizzled,
-    private_unswizzled
+    private_unswizzled,
+    agent
   };
 
   static const address_space_t &global ();
@@ -366,6 +367,32 @@ public:
 
   std::pair<const address_space_t &, amd_dbgapi_segment_address_t>
   lower (amd_dbgapi_segment_address_t generic_address) const override;
+
+  std::pair<amd_dbgapi_segment_address_t, amd_dbgapi_size_t>
+  convert (const wave_t &wave, amd_dbgapi_lane_id_t lane_id,
+           const address_space_t &from_address_space,
+           amd_dbgapi_segment_address_t from_address) const override;
+};
+
+class agent_address_space_t : public address_space_t
+{
+public:
+  agent_address_space_t (amd_dbgapi_address_space_id_t address_space_id,
+                         std::string name)
+    : address_space_t (address_space_id, kind_t::agent, std::move (name),
+                       std::nullopt, 64, 0x0000000000000000,
+                       AMD_DBGAPI_ADDRESS_SPACE_ACCESS_ALL)
+  {
+  }
+
+  amd_dbgapi_segment_address_dependency_t address_dependency (
+    amd_dbgapi_segment_address_t /* address  */) const override
+  {
+    return AMD_DBGAPI_SEGMENT_ADDRESS_DEPENDENCE_AGENT;
+  }
+
+  std::pair<const address_space_t &, amd_dbgapi_segment_address_t>
+  lower (amd_dbgapi_segment_address_t local_address) const override;
 
   std::pair<amd_dbgapi_segment_address_t, amd_dbgapi_size_t>
   convert (const wave_t &wave, amd_dbgapi_lane_id_t lane_id,

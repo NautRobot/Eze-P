@@ -507,7 +507,8 @@ public:
   }
 
   /* Find an object for which the unary predicate f returns true.  */
-  template <typename Functor> const auto *find_if (Functor predicate) const
+  template <typename Functor>
+  const auto *find_if (Functor predicate, bool all = false) const
   {
     using object_type = std::decay_t<utils::first_argument_of_t<Functor>>;
 
@@ -516,10 +517,11 @@ public:
         return &address_space_t::global ();
 
     return std::get<handle_object_set_t<object_type>> (m_handle_object_sets)
-      .find_if (predicate);
+      .find_if (predicate, all);
   }
   /* Find an object for which the unary predicate f returns true.  */
-  template <typename Functor> auto *find_if (Functor predicate)
+  template <typename Functor>
+  auto *find_if (Functor predicate, bool all = false)
   {
     using object_type = std::decay_t<utils::first_argument_of_t<Functor>>;
 
@@ -527,7 +529,7 @@ public:
     static_assert (!std::is_same_v<object_type, address_space_t>);
 
     return std::get<handle_object_set_t<object_type>> (m_handle_object_sets)
-      .find_if (predicate);
+      .find_if (predicate, all);
   }
 };
 
