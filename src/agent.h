@@ -122,6 +122,8 @@ public:
   const architecture_t *architecture () const { return m_architecture; }
 
   process_t &process () const { return m_process; }
+
+  const address_space_t &agent_address_space () const;
 };
 
 template <typename T>
@@ -133,9 +135,8 @@ agent_t::read_agent_memory (agent_address_t address, T *ptr, size_t size) const
 
       if (size_t xfer_size = read_agent_memory_partial (address, ptr, size);
           xfer_size != size)
-        throw memory_access_error_t (
-          address_space_t::global () /* FIXME: agent address space */,
-          address + xfer_size);
+        throw memory_access_error_t (agent_address_space (),
+                                     address + xfer_size);
     }
   catch (const memory_access_error_t &e)
     {
@@ -152,9 +153,8 @@ agent_t::write_agent_memory (agent_address_t address, const T *ptr,
     {
       if (size_t xfer_size = write_agent_memory_partial (address, ptr, size);
           xfer_size != size)
-        throw memory_access_error_t (
-          address_space_t::global () /* FIXME: agent address space */,
-          address + xfer_size);
+        throw memory_access_error_t (agent_address_space (),
+                                     address + xfer_size);
     }
   catch (const memory_access_error_t &e)
     {

@@ -462,6 +462,27 @@ generic_address_space_t::convert (
            lowered_address_space.last_address () - lowered_address + 1 };
 }
 
+std::pair<const address_space_t &, amd_dbgapi_segment_address_t>
+agent_address_space_t::lower (amd_dbgapi_segment_address_t agent_address) const
+{
+  return { *this, agent_address };
+}
+
+std::pair<amd_dbgapi_segment_address_t, amd_dbgapi_size_t>
+agent_address_space_t::convert (
+  const wave_t & /* wave  */, amd_dbgapi_lane_id_t /* lane_id  */,
+  const address_space_t &from_address_space,
+  amd_dbgapi_segment_address_t from_address) const
+{
+  auto [lowered_address_space, lowered_address]
+    = from_address_space.lower (from_address);
+
+  if (lowered_address_space.kind () == kind_t::agent)
+    return { lowered_address, last_address () - lowered_address + 1 };
+
+  throw api_error_t (AMD_DBGAPI_STATUS_ERROR_INVALID_ADDRESS_SPACE_CONVERSION);
+}
+
 template <typename AddressType>
 void
 memory_cache_t<AddressType>::fetch_cache_line (cache_line_t &cache_line,

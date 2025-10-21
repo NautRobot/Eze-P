@@ -59,7 +59,7 @@ agent_t::agent_t (amd_dbgapi_agent_id_t agent_id, process_t &process,
         if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
           throw process_exited_exception_t (m_process.id ());
         else if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
-          throw memory_access_error_t (address_space_t::global (), address);
+          throw memory_access_error_t (agent_address_space (), address);
         else if (status != AMD_DBGAPI_STATUS_SUCCESS)
           fatal_error ("xfer_global_memory_partial failed (%s)",
                        to_cstring (status));
@@ -268,6 +268,17 @@ agent_t::remove_watchpoint (const watchpoint_t &watchpoint)
     fatal_error ("failed to remove watchpoint (%s)", to_cstring (status));
 
   log_info ("%s: clear address_watch%d", to_cstring (id ()), os_watch_id);
+}
+
+const address_space_t &
+agent_t::agent_address_space () const
+{
+  const address_space_t *agent_address_space = this->architecture ()->find_if (
+    [] (const address_space_t &aspace)
+    { return aspace.kind () == address_space_t::kind_t::agent; },
+    true);
+  dbgapi_assert (agent_address_space != nullptr);
+  return *agent_address_space;
 }
 
 } /* namespace amd::dbgapi */
