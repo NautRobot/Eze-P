@@ -156,6 +156,17 @@ address_space_t::global ()
   return global_address_space;
 }
 
+const address_space_t &
+address_space_t::host ()
+{
+  static const host_address_space_t host_address_space (
+    { static_cast<std::underlying_type_t<reserved_ids_t>> (
+      reserved_ids_t::host) },
+    "host");
+
+  return host_address_space;
+}
+
 std::pair<const address_space_t &, amd_dbgapi_segment_address_t>
 global_address_space_t::lower (
   amd_dbgapi_segment_address_t global_address) const

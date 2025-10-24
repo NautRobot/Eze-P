@@ -547,6 +547,11 @@ public:
     = 0;
 
   virtual amd_dbgapi_status_t
+  xfer_host_memory_partial (host_address_t address, void *read,
+                            const void *write, size_t *size) const
+    = 0;
+
+  virtual amd_dbgapi_status_t
   xfer_agent_memory_partial (os_agent_id_t agent, agent_address_t address,
                              void *read, const void *write, size_t *size) const
     = 0;
@@ -723,6 +728,17 @@ public:
   xfer_global_memory_partial (global_address_t /* address  */, void *read,
                               const void *write,
                               size_t * /* size  */) const override
+  {
+    dbgapi_assert (!read != !write && "either read or write buffer");
+    /* Suppress warnings in release builds.  */
+    [] (auto &&...) {}(read, write);
+    return AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS;
+  }
+
+  amd_dbgapi_status_t
+  xfer_host_memory_partial (host_address_t /* address  */, void *read,
+                            const void *write,
+                            size_t * /* size  */) const override
   {
     dbgapi_assert (!read != !write && "either read or write buffer");
     /* Suppress warnings in release builds.  */
