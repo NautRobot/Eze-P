@@ -57,7 +57,7 @@ agent_t::agent_t (amd_dbgapi_agent_id_t agent_id, process_t &process,
                                                                write, &size);
 
         if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
-          throw process_exited_exception_t (m_process);
+          throw process_exited_exception_t (m_process.id ());
         else if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
           throw memory_access_error_t (address_space_t::global (), address);
         else if (status != AMD_DBGAPI_STATUS_SUCCESS)
