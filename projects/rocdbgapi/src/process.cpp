@@ -63,27 +63,6 @@ handle_object_set_t<process_t> process_t::s_process_map;
 process_t::process_t (amd_dbgapi_process_id_t process_id,
                       amd_dbgapi_client_process_id_t client_process_id)
   : handle_object (process_id), m_client_process_id (client_process_id),
-    m_memory_cache (
-      [this] (host_address_t address, void *read, const void *write,
-              size_t size)
-      {
-        amd_dbgapi_status_t status = os_driver ().xfer_global_memory_partial (
-          global_address_t {address}, read, write, &size);
-
-        if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
-          status = detail::process_callbacks.xfer_global_memory (
-            m_client_process_id, address, &size, read, write);
-
-        if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
-          throw process_exited_exception_t (*this);
-        else if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
-          throw memory_access_error_t (address_space_t::global (), address);
-        else if (status != AMD_DBGAPI_STATUS_SUCCESS)
-          fatal_error ("xfer_global_memory_partial failed (%s)",
-                       to_cstring (status));
-
-        return size;
-      }),
     m_dummy_agent (AMD_DBGAPI_AGENT_NONE, *this, nullptr, {})
 {
   /* Create the notifier pipe.  */
@@ -129,10 +108,6 @@ process_t::process_t (amd_dbgapi_process_id_t process_id,
 
 process_t::~process_t ()
 {
-  /* Drop all active cache lines.  */
-  m_memory_cache.write_back ();
-  m_memory_cache.discard ();
-
   /* Destruct the os_driver before closing the notifier.  */
   m_os_driver.reset ();
   client_notifier ().close ();
@@ -240,7 +215,6 @@ process_t::detach ()
          waves' context save area memory.  */
       try
         {
-          memory_cache ().write_back ();
           for (auto &&agent : range<agent_t> ())
             agent.memory_cache ().write_back ();
         }
@@ -309,8 +283,8 @@ void
 process_t::read_string (host_address_t address, std::string *string,
                         size_t size) const
 {
-  constexpr size_t chunk_size = decltype (m_memory_cache)::cache_line_size;
-  static_assert (!(chunk_size & (chunk_size - 1)), "must be a power of 2");
+  constexpr size_t chunk_size
+    = memory_cache_t<host_address_t>::cache_line_size;
 
   dbgapi_assert (string && "invalid argument");
 
@@ -1670,7 +1644,6 @@ process_t::freeze ()
   /* The freeze operation is used before creating a core dump of the current
      process.  Ensure that any modification done to memory so far is flushed
      to the inferior's memory so it can be captured in the core dump.  */
-  memory_cache ().write_back ();
   for (auto &&agent : range<agent_t> ())
     agent.memory_cache ().write_back ();
 

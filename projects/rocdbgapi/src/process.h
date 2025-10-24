@@ -102,7 +102,6 @@ private:
   };
   rocr_rdebug_version_t m_rocr_debug_version = ROCR_RDEBUG_VERSION_INVALID;
 
-  mutable memory_cache_t<host_address_t> m_memory_cache;
   std::unique_ptr<os_driver_t> m_os_driver{};
   flag_t m_flags{};
 
@@ -174,7 +173,6 @@ public:
      processes left in the s_process_map. */
   static void reset_all_ids ();
 
-  auto &memory_cache () const { return m_memory_cache; }
   os_driver_t &os_driver () const { return *m_os_driver; }
 
   inline void set_flag (flag_t flags);
@@ -185,23 +183,36 @@ public:
                                                    void *buffer,
                                                    size_t size) const
   {
-    return m_memory_cache.read_global_memory (address, buffer, size);
+    return xfer_global_memory (address, buffer, nullptr, size);
   }
 
   [[nodiscard]] size_t write_global_memory_partial (host_address_t address,
                                                     const void *buffer,
                                                     size_t size) const
   {
-    return m_memory_cache.write_global_memory (address, buffer, size);
+    return xfer_global_memory (address, nullptr, buffer, size);
   }
 
-  [[nodiscard]] size_t xfer_global_memory (host_address_t global_address,
-                                           void *read, const void *write,
+  [[nodiscard]] size_t xfer_global_memory (host_address_t address, void *read,
+                                           const void *write,
                                            size_t size) const
   {
-    return read != nullptr
-             ? read_global_memory_partial (global_address, read, size)
-             : write_global_memory_partial (global_address, write, size);
+    amd_dbgapi_status_t status = os_driver ().xfer_global_memory_partial (
+      global_address_t{ address }, read, write, &size);
+
+    if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
+      status = detail::process_callbacks.xfer_global_memory (
+        m_client_process_id, address, &size, read, write);
+
+    if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
+      throw process_exited_exception_t (id ());
+    else if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
+      throw memory_access_error_t (address_space_t::global (), address);
+    else if (status != AMD_DBGAPI_STATUS_SUCCESS)
+      fatal_error ("xfer_global_memory_partial failed (%s)",
+                   to_cstring (status));
+
+    return size;
   }
 
   template <typename T>
