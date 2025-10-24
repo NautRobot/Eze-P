@@ -299,7 +299,7 @@ process_t::read_string (host_address_t address, std::string *string,
 
       size_t request_size = chunk_size - (address & (chunk_size - 1));
       size_t xfer_size
-        = read_global_memory_partial (address, staging_buffer, request_size);
+        = read_host_memory_partial (address, staging_buffer, request_size);
 
       size_t length = std::min (size, xfer_size);
 
@@ -1268,8 +1268,8 @@ process_t::update_code_objects ()
   try
     {
       decltype (r_debug::r_state) state;
-      read_global_memory (m_runtime_info.r_debug + offsetof (r_debug, r_state),
-                          &state);
+      read_host_memory (m_runtime_info.r_debug + offsetof (r_debug, r_state),
+                        &state);
 
       /* If the state is not RT_CONSISTENT then that indicates there is a
          thread actively updating the code object list.  We cannot read the
@@ -1281,18 +1281,18 @@ process_t::update_code_objects ()
         return;
 
       host_address_t link_map_address;
-      read_global_memory (m_runtime_info.r_debug + offsetof (r_debug, r_map),
-                          &link_map_address);
+      read_host_memory (m_runtime_info.r_debug + offsetof (r_debug, r_map),
+                        &link_map_address);
 
       while (link_map_address != 0)
         {
           global_address_t load_address;
-          read_global_memory (link_map_address + offsetof (link_map, l_addr),
-                              &load_address);
+          read_host_memory (link_map_address + offsetof (link_map, l_addr),
+                            &load_address);
 
           host_address_t l_name_address;
-          read_global_memory (link_map_address + offsetof (link_map, l_name),
-                              &l_name_address);
+          read_host_memory (link_map_address + offsetof (link_map, l_name),
+                            &l_name_address);
 
           std::string uri;
           read_string (l_name_address, &uri, -1);
@@ -1313,8 +1313,8 @@ process_t::update_code_objects ()
 
           code_object->set_mark (code_object_mark);
 
-          read_global_memory (link_map_address + offsetof (link_map, l_next),
-                              &link_map_address);
+          read_host_memory (link_map_address + offsetof (link_map, l_next),
+                            &link_map_address);
         }
     }
   catch (const process_exited_exception_t &)
@@ -1359,7 +1359,7 @@ process_t::runtime_enable (os_runtime_info_t runtime_info)
     /* Check the r_version.  It should not be incompatible with any
        architecture found in the system.  */
     rocr_rdebug_version_t r_version;
-    read_global_memory (
+    read_host_memory (
       runtime_info.r_debug + offsetof (struct r_debug, r_version), &r_version);
 
     m_rocr_debug_version = r_version;
@@ -1509,8 +1509,8 @@ process_t::runtime_enable (os_runtime_info_t runtime_info)
   };
 
   host_address_t r_brk_address;
-  read_global_memory (m_runtime_info.r_debug + offsetof (r_debug, r_brk),
-                      &r_brk_address);
+  read_host_memory (m_runtime_info.r_debug + offsetof (r_debug, r_brk),
+                    &r_brk_address);
 
   if (!create<breakpoint_t> (*this, r_brk_address, r_brk_callback)
          .is_inserted ())

@@ -205,7 +205,7 @@ aql_queue_t::aql_dispatch_t::aql_dispatch_t (
       + (os_queue_packet_id * aql_packet_size) % queue.size ();
 
   /* Read the dispatch packet and kernel descriptor.  */
-  process ().read_global_memory (packet_address, &m_packet);
+  process ().read_host_memory (packet_address, &m_packet);
 
   m_kernel_descriptor = architecture ().make_kernel_descriptor (
     process (), m_packet.kernel_object);
@@ -536,13 +536,13 @@ aql_queue_t::queue_state_changed ()
          it.  We cannot cache this value as the runtime may change the
          allocation dynamically.  */
 
-      process ().read_global_memory (
+      process ().read_host_memory (
         m_os_queue_info.read_pointer_address
           + offsetof (amd_queue_t, scratch_backing_memory_location)
           - offsetof (amd_queue_t, read_dispatch_id),
         &m_scratch_backing_memory_address);
 
-      process ().read_global_memory (
+      process ().read_host_memory (
         m_os_queue_info.read_pointer_address
           + offsetof (amd_queue_t, compute_tmpring_size)
           - offsetof (amd_queue_t, read_dispatch_id),
@@ -550,11 +550,11 @@ aql_queue_t::queue_state_changed ()
 
       /* Read the queue's write_packet_id and read_packet_id.  */
 
-      process ().read_global_memory (m_os_queue_info.write_pointer_address,
-                                     &m_write_packet_id.emplace ());
+      process ().read_host_memory (m_os_queue_info.write_pointer_address,
+                                   &m_write_packet_id.emplace ());
 
-      process ().read_global_memory (m_os_queue_info.read_pointer_address,
-                                     &m_read_packet_id.emplace ());
+      process ().read_host_memory (m_os_queue_info.read_pointer_address,
+                                   &m_read_packet_id.emplace ());
 
       /* Iterate the control stack and update/create waves that were saved in
          the last context wave save.  Waves that are no longer present will be
@@ -883,12 +883,12 @@ aql_queue_t::active_packets_info (
   dbgapi_assert (is_suspended ());
 
   amd_dbgapi_os_queue_packet_id_t read_packet_id;
-  process ().read_global_memory (m_os_queue_info.read_pointer_address,
-                                 &read_packet_id);
+  process ().read_host_memory (m_os_queue_info.read_pointer_address,
+                               &read_packet_id);
 
   amd_dbgapi_os_queue_packet_id_t write_packet_id;
-  process ().read_global_memory (m_os_queue_info.write_pointer_address,
-                                 &write_packet_id);
+  process ().read_host_memory (m_os_queue_info.write_pointer_address,
+                               &write_packet_id);
 
   if (read_packet_id > write_packet_id)
     fatal_error ("corrupted read/write packet ids");
@@ -927,17 +927,17 @@ aql_queue_t::active_packets_bytes (
     = address () + (write_packet_id & id_mask) * aql_packet_size;
 
   if (read_packet_ptr < write_packet_ptr)
-    process ().read_global_memory (read_packet_ptr, memory, packets_byte_size);
+    process ().read_host_memory (read_packet_ptr, memory, packets_byte_size);
 
   else if (read_packet_ptr > write_packet_ptr)
     {
       size_t first_part_size = address () + size () - read_packet_ptr;
 
-      process ().read_global_memory (read_packet_ptr, memory, first_part_size);
+      process ().read_host_memory (read_packet_ptr, memory, first_part_size);
 
       size_t second_part_size = write_packet_ptr - address ();
 
-      process ().read_global_memory (
+      process ().read_host_memory (
         address (), static_cast<char *> (memory) + first_part_size,
         second_part_size);
     }

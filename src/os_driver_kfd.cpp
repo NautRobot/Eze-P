@@ -490,6 +490,16 @@ protected:
                       os_exception_mask_t exceptions_cleared) const
     = 0;
 
+  amd_dbgapi_status_t xfer_host_memory_partial (host_address_t address,
+                                                void *read, const void *write,
+                                                size_t *size) const override
+  {
+    /* We have a unified address space, so just use the global memory access
+       to handle agent memory.  */
+    return xfer_global_memory_partial (global_address_t{ address }, read,
+                                       write, size);
+  }
+
   amd_dbgapi_status_t xfer_agent_memory_partial (os_agent_id_t /* agent  */,
                                                  agent_address_t address,
                                                  void *read, const void *write,

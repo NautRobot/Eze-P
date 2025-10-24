@@ -137,10 +137,19 @@ public:
     global,
     private_swizzled,
     private_unswizzled,
-    agent
+    agent,
+    host
+  };
+
+  enum class reserved_ids_t
+  {
+    global = AMD_DBGAPI_ADDRESS_SPACE_GLOBAL.handle,
+    host,
+    next_non_reserved_id
   };
 
   static const address_space_t &global ();
+  static const address_space_t &host ();
 
 private:
   kind_t const m_kind;
@@ -400,12 +409,53 @@ public:
            amd_dbgapi_segment_address_t from_address) const override;
 };
 
-/* The amd_dbgapi_address_space_id_t{1} is reserved for the distinguished
-   global address space id, to we need to start numbering at 2.  */
+class host_address_space_t : public address_space_t
+{
+public:
+  host_address_space_t (amd_dbgapi_address_space_id_t address_space_id,
+                        std::string name)
+    : address_space_t (address_space_id, kind_t::host, std::move (name),
+                       std::nullopt, 64, 0x0000000000000000,
+                       AMD_DBGAPI_ADDRESS_SPACE_ACCESS_ALL)
+  {
+  }
+
+  amd_dbgapi_segment_address_dependency_t address_dependency (
+    amd_dbgapi_segment_address_t /* address  */) const override
+  {
+    return AMD_DBGAPI_SEGMENT_ADDRESS_DEPENDENCE_AGENT;
+  }
+
+  std::pair<const address_space_t &, amd_dbgapi_segment_address_t>
+  lower (amd_dbgapi_segment_address_t host_address) const override
+  {
+    return { *this, host_address };
+  }
+
+  std::pair<amd_dbgapi_segment_address_t, amd_dbgapi_size_t>
+  convert (const wave_t & /* wave  */, amd_dbgapi_lane_id_t /* lane_id  */,
+           const address_space_t &from_address_space,
+           amd_dbgapi_segment_address_t from_address) const override
+  {
+    auto [lowered_address_space, lowered_address]
+      = from_address_space.lower (from_address);
+
+    if (lowered_address_space.kind () == kind_t::host)
+      return { lowered_address, last_address () - lowered_address + 1 };
+
+    throw api_error_t (
+      AMD_DBGAPI_STATUS_ERROR_INVALID_ADDRESS_SPACE_CONVERSION);
+  }
+};
+
+/* Some IDs are reserved for static address spaces (global, host).  Make sure
+   to start the numbering at the first non-reserved address space ID.  */
 template <>
 struct monotonic_counter_start_t<amd_dbgapi_address_space_id_t>
   : public std::integral_constant<
-      decltype (amd_dbgapi_address_space_id_t::handle), 2>
+      decltype (amd_dbgapi_address_space_id_t::handle),
+      static_cast<std::underlying_type_t<address_space_t::reserved_ids_t>> (
+        address_space_t::reserved_ids_t::next_non_reserved_id)>
 {
 };
 

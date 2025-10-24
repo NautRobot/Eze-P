@@ -179,22 +179,36 @@ public:
   inline void clear_flag (flag_t flags);
   inline bool is_flag_set (flag_t flags) const;
 
-  [[nodiscard]] size_t read_global_memory_partial (host_address_t address,
+  [[nodiscard]] size_t read_global_memory_partial (global_address_t address,
                                                    void *buffer,
                                                    size_t size) const
   {
     return xfer_global_memory (address, buffer, nullptr, size);
   }
 
-  [[nodiscard]] size_t write_global_memory_partial (host_address_t address,
+  [[nodiscard]] size_t write_global_memory_partial (global_address_t address,
                                                     const void *buffer,
                                                     size_t size) const
   {
     return xfer_global_memory (address, nullptr, buffer, size);
   }
 
-  [[nodiscard]] size_t xfer_global_memory (host_address_t address, void *read,
-                                           const void *write,
+  [[nodiscard]] size_t read_host_memory_partial (host_address_t address,
+                                                 void *buffer,
+                                                 size_t size) const
+  {
+    return xfer_host_memory (address, buffer, nullptr, size);
+  }
+
+  [[nodiscard]] size_t write_host_memory_partial (host_address_t address,
+                                                  const void *buffer,
+                                                  size_t size) const
+  {
+    return xfer_host_memory (address, nullptr, buffer, size);
+  }
+
+  [[nodiscard]] size_t xfer_global_memory (global_address_t address,
+                                           void *read, const void *write,
                                            size_t size) const
   {
     amd_dbgapi_status_t status = os_driver ().xfer_global_memory_partial (
@@ -217,9 +231,34 @@ public:
     return size;
   }
 
+  [[nodiscard]] size_t xfer_host_memory (host_address_t address, void *read,
+                                         const void *write, size_t size) const
+  {
+    amd_dbgapi_status_t status = os_driver ().xfer_host_memory_partial (
+      address, read, write, &size);
+
+    if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
+      status = detail::process_callbacks.xfer_global_memory (
+        m_client_process_id, address, &size, read, write);
+
+    if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
+      throw process_exited_exception_t (id ());
+    else if (status == AMD_DBGAPI_STATUS_ERROR_MEMORY_ACCESS)
+      throw memory_access_error_t (address_space_t::global (), address);
+    else if (status != AMD_DBGAPI_STATUS_SUCCESS)
+      fatal_error ("xfer_global_memory_partial failed (%s)",
+                   to_cstring (status));
+
+    return size;
+  }
+
   template <typename T>
-  void read_global_memory (host_address_t address, T *ptr,
+  void read_global_memory (global_address_t address, T *ptr,
                            size_t size = sizeof (T)) const;
+
+  template <typename T>
+  void read_host_memory (host_address_t address, T *ptr,
+                         size_t size = sizeof (T)) const;
   template <typename T>
   void write_global_memory (host_address_t address, const T *ptr,
                             size_t size = sizeof (T)) const;
@@ -439,7 +478,7 @@ public:
 
 template <typename T>
 void
-process_t::read_global_memory (host_address_t address, T *ptr,
+process_t::read_global_memory (global_address_t address, T *ptr,
                                size_t size) const
 {
   try
@@ -452,6 +491,23 @@ process_t::read_global_memory (host_address_t address, T *ptr,
   catch (const memory_error_t &e)
     {
       fatal_error ("process_t::read_global_memory failed: %s", e.what ());
+    }
+}
+
+template <typename T>
+void
+process_t::read_host_memory (host_address_t address, T *ptr, size_t size) const
+{
+  try
+    {
+      if (size_t xfer_size = read_host_memory_partial (address, ptr, size);
+          xfer_size != size)
+        throw memory_access_error_t (address_space_t::host (),
+                                     address + xfer_size);
+    }
+  catch (const memory_access_error_t &e)
+    {
+      fatal_error ("process_t::read_host_memory failed: %s", e.what ());
     }
 }
 
