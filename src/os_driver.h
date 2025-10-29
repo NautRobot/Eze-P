@@ -452,7 +452,8 @@ public:
   create_driver (std::optional<amd_dbgapi_os_process_id_t> os_pid);
 
   static std::unique_ptr<os_driver_t>
-  create_driver (const amd_dbgapi_core_state_data_t &core_state);
+  create_driver (amd_dbgapi_client_process_id_t client_process_id,
+                 const amd_dbgapi_core_state_data_t &core_state);
 
   virtual bool is_valid () const = 0;
 

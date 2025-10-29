@@ -95,7 +95,8 @@ process_t::process_t (amd_dbgapi_process_id_t process_id,
         = client_process_get_info (AMD_DBGAPI_CLIENT_PROCESS_INFO_CORE_STATE,
                                    sizeof (core_state), &core_state);
       if (status == AMD_DBGAPI_STATUS_SUCCESS)
-        m_os_driver = os_driver_t::create_driver (core_state);
+        m_os_driver
+          = os_driver_t::create_driver (m_client_process_id, core_state);
       else
         m_os_driver = os_driver_t::create_driver (std::nullopt);
     }
