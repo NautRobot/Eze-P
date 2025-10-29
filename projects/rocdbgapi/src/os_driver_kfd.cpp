@@ -783,7 +783,8 @@ struct kfd_note_header_t
 class kfd_core_driver_t final : public kfd_driver_base_t
 {
 public:
-  kfd_core_driver_t (const amd_dbgapi_core_state_data_t &core_state);
+  kfd_core_driver_t (amd_dbgapi_client_process_id_t client_process_id,
+                     const amd_dbgapi_core_state_data_t &core_state);
 
   bool is_valid () const override { return m_state != nullptr; }
 
@@ -799,6 +800,11 @@ public:
   }
 
   bool is_debug_enabled () const override;
+
+  amd_dbgapi_status_t xfer_global_memory_partial (global_address_t address,
+                                                  void *read,
+                                                  const void *write,
+                                                  size_t *size) const override;
 
 protected:
   virtual amd_dbgapi_status_t
@@ -822,6 +828,7 @@ private:
   };
 
   std::unique_ptr<kfd_simulated_state_t> m_state;
+  amd_dbgapi_client_process_id_t const m_client_process_id;
 };
 
 kfd_driver_base_t::version_t
@@ -875,8 +882,9 @@ private:
 };
 
 kfd_core_driver_t::kfd_core_driver_t (
+  amd_dbgapi_client_process_id_t client_process_id,
   const amd_dbgapi_core_state_data_t &core_state)
-  : kfd_driver_base_t (std::nullopt)
+  : kfd_driver_base_t (std::nullopt), m_client_process_id{ client_process_id }
 {
   if (core_state.endianness
       != (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ? AMD_DBGAPI_ENDIAN_LITTLE
@@ -926,6 +934,15 @@ bool
 kfd_core_driver_t::is_debug_enabled () const
 {
   return m_state->runtime_info.runtime_state == os_runtime_state_t::enabled;
+}
+
+amd_dbgapi_status_t
+kfd_core_driver_t::xfer_global_memory_partial (global_address_t address,
+                                               void *read, const void *write,
+                                               size_t *size) const
+{
+  return detail::process_callbacks.xfer_global_memory (
+    m_client_process_id, address, size, read, write);
 }
 
 amd_dbgapi_status_t
@@ -1962,7 +1979,8 @@ os_driver_t::create_driver (std::optional<amd_dbgapi_os_process_id_t> os_pid)
 }
 
 std::unique_ptr<os_driver_t>
-os_driver_t::create_driver (const amd_dbgapi_core_state_data_t &core_state)
+os_driver_t::create_driver (amd_dbgapi_client_process_id_t client_process_id,
+                            const amd_dbgapi_core_state_data_t &core_state)
 {
   std::unique_ptr<os_driver_t> os_driver;
 
@@ -1973,7 +1991,8 @@ os_driver_t::create_driver (const amd_dbgapi_core_state_data_t &core_state)
   switch (note_version)
     {
     case amdgpu_core_note_version_t::kfd_note:
-      os_driver = std::make_unique<kfd_core_driver_t> (core_state);
+      os_driver
+        = std::make_unique<kfd_core_driver_t> (client_process_id, core_state);
       break;
     default:
       warning ("Cannot open core state version %" PRIu64,
