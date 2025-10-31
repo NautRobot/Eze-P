@@ -29,6 +29,8 @@
 
 #include "windows/kmddbg.h"
 
+#include <hsa/amd_hsa_queue.h>
+
 #include <algorithm>
 #include <cinttypes>
 #include <cstdlib>
@@ -1827,19 +1829,66 @@ kmd_driver_t::queue_snapshot (os_queue_snapshot_entry_t *snapshots,
       os_queue_snapshot_entry_t &queue = snapshots[queue_idx];
       queue.queue_id = make_queue_id (agent_id, snap.queueId);
       queue.gpu_id = agent_id;
-      queue.queue_type = os_queue_type (snap.queueType);
-      queue.exception_status = exceptions;
-      queue.ring_base_address
-        = static_cast<host_address_t> (snap.ringBufferAddress);
-      queue.write_pointer_address
-        = static_cast<host_address_t> (snap.writePtrAddress);
-      queue.read_pointer_address
-        = static_cast<host_address_t> (snap.readPtrAddress);
+      queue.exception_status = os_exception_mask (snap.queueExceptionMask);
       queue.ctx_save_restore_address
         = static_cast<agent_address_t> (snap.ctxSaveRestoreAddress);
       queue.ctx_save_restore_area_size
         = static_cast<amd_dbgapi_size_t> (snap.ctxSaveRestoreSize);
-      queue.ring_size = static_cast<amd_dbgapi_size_t> (snap.ringSize);
+
+      if (snap.aqlPacketList != 0)
+        {
+          auto read_host_memory = [this] (host_address_t address, auto *val)
+          {
+            size_t requested_size = sizeof (*val);
+            amd_dbgapi_status_t status = this->xfer_host_memory_partial (
+              address, static_cast<void *> (val), nullptr, &requested_size);
+
+            if (status != AMD_DBGAPI_STATUS_SUCCESS
+                || requested_size != sizeof (*val))
+              fatal_error ("read_host_memory: failed to read %s",
+                           to_string (address).c_str ());
+          };
+
+          // Software emulated AQL queue:
+          queue.queue_type = os_queue_type_t::compute_aql;
+
+          host_address_t read_pointer_address
+            = static_cast<host_address_t> (snap.aqlPacketList);
+
+          queue.read_pointer_address = read_pointer_address;
+          queue.write_pointer_address
+            = queue.read_pointer_address
+              + offsetof (amd_queue_t, write_dispatch_id)
+              - offsetof (amd_queue_t, read_dispatch_id);
+
+          uint32_t hsa_queue_base_offset;
+          read_host_memory (
+            read_pointer_address
+              + offsetof (amd_queue_t, read_dispatch_id_field_base_byte_offset)
+              - offsetof (amd_queue_t, read_dispatch_id),
+            &hsa_queue_base_offset);
+
+          hsa_queue_t hsa_queue;
+          read_host_memory (read_pointer_address - hsa_queue_base_offset,
+                            &hsa_queue);
+
+          queue.ring_base_address
+            = reinterpret_cast<amd_dbgapi_global_address_t> (
+              hsa_queue.base_address);
+          queue.ring_size
+            = static_cast<amd_dbgapi_size_t> (hsa_queue.size << 6);
+        }
+      else
+        {
+          queue.queue_type = os_queue_type (snap.queueType);
+          queue.ring_base_address = static_cast<host_address_t> (
+            snap.ringBufferAddress);
+          queue.write_pointer_address
+            = static_cast<host_address_t> (snap.writePtrAddress);
+          queue.read_pointer_address
+            = static_cast<host_address_t> (snap.readPtrAddress);
+          queue.ring_size = static_cast<amd_dbgapi_size_t> (snap.ringSize);
+        }
     }
 
   return AMD_DBGAPI_STATUS_SUCCESS;
