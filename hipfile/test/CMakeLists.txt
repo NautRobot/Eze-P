@@ -51,6 +51,9 @@ ais_add_executable(
     SRCS ${UNIT_TEST_SOURCE_FILES} ${SHARED_SOURCE_FILES}
     SYSINCLS ${TEST_SYSINCLS}
 )
+target_compile_options(hipfile_tests
+    PRIVATE -Wno-unused-function
+)
 target_link_libraries(hipfile_tests PRIVATE GTest::gtest)
 target_link_libraries(hipfile_tests PRIVATE GTest::gtest_main)
 if(CMAKE_HIP_PLATFORM STREQUAL "amd")
