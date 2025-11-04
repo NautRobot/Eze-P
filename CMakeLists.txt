@@ -160,6 +160,7 @@ option(BUILD_ROCFILE "Build rocfile library (AMD only)" ${BUILD_ROCFILE_DEFAULT}
 # hipfile
 #---------
 option(BUILD_HIPFILE "Build hipfile library" ON)
+cmake_dependent_option(BUILD_AISCP "Build aiscp example program" ON "BUILD_HIPFILE" OFF)
 
 #------
 # docs
