@@ -23,3 +23,8 @@ endif()
 if(BUILD_TESTING)
     add_subdirectory(test)
 endif()
+
+# Add the aiscp example directory
+if(BUILD_AISCP)
+    add_subdirectory(examples/aiscp)
+endif()
