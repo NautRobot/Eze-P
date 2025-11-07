@@ -1966,9 +1966,12 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   double sum_timers = 0;
   uint64_t timers[TIMERS_INIT_COUNT] = {0};
   unsigned long long commIdHash;
+  char* archName;
+  int cuCount;
+  hipDeviceProp_t devProp;
+
   #ifdef USE_INDIRECT_FUNCTION_CALL
   int64_t stackSize;
-  hipDeviceProp_t devProp;
   #endif
 
   timers[TIMER_INIT_TOTAL] = clockNano();
@@ -1978,16 +1981,20 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   CUDACHECKGOTO(cudaDeviceGetAttribute(&archMinor, cudaDevAttrComputeCapabilityMinor, cudaDev), res, fail);
   cudaArch = 100*archMajor + 10*archMinor;
 
+  CUDACHECKGOTO(hipGetDeviceProperties(&devProp, cudaDev), res, fail);
+  cuCount = devProp.multiProcessorCount;
+  archName = (char*)malloc(strlen(devProp.gcnArchName) + 1);
+  strcpy(archName, devProp.gcnArchName);
+
   timers[TIMER_INIT_KERNELS] = clockNano();
   NCCLCHECK(ncclInitKernelsForDevice(cudaArch, maxSharedMem, &maxLocalSizeBytes));
   // Set the maximum kernel stack size of all kernels to avoid
   // a CUDA memory reconfig on load (c.f. NVSHMEM issue)
 #ifdef USE_INDIRECT_FUNCTION_CALL
-  CUDACHECK(hipGetDeviceProperties(&devProp, 0));
-  if (ncclParamSetStackSize() == 1 && !IsArchMatch(devProp.gcnArchName,"gfx942") && !IsArchMatch(devProp.gcnArchName,"gfx950")) {
+  if (ncclParamSetStackSize() == 1 && !IsArchMatch(archName,"gfx942") && !IsArchMatch(archName,"gfx950")) {
     stackSize = rcclParamStackSizeOverride() ? rcclParamStackSizeOverride() : maxLocalSizeBytes;
     if (stackSize == 0) {
-      if (IsArchMatch(devProp.gcnArchName,"gfx906"))
+      if (IsArchMatch(archName,"gfx906"))
         stackSize = 1024;
       else
         stackSize = 512;
@@ -2040,6 +2047,8 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
     timers[TIMER_INIT_BOOTSTRAP] = clockNano() - timers[TIMER_INIT_BOOTSTRAP];
   }
   comm->cudaArch = cudaArch;
+  comm->archName = archName;
+  comm->cuCount = cuCount;
 
   NCCLCHECKGOTO(initTransportsRank(comm, job->parent, timers), res, fail);
 
@@ -2064,9 +2073,7 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   if (rcclParamMscclppEnabled()) {
 #ifdef ENABLE_MSCCLPP
     if (mscclEnabled() && (comm->topo->mscclEnabled || mscclForceEnabled()) && mscclppCommCompatible(comm)) {
-      hipDeviceProp_t devProp;
-      CUDACHECK(hipGetDeviceProperties(&devProp, cudaDev));
-      comm->mscclppCompatible = IsArchMatch(devProp.gcnArchName, "gfx942") || IsArchMatch(devProp.gcnArchName, "gfx950");
+      comm->mscclppCompatible = IsArchMatch(archName, "gfx942") || IsArchMatch(archName, "gfx950");
       if (comm->mscclppCompatible) {
         bool mapContainsId = (mscclpp_uniqueIdMap.count(*job->commId) > 0);
         auto& mscclppUniqueId = mscclpp_uniqueIdMap[*job->commId];
