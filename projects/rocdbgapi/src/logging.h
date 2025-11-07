@@ -48,6 +48,12 @@
 #define log_info(...) dbgapi_log (AMD_DBGAPI_LOG_LEVEL_INFO, __VA_ARGS__)
 #define log_verbose(...) dbgapi_log (AMD_DBGAPI_LOG_LEVEL_VERBOSE, __VA_ARGS__)
 
+#if defined (__linux__)
+#define PROCESS_ID_FORMAT "%d"
+#elif defined (_WIN32)
+#define PROCESS_ID_FORMAT "%lu"
+#endif
+
 namespace amd::dbgapi
 {
 namespace detail

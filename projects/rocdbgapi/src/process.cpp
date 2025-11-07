@@ -1581,9 +1581,10 @@ void
 process_t::attach ()
 {
   log_info ("attaching %s to %s", to_cstring (id ()),
-            m_os_process_id
-              ? string_printf ("OS process %d", *m_os_process_id).c_str ()
-              : "exited process");
+            m_os_process_id ? string_printf ("OS process " PROCESS_ID_FORMAT,
+                                             *m_os_process_id)
+                                .c_str ()
+                            : "exited process");
 
   if (os_driver ().check_version () != AMD_DBGAPI_STATUS_SUCCESS)
     throw api_error_t (AMD_DBGAPI_STATUS_ERROR_RESTRICTION);

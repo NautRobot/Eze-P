@@ -686,7 +686,9 @@ typedef enum
  */
 #if defined(__linux__)
 typedef pid_t amd_dbgapi_os_process_id_t;
-#endif /* __linux__ */
+#elif defined(_WIN32)
+typedef DWORD amd_dbgapi_os_process_id_t;
+#endif /* _WIN32 */
 
 /**
  * Type used to notify the client of the library that a process may have
@@ -722,7 +724,7 @@ typedef pid_t amd_dbgapi_os_process_id_t;
 typedef int amd_dbgapi_notifier_t;
 #elif defined(_WIN32)
 typedef HANDLE amd_dbgapi_notifier_t;
-#endif /* __linux__ */
+#endif /* _WIN32 */
 
 /**
  * Native operating system agent ID.
@@ -731,9 +733,9 @@ typedef HANDLE amd_dbgapi_notifier_t;
  * is executing the library to specify the AMD GPU agents accessible to a
  * process.
  */
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
 typedef uint64_t amd_dbgapi_os_agent_id_t;
-#endif /* __linux__ */
+#endif /* __linux__ || _WIN32  */
 
 /**
  * Native operating system queue ID.
@@ -741,9 +743,9 @@ typedef uint64_t amd_dbgapi_os_agent_id_t;
  * This is the queue ID used by the operating system AMD GPU device driver that
  * is executing the library to specify the AMD GPU queues of a process.
  */
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
 typedef uint64_t amd_dbgapi_os_queue_id_t;
-#endif /* __linux__ */
+#endif /* __linux__ || _WIN32  */
 
 /**
  * Native operating system queue packet ID.
@@ -753,9 +755,9 @@ typedef uint64_t amd_dbgapi_os_queue_id_t;
  * queue of a process.  The meaning of the queue packet ID is dependent on the
  * queue type.  See ::amd_dbgapi_os_queue_type_t.
  */
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
 typedef uint64_t amd_dbgapi_os_queue_packet_id_t;
-#endif /* __linux__ */
+#endif /* __linux__ || _WIN32  */
 
 /**
  * Native operating system queue type.
@@ -764,7 +766,7 @@ typedef uint64_t amd_dbgapi_os_queue_packet_id_t;
  * the library to specify the AMD GPU queue mechanics supported by the queues
  * of a process.
  */
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
 typedef enum
 {
   /**
@@ -788,7 +790,7 @@ typedef enum
    */
   AMD_DBGAPI_OS_QUEUE_TYPE_AMD_SDMA_XGMI = 514
 } amd_dbgapi_os_queue_type_t;
-#endif /* __linux__ */
+#endif /* __linux__ || _WIN32  */
 
 /** @} */
 
