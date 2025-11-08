@@ -302,7 +302,10 @@ struct Info : public amd::EmbeddedObject {
   size_t preferredWorkGroupSize_;
 
   //! Number of shader engines in physical GPU
-  size_t numberOfShaderEngines;
+  size_t numberOfShaderEngines_;
+
+  //! Maximum number of workgroups in cluster
+  size_t clusterMaxSize_;
 
   //! uint32_t Preferred native vector width size for built-in scalar types
   //  that can be put into vectors.
@@ -552,6 +555,7 @@ struct Info : public amd::EmbeddedObject {
   //! executed by SIMDs in the same compute unit.
   uint32_t simdPerCU_;
   uint32_t cuPerShaderArray_;  //!< Number of CUs per shader array
+
   //! The maximum number of work items from the same work group that can be
   //! executed by a SIMD in parallel
   uint32_t simdWidth_;

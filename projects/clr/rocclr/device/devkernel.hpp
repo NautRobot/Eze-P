@@ -229,7 +229,7 @@ class Kernel : public amd::HeapObject {
     int maxOccupancyPerCu_;           //!< Max occupancy per compute unit in threads
     bool isWGPMode_;                  //!< kernel compiled in WGP/cumode
     bool uniformWorkGroupSize_;       //!< uniform work group size option
-    bool clusterSizeSet_;             //!< cluster metadata present in code object
+    bool hasClusterAttr_;             //!< cluster metadata present in code object
     uint8_t groupMemCarveout_;        //!< LDS carveout
   };
 
@@ -274,7 +274,7 @@ class Kernel : public amd::HeapObject {
   size_t getWorkGroupSizeHint(int dim) const { return workGroupInfo_.compileSizeHint_[dim]; }
 
   void setClusterSize(size_t x, size_t y, size_t z) {
-    workGroupInfo_.clusterSizeSet_ = true;
+    workGroupInfo_.hasClusterAttr_ = true;
     workGroupInfo_.clusterSize_[0] = x;
     workGroupInfo_.clusterSize_[1] = y;
     workGroupInfo_.clusterSize_[2] = z;
@@ -282,7 +282,9 @@ class Kernel : public amd::HeapObject {
 
   size_t getClusterSize(int dim) const { return workGroupInfo_.clusterSize_[dim]; }
 
-  bool clusterSizeSet() const { return workGroupInfo_.clusterSizeSet_; }
+  //! Returns whether cluster_dims was specified in the object metadata. If false,
+  //! it was not specified, and getClusterSize() would return the default implicit value
+  bool hasClusterAttr() const { return workGroupInfo_.hasClusterAttr_; }
 
   //! Returns GPU device object, associated with this kernel
   const amd::Device& device() const { return dev_; }

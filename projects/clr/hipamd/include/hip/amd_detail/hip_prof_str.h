@@ -6521,6 +6521,9 @@ typedef struct hip_api_data_s {
 };
 // hipOccupancyMaxActiveClusters[('int*', 'numClusters'), ('const void*', 'f'), ('const hipLaunchConfig_t*', 'config')]
 #define INIT_hipOccupancyMaxActiveClusters_CB_ARGS_DATA(cb_data) { \
+  cb_data.args.hipOccupancyMaxActiveClusters.numClusters = (int*)numClusters; \
+  cb_data.args.hipOccupancyMaxActiveClusters.f = (const void*)f; \
+  cb_data.args.hipOccupancyMaxActiveClusters.config = (const hipLaunchConfig_t*)config; \
 };
 // hipOccupancyMaxPotentialBlockSize[('int*', 'gridSize'), ('int*', 'blockSize'), ('const void*', 'f'), ('size_t', 'dynSharedMemPerBlk'), ('int', 'blockSizeLimit')]
 #define INIT_hipOccupancyMaxPotentialBlockSize_CB_ARGS_DATA(cb_data) { \
@@ -6532,6 +6535,9 @@ typedef struct hip_api_data_s {
 };
 // hipOccupancyMaxPotentialClusterSize[('int*', 'clusterSize'), ('const void*', 'f'), ('const hipLaunchConfig_t*', 'config')]
 #define INIT_hipOccupancyMaxPotentialClusterSize_CB_ARGS_DATA(cb_data) { \
+  cb_data.args.hipOccupancyMaxPotentialClusterSize.clusterSize = (int*)clusterSize; \
+  cb_data.args.hipOccupancyMaxPotentialClusterSize.f = (const void*)f; \
+  cb_data.args.hipOccupancyMaxPotentialClusterSize.config = (const hipLaunchConfig_t*)config; \
 };
 // hipPeekAtLastError[]
 #define INIT_hipPeekAtLastError_CB_ARGS_DATA(cb_data) { \
