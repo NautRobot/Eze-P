@@ -3,7 +3,7 @@
 > [!CAUTION] 
 > This release is an *early-access* software technology preview. Running production workloads is *not* recommended.
 
-[![MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/ROCm/hipFile/develop/LICENSE)
+[![MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/ROCm/hipFile/develop/LICENSE.md)
 
 AMD Infinity Storage library that supports IO directly to the GPU
 
