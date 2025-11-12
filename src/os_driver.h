@@ -491,7 +491,7 @@ public:
   virtual amd_dbgapi_status_t
   query_debug_event (os_exception_mask_t *exceptions_present,
                      os_queue_id_t *os_queue_id, os_agent_id_t *os_agent_id,
-                     os_exception_mask_t exceptions_cleared)
+                     os_exception_mask_t exceptions_cleared) const
     = 0;
 
   virtual amd_dbgapi_status_t query_exception_info (
@@ -627,10 +627,10 @@ public:
     return AMD_DBGAPI_STATUS_ERROR;
   }
 
-  amd_dbgapi_status_t
-  query_debug_event (os_exception_mask_t *exceptions_present,
-                     os_queue_id_t *os_queue_id, os_agent_id_t *os_agent_id,
-                     os_exception_mask_t /* exceptions_cleared  */) override
+  amd_dbgapi_status_t query_debug_event (
+    os_exception_mask_t *exceptions_present, os_queue_id_t *os_queue_id,
+    os_agent_id_t *os_agent_id,
+    os_exception_mask_t /* exceptions_cleared  */) const override
   {
     *exceptions_present = os_exception_mask_t::none;
     *os_queue_id = *os_agent_id = 0;

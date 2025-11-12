@@ -1107,7 +1107,7 @@ public:
   amd_dbgapi_status_t
   query_debug_event (os_exception_mask_t *exceptions_present,
                      os_queue_id_t *os_queue_id, os_agent_id_t *os_agent_id,
-                     os_exception_mask_t exceptions_cleared) override;
+                     os_exception_mask_t exceptions_cleared) const override;
 
   amd_dbgapi_status_t
   query_exception_info (os_exception_code_t exception,
@@ -1584,7 +1584,7 @@ amd_dbgapi_status_t
 kfd_driver_t::query_debug_event (os_exception_mask_t *exceptions_present,
                                  os_queue_id_t *os_queue_id,
                                  os_agent_id_t *os_agent_id,
-                                 os_exception_mask_t exceptions_cleared)
+                                 os_exception_mask_t exceptions_cleared) const
 {
   TRACE_DRIVER_BEGIN (param_in (exceptions_present), param_in (os_queue_id),
                       param_in (os_agent_id), param_in (exceptions_cleared));
