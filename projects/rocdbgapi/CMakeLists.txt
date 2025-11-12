@@ -78,7 +78,10 @@ endif()
 
 # Allow building dbgapi as either a shared or static library,
 # depending on BUILD_SHARED_LIBS.
-option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+# Note add_library internally checks BUILD_SHARED_LIBS, but CMake does
+# not define BUILD_SHARED_LIBS by default.  See
+# <https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html>.
+option(BUILD_SHARED_LIBS "Build amd-dbgapi as a shared library" ON)
 
 add_library(amd-dbgapi
   src/agent.cpp

@@ -80,7 +80,7 @@ variable to ``OFF``.
 The built ROCdbgapi library will be placed in:
 
 - ``build/include/amd-dbgapi.h``
-- ``build/librocm-dbgapi.(a|so)*``
+- ``build/librocm-dbgapi.(a|so*)``
 
 An example command-line to generate the HTML and PDF library documentation is:
 
