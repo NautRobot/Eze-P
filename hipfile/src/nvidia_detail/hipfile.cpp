@@ -3,8 +3,15 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "hipfile.h"
 #include "hipfile-cufile.h"
+#include "hipfile-types.h"
 
+#include <cuda.h>
+#include <cufile.h>
+#include <driver_types.h>
+#include <hip/hip_runtime_api.h>
+#include <sys/types.h>
 #include <vector>
 
 using namespace std;
