@@ -6,6 +6,8 @@
 #include "hipfile-cufile.h"
 
 #include <climits>
+#include <cuda.h>
+#include <hip/hip_runtime_api.h>
 #include <stdexcept>
 
 hipFileOpError_t
