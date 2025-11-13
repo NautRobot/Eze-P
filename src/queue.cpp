@@ -1123,7 +1123,7 @@ queue_t::get_info (amd_dbgapi_queue_info_t query, size_t value_size,
 
     case AMD_DBGAPI_QUEUE_INFO_OS_ID:
       {
-        std::optional<amd_dbgapi_os_queue_id_t> os_id = os_queue_id ();
+        std::optional<os_queue_id_t> os_id = os_queue_id ();
         dbgapi_assert (os_id.has_value ());
         utils::get_info (
           value_size, value,
