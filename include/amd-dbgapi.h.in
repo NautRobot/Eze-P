@@ -376,6 +376,11 @@
  *     made from a thread which is the tracer of the target process (i.e. the
  *     calling thread must be PTRACE-attached to the process).
  *
+ * 12. Windows is supported only on the gfx120x architectures (gfx1201,
+ *     gfx1202).
+ *
+ * 13. Multidevice configurations are not supported on Windows.
+ *
  * \section references References
  *
  * 1. Advanced Micro Devices: [www.amd.com] (https://www.amd.com/)
