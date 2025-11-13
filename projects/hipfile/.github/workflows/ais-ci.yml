@@ -1,0 +1,59 @@
+name: AIS_CI
+run-name: Main CI workflow to coordinate jobs for a single platform.
+on:
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+permissions:
+  contents: read
+  packages: read
+jobs:
+  AIS_CI_Pre-check:
+    outputs:
+      changed_dockerfile: ${{ steps.ci-flags.outputs.changed_dockerfile }}
+    runs-on: [ubuntu-24.04]
+    steps:
+      - name: Fetching code repository...
+        uses: actions/checkout@v5
+      - name: Git fetch base ref
+        run: git fetch origin ${{ github.base_ref }}
+      - name: Set CI Flags
+        id: ci-flags
+        run: |
+          echo "changed_dockerfile=$(./util/files-changed.sh origin/${{ github.base_ref }} HEAD 'util/docker/DOCKERFILE.*')" >> ${GITHUB_OUTPUT}
+  build_AIS_CI_image:
+    if: ${{ needs.AIS_CI_Pre-check.outputs.changed_dockerfile == '1' }}
+    needs: AIS_CI_Pre-check
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-ais-ci-image.yml
+    with:
+      platform: ${{ inputs.platform }}
+  build_and_test:
+    # Run after build_AIS_CI_image but only if build_AIS_CI_image passed or was skipped.
+    # always() check needed otherwise success() implicitly added.
+    if: >-
+      ${{
+        always() &&
+        (
+          needs.build_AIS_CI_image.result == 'skipped' ||
+          (
+            needs['AIS_CI_Pre-check'].outputs.changed_dockerfile == '1' &&
+            needs.build_AIS_CI_image.result == 'success'
+          )
+        )
+      }}
+    needs: [AIS_CI_Pre-check, build_AIS_CI_image]
+    uses: ./.github/workflows/build-ais.yml
+    with:
+      # If Dockerfile changed, use the new CI image. Otherwise, use 'latest'.
+      ci_image: >-
+        ${{
+          needs.AIS_CI_Pre-check.outputs.changed_dockerfile == '1' &&
+          needs.build_AIS_CI_image.outputs.ci_image ||
+          format('ghcr.io/rocm/hipfile/ais_ci_{0}:latest', inputs.platform)
+        }}
+      platform: ${{ inputs.platform }}
