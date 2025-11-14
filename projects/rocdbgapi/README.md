@@ -19,19 +19,24 @@ Build the AMD Debugger API Library
 ----------------------------------
 
 The ROCdbgapi library can be built on Ubuntu 18.04, Ubuntu 20.04, Centos 8.1,
-RHEL 8.1, and SLES 15 Service Pack 1.
+RHEL 8.1, SLES 15 Service Pack 1, and Windows 11.
 
 Building the ROCdbgapi library has the following prerequisites:
 
 1. A C++17 compiler such as GCC 7 or Clang 5.
 
-2. AMD Code Object Manager Library (ROCcomgr) which can be installed as part of
-   the AMD ROCm release by the ``comgr`` package.
+2. AMD Code Object Manager Library (ROCcomgr).  On Linux, this can be installed
+   as part of the AMD ROCm release by the ``comgr`` package.  On Windows, this
+   is installed as part of the HIP SDK release.
 
-3. ROCm CMake modules which can be installed as part of the AMD ROCm release by
-   the ``rocm-cmake`` package.
+3. The HSA runtime headers.  On Linux, this is installed as part of the
+   ``hsa-runtime64`` package.  The headers can also be found in the sources of
+   the ROCr (ROCm Runtime) project.
 
-4. For Ubuntu 18.04 and Ubuntu 20.04 the following adds the needed packages:
+4. ROCm CMake modules, which can be installed using the ``rocm-cmake`` package
+   available as part of the AMD ROCm release.
+
+5. For Ubuntu 18.04 and Ubuntu 20.04, the following adds the needed packages:
 
    ````shell
    apt install gcc g++ make cmake doxygen graphviz texlive-full
@@ -41,7 +46,7 @@ Building the ROCdbgapi library has the following prerequisites:
    that prevents the PDF from being created.  ``doxygen`` 1.8.11 can be built
    from source to avoid the issue.
 
-5. For CentOS 8.1 and RHEL 8.1 the following adds the needed packages:
+6. For CentOS 8.1 and RHEL 8.1, the following adds the needed packages:
 
    ````shell
    yum install -y gcc gcc-g++ make cmake doxygen graphviz texlive \
@@ -53,7 +58,7 @@ Building the ROCdbgapi library has the following prerequisites:
    has a bug that prevents the PDF from being created. ``doxygen`` 1.8.11 can be
    built from source to avoid the issue.
 
-6. For SLES 15 Service Pack 15 the following adds the needed packages:
+7. For SLES 15 Service Pack 15, the following adds the needed packages:
 
    ````shell
    zypper in gcc gcc-g++ make cmake doxygen graphviz texlive-scheme-medium \
@@ -61,7 +66,18 @@ Building the ROCdbgapi library has the following prerequisites:
      texlive-tabu
    ````
 
-An example command-line to build the ROCdbgapi library on Linux is:
+8. For Windows using MSYS2, the following adds the needed packages:
+
+   ````shell
+   pacman -S make mingw-w64-ucrt-x86_64-gcc \
+     texinfo texinfo-tex \
+     mingw-w64-x86_64-texlive-plain-generic \
+     mingw-w64-x86_64-texlive-latex-recommended \
+     mingw-w64-x86_64-texlive-latex-extra \
+     doxygen mingw-w64-x86_64-graphviz
+   ````
+
+Here is an example command line to build the ROCdbgapi library:
 
 ````shell
 cd rocdbgapi
@@ -77,10 +93,13 @@ By default, ROCdbapi is built as a shared library.  You may build it
 instead as a static library by setting the ``BUILD_SHARED_LIBS`` cmake
 variable to ``OFF``.
 
+To specify a custom path to the HSA runtime headers, set the
+``HSA_RUNTIME_INCLUDE_DIRECTORIES`` cmake variable.
+
 The built ROCdbgapi library will be placed in:
 
 - ``build/include/amd-dbgapi.h``
-- ``build/librocm-dbgapi.(a|so*)``
+- ``build/librocm-dbgapi.(a|so*|dll|dll.a|lib)``
 
 An example command-line to generate the HTML and PDF library documentation is:
 
@@ -102,32 +121,45 @@ make install
 The installed ROCdbgapi library and documentation will be placed in:
 
 - ``../install/include/amd-dbgapi.h``
-- ``../install/lib/librocm-dbgapi.so*``
+- ``../install/lib/librocm-dbgapi.*``
 - ``../install/share/amd-dbgapi/LICENSE.txt``
 - ``../install/share/amd-dbgapi/README.md``
 - ``../install/share/html/amd-dbgapi/index.html``
 - ``../install/share/doc/amd-dbgapi/amd-dbgapi.pdf``
 
-To use the ROCdbgapi library, the ROCcomgr library must be installed.  This can
-be installed as part of the AMD ROCm release by the ``comgr`` package:
-
-- ``libamd_comgr.so.1``
-
-The ROCdbgapi library requires that the ROCr library is loaded in the inferior
-to enable AMD GPU debugging.  This can be installed as part of the AMD ROCm
-release by the ``hsa-rocr-dev`` package:
-
-- ``libhsa-runtime64.so.1 ``
-
 Running the AMD Debugger API Library
 ------------------------------------
+
+To use the ROCdbgapi library, the ROCcomgr library must be installed.  On Linux,
+this can be installed as part of the AMD ROCm release by the ``comgr`` package:
+
+- ``libamd_comgr.so``
+
+On Windows, ROCcomgr is installed as part of the HIP SDK release:
+
+- ``C:\Windows\System32\amd_comgr_*.dll``
+
+To enable AMD GPU debugging, the ROCdbgapi library requires that an AMD GPU
+runtime library is loaded in the inferior:
+
+- On Linux, the required runtime library is AMD's implementation of the HSA
+  runtime, maintained by the ROCr (ROCm Runtime) project.  This can be installed
+  using the ``hsa-rocr-dev`` package available as part of the AMD ROCm release:
+
+  ``libhsa-runtime64.so``
+
+- On Windows, the required runtime library is AMD's HIP runtime library,
+  maintained by the CLR project.  This is installed as part of the HIP SDK
+  release:
+
+  ``C:\Windows\System32\amdhip64_*.dll``
 
 The AMD Debugger API library has an optional runtime dependency to the
 `amdgpu.ids` database file, located in `/opt/amdgpu/share/libdrm/amdgpu.ids`
 or `/usr/share/libdrm/amdgpu.ids`.
 
 The `/opt/amdgpu/share/libdrm/amdgpu.ids` database is provided by the
-`libdrm-amdgpu-common` ROCm package on all distributions.
+`libdrm-amdgpu-common` ROCm package on all Linux distributions.
 
 The `/usr/share/libdrm/amdgpu.ids` is provided by the following packages:
 - SLES: `libdrm-amdgpu`
