@@ -1255,6 +1255,7 @@ hipError_t hipLaunchKernelExC(const hipLaunchConfig_t* config, const void* fPtr,
                                                config->dynamicSmemBytes, config->stream));
   }
 
+  dim3 clusterDims = {0, 0, 0};
   for (size_t attr_idx = 0; attr_idx < config->numAttrs; ++attr_idx) {
     hipLaunchAttribute& attr = config->attrs[attr_idx];
     switch (attr.id) {
@@ -1265,12 +1266,24 @@ hipError_t hipLaunchKernelExC(const hipLaunchConfig_t* config, const void* fPtr,
                                                 config->dynamicSmemBytes, config->stream));
         }
         break;
+      case hipLaunchAttributeClusterDimension :
+        clusterDims.x = attr.val.clusterDim.x;
+        clusterDims.y = attr.val.clusterDim.y;
+        clusterDims.z = attr.val.clusterDim.z;
+        break;
       default:
         LogPrintfError("Attribute %u not supported", attr.id);
         break;
     }
   }
-  HIP_RETURN(hipErrorInvalidConfiguration);
+  // All dimensions have to be atleast 1.
+  if (clusterDims.x == 0 || clusterDims.y == 0 || clusterDims.z == 0) {
+    HIP_RETURN (hipErrorInvalidConfiguration);
+  }
+
+  HIP_RETURN_DURATION(hipLaunchKernel_common(fPtr, config->gridDim, config->blockDim, args,
+    config->dynamicSmemBytes, config->stream,
+    clusterDims));
 }
 
 hipError_t hipDrvLaunchKernelEx(const HIP_LAUNCH_CONFIG* config, hipFunction_t f,

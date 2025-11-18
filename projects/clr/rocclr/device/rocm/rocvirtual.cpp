@@ -4088,8 +4088,11 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     // dispatchPacket.header = aqlHeader_;
     // dispatchPacket.setup |= sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
 
-    bool useNewDispatchPacket = (sizes.cluster()[0] > 1) || (sizes.cluster()[1] > 1) ||
-                                (sizes.cluster()[2] > 1) || dev().settings().useNewDispatchPacket_;
+    bool useNewDispatchPacket = (sizes.dimensions() > 0 && sizes.cluster()[0] > 1) ||
+                                (sizes.dimensions() > 1 && sizes.cluster()[1] > 1) ||
+                                (sizes.dimensions() > 2 && sizes.cluster()[2] > 1) ||
+                                dev().settings().useNewDispatchPacket_;
+
     if (useNewDispatchPacket) {
       auto& dispatchPacketExt = dispatchPacketUnion.extKernelDispatch;
 
