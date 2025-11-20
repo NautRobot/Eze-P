@@ -487,6 +487,9 @@ class GpuPmcBuilder : public PmcBuilder, protected Primitives {
     SetPerfmonCntl(cmd_buffer, Primitives::cp_perfmon_cntl_start_value(), counters_vec.get_attr());
     // Issue barrier command to apply the commands to configure perfcounters
     if (!concurrent) builder.BuildWriteWaitIdlePacket(cmd_buffer);
+
+    // Dump START packets if enabled
+    cmd_buffer->DumpToFile("start_packets.hex");
   }
 
   // Build PMC read PM4 packets
@@ -701,6 +704,9 @@ class GpuPmcBuilder : public PmcBuilder, protected Primitives {
       builder.BuildWriteUConfigRegPacket(cmd_buffer, Primitives::RLC_PERFMON_CLK_CNTL_ADDR, 0);
 
     builder.BuildWriteWaitIdlePacket(cmd_buffer);
+
+    // Dump STOP packets if enabled
+    cmd_buffer->DumpToFile("stop_packets.hex");
   }
 
   // Build PMC read PM4 comands
@@ -773,6 +779,9 @@ class GpuPmcBuilder : public PmcBuilder, protected Primitives {
     }
 
     builder.BuildCacheFlushPacket(cmd_buffer, reinterpret_cast<size_t>(buf), read_counter * sizeof(uint32_t));
+
+    // Dump READ packets if enabled
+    cmd_buffer->DumpToFile("read_packets.hex");
 
     // Return amount of data to read
     return read_counter * sizeof(uint32_t);
