@@ -24,10 +24,6 @@ jobs:
     container: docker:28.5
     outputs:
       new_ci_image: ${{ steps.ci-image.outputs.AIS_CI_IMAGE }}
-      image_tag: ${{ steps.ci-image.outputs.AIS_CI_IMAGE_TAG }}
-      # image_tag is a bit hacky. GitHub does not support separating outputs
-      # from a workflow run in a matrix. The last workflow to run will set the
-      # output value. `image_tag` is constant across matrix jobs so this is fine.
     steps:
       - name: Set CI environment variables
         run: |
@@ -37,6 +33,8 @@ jobs:
         id: ci-image
         run: |
           echo "AIS_CI_IMAGE=${{ env.AIS_DOCKER_REGISTRY }}/${{ env.AIS_CI_IMAGE_NAME}}:${AIS_CI_IMAGE_TAG}" \
+            >> "${GITHUB_OUTPUT}"
+          echo "AIS_CI_LATEST_CACHE=${{ env.AIS_DOCKER_REGISTRY }}/${{ env.AIS_CI_IMAGE_NAME}}:latest-cache" \
             >> "${GITHUB_OUTPUT}"
       - name: Fetching code repository...
         uses: actions/checkout@v5
@@ -62,6 +60,7 @@ jobs:
               PR URL: ${{ env.AIS_PR_BASE_URL }}/${AIS_PR_NUMBER}" \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             --cache-from=type=registry,ref=${{ steps.ci-image.outputs.AIS_CI_IMAGE }} \
+            --cache-from=type=registry,ref=${{ steps.ci-image.outcome.AIS_CI_LATEST_CACHE }} \
             --push \
             -t ${{ steps.ci-image.outputs.AIS_CI_IMAGE }} \
             ${GITHUB_WORKSPACE}
