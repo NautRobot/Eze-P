@@ -283,7 +283,11 @@ private_swizzled_address_space_t::convert (
     return { null_address (), 0 };
 
   if (lowered_address_space.kind () == kind_t::private_swizzled)
-    return { lowered_address, last_address () - lowered_address + 1 };
+    {
+      auto [scratch_base, scratch_size] = wave.scratch_memory_region ();
+      return { lowered_address,
+               (scratch_size / wave.lane_count ()) - lowered_address };
+    }
 
   /* Convert from global or private_unswizzled.  */
   if (lowered_address_space.kind () == kind_t::global
@@ -338,7 +342,10 @@ private_unswizzled_address_space_t::convert (
     return { null_address (), 0 };
 
   if (lowered_address_space.kind () == kind_t::private_unswizzled)
-    return { lowered_address, last_address () - lowered_address + 1 };
+    {
+      auto [scratch_base, scratch_size] = wave.scratch_memory_region ();
+      return { lowered_address, scratch_size - lowered_address };
+    }
 
   /* Convert from global.  */
   if (lowered_address_space.kind () == kind_t::global)
