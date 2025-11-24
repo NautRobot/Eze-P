@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 include(AISCompilerOptions)
+include(CheckLinkerFlag)
 
 # Add static and shared libraries using AIS build conventions
 #
@@ -107,6 +108,12 @@ function(ais_add_libraries)
             target_link_libraries(${target} PRIVATE ${CUFILE_LIBRARY})
         endif()
         target_link_libraries(${target} PRIVATE hip::host)
+
+        # Add link options (mainly for hardening)
+        check_linker_flag(CXX "-Wl,-z,noexecstack" LINKER_SUPPORTS_NOEXECSTACK)
+        if(LINKER_SUPPORTS_NOEXECSTACK)
+            target_link_options(${target} PRIVATE "-Wl,-z,noexecstack")
+        endif()
 
         # Add the common include path
         target_include_directories(${target} PRIVATE "${CMAKE_SOURCE_DIR}/shared")
