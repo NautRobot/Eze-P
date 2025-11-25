@@ -39,10 +39,8 @@ Options
 |AIS\_USE\_IWYU|OFF|Run the `include-what-you-use` tool|
 |AIS\_WARN\_UNSAFE\_BUFFER\_OPS|ON|Scan code for unsafe buffer operations (clang only, OFF for others)|
 |BUILD\_AIS\_DOCS|OFF|Build API documentation (requires Doxygen)|
-|BUILD\_AISCP|ON|Build `aiscp` example program (OFF if no hipFile)|
+|BUILD\_AISCP|ON|Build `aiscp` example program|
 |BUILD\_CODE\_COVERAGE|OFF|Generate code coverage information when tests are run|
-|BUILD\_HIPFILE|ON|Build the hipFile library|
-|BUILD\_ROCFILE|ON|Build the rocFile library (AMD only, OFF for NVIDIA)|
 |BUILD\_TESTING|ON|Build the test suite|
 
 Sanitizer options
