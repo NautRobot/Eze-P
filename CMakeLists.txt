@@ -16,8 +16,6 @@ endif()
 
 # Set the library version in a variable so we can use
 # it in *.in files and avoid version mismatch.
-#
-# The versions number of rocFile and hipFile are identical
 set(AIS_LIBRARY_MAJOR 0)
 set(AIS_LIBRARY_MINOR 2)
 set(AIS_LIBRARY_PATCH 0)
@@ -81,6 +79,15 @@ if(NOT CMAKE_HIP_PLATFORM STREQUAL "amd" AND NOT CMAKE_HIP_PLATFORM STREQUAL "nv
     message(FATAL_ERROR "Invalid CMAKE_HIP_PLATFORM: '${CMAKE_HIP_PLATFORM}'. Allowed values are 'amd' or 'nvidia'.")
 endif()
 
+# Set the platform variable
+if(CMAKE_HIP_PLATFORM STREQUAL "nvidia")
+    set(BUILD_AMD_DETAIL OFF)
+    set(BUILD_NVIDIA_DETAIL ON)
+else()
+    set(BUILD_AMD_DETAIL ON)
+    set(BUILD_NVIDIA_DETAIL OFF)
+endif()
+
 #-----------------------------------------------------------------------------
 # Include our custom CMake code in the module path
 #-----------------------------------------------------------------------------
@@ -119,7 +126,7 @@ include(AISAddLibraries)
 #-----------------------------------------------------------------------------
 # Code coverage (via llvm-cov)
 #
-# To use with the hipFile/rocFile libraries:
+# To use with the hipFile library:
 #   - Build with BUILD_CODE_COVERAGE set to ON
 #   - Run `ctest .`
 #
@@ -156,15 +163,6 @@ include(AISIWYU)
 #-------------------
 include(AISSanitizers)
 
-#-------------------
-# Platform defaults
-#-------------------
-if(CMAKE_HIP_PLATFORM STREQUAL "nvidia")
-    set(BUILD_ROCFILE OFF)
-else()
-    set(BUILD_ROCFILE ON)
-endif()
-
 #-----------------------
 # aiscp example program
 #-----------------------
@@ -173,7 +171,7 @@ option(BUILD_AISCP "Build aiscp example program" ON)
 #------
 # docs
 #------
-option(BUILD_AIS_DOCS "Build the rocFile/hipFile docs (requires Doxygen)" OFF)
+option(BUILD_AIS_DOCS "Build the hipFile docs (requires Doxygen)" OFF)
 
 #-----------------------------------------------------------------------------
 # Find important packages for building the software
@@ -194,10 +192,10 @@ else()
 endif()
 
 # Find the cuFile library and headers on NVIDIA
-if(CMAKE_HIP_PLATFORM STREQUAL "nvidia")
+if(BUILD_NVIDIA_DETAIL)
     find_package(CUDAToolkit REQUIRED)
 
-    if(CMAKE_HIP_PLATFORM STREQUAL "nvidia" AND CMAKE_VERSION VERSION_LESS "3.28")
+    if(CMAKE_VERSION VERSION_LESS "3.28")
         enable_language(CUDA)
         # Set a default architecture if not provided.
         if(NOT CMAKE_CUDA_ARCHITECTURES)
@@ -219,9 +217,6 @@ endif()
 #-----------------------------------------------------------------------------
 # Subdirectories to configure/build
 #-----------------------------------------------------------------------------
-if(BUILD_ROCFILE)
-    add_subdirectory(rocfile)
-endif()
 add_subdirectory(hipfile)
 if(BUILD_AIS_DOCS)
     add_subdirectory(docs)

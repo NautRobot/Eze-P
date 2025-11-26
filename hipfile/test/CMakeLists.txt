@@ -7,17 +7,12 @@ include(AISUseGTest)
 find_package(Boost COMPONENTS program_options REQUIRED)
 
 set(SHARED_SOURCE_FILES
-    "${CMAKE_SOURCE_DIR}/shared/test/magic-word.cpp"
-)
-
-set(SHARED_TEST_INCLUDE_PATH
-    "${CMAKE_SOURCE_DIR}/shared/test/"
+    common/magic-word.cpp
 )
 
 # These tests do not require a HIP capable GPU.
 # They should pass on a CPU-only system.
 set(UNIT_TEST_SOURCE_FILES
-    main.cpp
 )
 
 # These tests call into the GPU Driver.
@@ -33,15 +28,13 @@ set(SYSTEM_TEST_SOURCE_FILES
 
 set(TEST_SYSINCLS
     ${HIPFILE_INCLUDE_PATH}
-    ${HIPFILE_TEST_PATH}
-    ${SHARED_TEST_INCLUDE_PATH}
+    ${HIPFILE_TEST_INCLUDE_PATH}
 )
 
-if(CMAKE_HIP_PLATFORM STREQUAL "nvidia")
-    list(APPEND UNIT_TEST_SOURCE_FILES hipfile-cufile.cpp)
+if(BUILD_NVIDIA_DETAIL)
+    list(APPEND UNIT_TEST_SOURCE_FILES nvidia_detail/cufile-api-compat.cpp)
     list(APPEND TEST_SYSINCLS ${HIPFILE_NVIDIA_SOURCE_PATH})
-elseif(CMAKE_HIP_PLATFORM STREQUAL "amd")
-    list(APPEND UNIT_TEST_SOURCE_FILES hipfile-rocfile.cpp)
+else()
     list(APPEND TEST_SYSINCLS ${HIPFILE_AMD_SOURCE_PATH})
 endif()
 
@@ -56,9 +49,6 @@ target_compile_options(hipfile_tests
 )
 target_link_libraries(hipfile_tests PRIVATE GTest::gtest)
 target_link_libraries(hipfile_tests PRIVATE GTest::gtest_main)
-if(CMAKE_HIP_PLATFORM STREQUAL "amd")
-    target_link_libraries(hipfile_tests PRIVATE rocfile_shared)
-endif()
 
 ais_gtest_discover_tests(
     hipfile_tests
@@ -74,9 +64,6 @@ ais_add_executable(
 )
 target_link_libraries(hipfile_system_tests PRIVATE GTest::gtest)
 target_link_libraries(hipfile_system_tests PRIVATE Boost::program_options)
-if(CMAKE_HIP_PLATFORM STREQUAL "amd")
-    target_link_libraries(hipfile_system_tests PRIVATE rocfile_shared)
-endif()
 
 gtest_discover_tests(
     hipfile_system_tests
@@ -90,12 +77,12 @@ gtest_discover_tests(
 # ----------------------------------------
 ais_add_executable(
     NAME test_hipfile_basic
-    SRCS test-hipfile.cpp
+    SRCS legacy/test-hipfile.cpp
     DEPS hipfile_shared
 )
 ais_add_executable(
     NAME test_hipfile_batch
-    SRCS test-hipfile-batch.cpp
+    SRCS legacy/test-hipfile-batch.cpp
     DEPS hipfile_shared
 )
 # ----------------------------------------

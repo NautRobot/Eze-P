@@ -12,7 +12,7 @@ values indicate an error.
 
 ::
 
-    typedef struct __ROCFILE_NODISCARD hipFileError {
+    typedef struct __HIPFILE_NODISCARD hipFileError {
         hipFileOpError_t err;         //!< Errors related to hipFile or the GPU IO driver
         hipError_t       hip_drv_err; //!< Errors related to the GPU driver
     } hipFileError_t;
@@ -31,8 +31,8 @@ be set to ``hipSuccess``.
 
 Several helper macros are included in ``hipfile.h`` that help with error checking:
 
-* ``IS_ROCFILE_ERR()``
-* ``ROCFILE_ERRSTR()``
+* ``IS_HIPFILE_ERR()``
+* ``HIPFILE_ERRSTR()``
 * ``IS_HIP_DRV_ERR()``
 * ``HIP_DRV_ERR()``
 
