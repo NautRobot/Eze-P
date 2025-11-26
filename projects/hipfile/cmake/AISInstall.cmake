@@ -2,36 +2,19 @@
 #
 # SPDX-License-Identifier: MIT
 
-# Install hipFile and rocFile
+# Install hipFile
 
 # From the rocm-cmake repo
 include(ROCMInstallTargets)
 include(ROCMCreatePackage)
 
-
 # Install the package
-if(BUILD_ROCFILE)
-    rocm_install(TARGETS rocfile_static)
-    rocm_install(TARGETS rocfile_shared)
-endif()
 rocm_install(TARGETS hipfile_static)
 rocm_install(TARGETS hipfile_shared)
 
 # Install the headers
-if(BUILD_ROCFILE)
-    rocm_install(
-        DIRECTORY ${CMAKE_SOURCE_DIR}/rocfile/include/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
-endif()
 rocm_install(
     DIRECTORY ${CMAKE_SOURCE_DIR}/hipfile/include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-
-# Always install the hipfile-types.h file
-rocm_install(
-    FILES ${CMAKE_SOURCE_DIR}/shared/hipfile-types.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
@@ -39,9 +22,6 @@ rocm_install(
 # when we have dependencies
 
 # Export the targets
-if(BUILD_ROCFILE)
-    set(target_list ${target_list} roc::rocfile_shared roc::rocfile_static)
-endif()
 set(target_list ${target_list} roc::hipfile_shared roc::hipfile_static)
 
 rocm_export_targets(
