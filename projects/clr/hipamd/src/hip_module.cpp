@@ -864,7 +864,7 @@ hipError_t hipLaunchKernel_common(const void* hostFunction, dim3 gridDim, dim3 b
   }
   STREAM_CAPTURE(hipLaunchKernel, stream, hostFunction, gridDim, blockDim, args, sharedMemBytes);
   return ihipLaunchKernel(hostFunction, gridDim, blockDim, args, sharedMemBytes, stream, nullptr,
-                          nullptr, 0);
+                          nullptr, 0, clusterDim);
 }
 
 hipError_t hipLaunchKernel(const void* hostFunction, dim3 gridDim, dim3 blockDim, void** args,
