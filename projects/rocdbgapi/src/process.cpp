@@ -31,7 +31,7 @@
 #include "os_driver.h"
 #include "queue.h"
 #include "register.h"
-#include "rocr_rdebug.h"
+#include "runtime_rdebug.h"
 #include "watchpoint.h"
 #include "wave.h"
 
@@ -1359,17 +1359,18 @@ process_t::runtime_enable (os_runtime_info_t runtime_info)
 
     /* Check the r_version.  It should not be incompatible with any
        architecture found in the system.  */
-    rocr_rdebug_version_t r_version;
+    runtime_rdebug_version_t r_version;
     read_host_memory (
       runtime_info.r_debug + offsetof (struct r_debug, r_version), &r_version);
 
-    m_rocr_debug_version = r_version;
-    if (r_version < ROCR_RDEBUG_VERSION_MIN
-        || r_version > ROCR_RDEBUG_VERSION_MAX)
+    m_runtime_debug_version = r_version;
+    if (r_version < RUNTIME_RDEBUG_VERSION_MIN
+        || r_version > RUNTIME_RDEBUG_VERSION_MAX)
       {
         warning ("AMD GPU runtime's r_debug::r_version %d not supported "
                  "(r_debug::r_version at in [%d..%d] required)",
-                 r_version, ROCR_RDEBUG_VERSION_MIN, ROCR_RDEBUG_VERSION_MAX);
+                 r_version, RUNTIME_RDEBUG_VERSION_MIN,
+                 RUNTIME_RDEBUG_VERSION_MAX);
         return AMD_DBGAPI_RUNTIME_STATE_LOADED_ERROR_RESTRICTION;
       }
 
@@ -1700,8 +1701,8 @@ process_t::get_info (amd_dbgapi_process_info_t query, size_t value_size,
         os_runtime_info_t runtime_info = m_runtime_info;
         if (is_flag_set (process_t::flag_t::spi_ttmps_setup_enabled))
           {
-            if (m_rocr_debug_version < 10 && m_runtime_info.ttmp_setup == false
-                &&
+            if (m_runtime_debug_version < 10
+                && m_runtime_info.ttmp_setup == false &&
                 [this] ()
                 {
                   for (auto &&device : range<agent_t> ())

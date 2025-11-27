@@ -34,7 +34,7 @@
 #include "logging.h"
 #include "os_driver.h"
 #include "queue.h"
-#include "rocr_rdebug.h"
+#include "runtime_rdebug.h"
 #include "utils.h"
 #include "watchpoint.h"
 #include "wave.h"
@@ -100,7 +100,8 @@ private:
   amd_dbgapi_runtime_state_t m_runtime_state{
     AMD_DBGAPI_RUNTIME_STATE_UNLOADED
   };
-  rocr_rdebug_version_t m_rocr_debug_version = ROCR_RDEBUG_VERSION_INVALID;
+  runtime_rdebug_version_t m_runtime_debug_version
+    = RUNTIME_RDEBUG_VERSION_INVALID;
 
   std::unique_ptr<os_driver_t> m_os_driver{};
   flag_t m_flags{};
@@ -162,9 +163,9 @@ public:
     return m_os_process_id;
   }
 
-  rocr_rdebug_version_t rocr_rdebug_version () const
+  runtime_rdebug_version_t runtime_rdebug_version () const
   {
-    return m_rocr_debug_version;
+    return m_runtime_debug_version;
   }
 
   bool from_core () const { return !m_os_process_id.has_value (); }
@@ -230,8 +231,8 @@ public:
   [[nodiscard]] size_t xfer_host_memory (host_address_t address, void *read,
                                          const void *write, size_t size) const
   {
-    amd_dbgapi_status_t status = os_driver ().xfer_host_memory_partial (
-      address, read, write, &size);
+    amd_dbgapi_status_t status
+      = os_driver ().xfer_host_memory_partial (address, read, write, &size);
 
     if (status == AMD_DBGAPI_STATUS_ERROR_PROCESS_EXITED)
       throw process_exited_exception_t (id ());
