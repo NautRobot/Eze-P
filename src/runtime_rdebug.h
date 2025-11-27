@@ -18,12 +18,12 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE. */
 
-#ifndef ROCR_RDEBUG_H
-#define ROCR_RDEBUG_H 1
+#ifndef RUNTIME_RDEBUG_H
+#define RUNTIME_RDEBUG_H 1
 
 #include <link.h> /* for struct r_debug */
 
-/* ROCR r_debug::r_version history:
+/* Runtime r_debug::r_version history:
 
 1: Initial debug protocol
 2: New trap handler ABI. The reason for halting a wave is recorded in
@@ -44,10 +44,10 @@
 11: Remove scratch_backing_memory_byte_size from the aql_queue_t.
 */
 
-using rocr_rdebug_version_t = decltype (r_debug::r_version);
+using runtime_rdebug_version_t = decltype (r_debug::r_version);
 
-constexpr rocr_rdebug_version_t ROCR_RDEBUG_VERSION_INVALID = 0;
-constexpr rocr_rdebug_version_t ROCR_RDEBUG_VERSION_MIN = 8;
-constexpr rocr_rdebug_version_t ROCR_RDEBUG_VERSION_MAX = 11;
+constexpr runtime_rdebug_version_t RUNTIME_RDEBUG_VERSION_INVALID = 0;
+constexpr runtime_rdebug_version_t RUNTIME_RDEBUG_VERSION_MIN = 8;
+constexpr runtime_rdebug_version_t RUNTIME_RDEBUG_VERSION_MAX = 11;
 
-#endif /* ROCR_RDEBUG_H */
+#endif /* RUNTIME_RDEBUG_H */

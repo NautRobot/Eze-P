@@ -24,6 +24,7 @@
 #include "amd-dbgapi.h"
 #include "logging.h"
 #include "memory.h"
+#include "runtime_rdebug.h"
 #include "utils.h"
 
 #include <cstddef>

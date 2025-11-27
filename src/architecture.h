@@ -28,7 +28,7 @@
 #include "memory.h"
 #include "os_driver.h"
 #include "register.h"
-#include "rocr_rdebug.h"
+#include "runtime_rdebug.h"
 #include "utils.h"
 
 #include <cstddef>
@@ -334,9 +334,9 @@ public:
 
   /* Report that a given ABI version is unreliable for the current
      architecture.  */
-  virtual bool check_runtime_abi_version (rocr_rdebug_version_t) const = 0;
+  virtual bool check_runtime_abi_version (runtime_rdebug_version_t) const = 0;
 
-  virtual bool park_stopped_waves (rocr_rdebug_version_t) const = 0;
+  virtual bool park_stopped_waves (runtime_rdebug_version_t) const = 0;
   virtual void save_pc_for_park (const wave_t &wave, agent_address_t pc) const
     = 0;
   virtual agent_address_t saved_parked_pc (const wave_t &wave) const = 0;
