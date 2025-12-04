@@ -9,12 +9,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/types.h>
+
+/* Needed for struct sockaddr */
 #ifdef _WIN32
 #include <winsock2.h>
 #else
 #include <sys/socket.h>
 #endif
-#include <sys/types.h>
 
 #if defined(__GNUC__)
 #define HIPFILE_API __attribute__((visibility("default")))
@@ -95,10 +97,16 @@ extern "C" {
  * @brief Platform-independent offset type
  * @ingroup core
  */
-#ifndef _WIN32
-typedef off_t hoff_t;
-#else
+#ifdef _WIN32
 typedef __int64 hoff_t;
+#else
+typedef off_t hoff_t;
+#endif
+
+/* Handle ssize_t on Windows (does not need Doxygen) */
+#ifdef _WIN32
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
 #endif
 
 // ***********************************************************************
