@@ -7,6 +7,7 @@
 
 #include "hipfile.h"
 #include "mountinfo.h"
+#include "passkey.h"
 
 #include <linux/stat.h>
 #include <memory>
@@ -87,6 +88,8 @@ public:
     virtual std::optional<MountInfo> getMountInfo() const      = 0;
 };
 
+class FileMap;
+
 class File : public IFile {
 
 public:
@@ -105,11 +108,12 @@ public:
     virtual int                      getStatusFlags() const override;
     virtual std::optional<MountInfo> getMountInfo() const override;
 
-private:
     /// @brief Construct a registered file
     /// @param uf An unregistered file
-    File(const UnregisteredFile &uf);
+    /// @param k  Key class instance (see passkey.h)
+    File(const UnregisteredFile &uf, const PassKey<FileMap> &k);
 
+private:
     /// @brief The file descriptor
     int fd;
 
@@ -123,8 +127,6 @@ private:
 
     /// @brief Mount information for the filesystem backing fd
     std::optional<MountInfo> mountinfo;
-
-    friend class FileMap;
 };
 
 class FileMap {

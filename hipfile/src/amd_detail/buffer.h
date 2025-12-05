@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "passkey.h"
+
 #include <cstddef>
 #include <hip/hip_runtime_api.h>
 #include <memory>
@@ -59,6 +61,8 @@ public:
     virtual int           getGpuId() const  = 0;
 };
 
+class BufferMap;
+
 class Buffer : public IBuffer {
 
 public:
@@ -78,13 +82,14 @@ public:
     virtual hipMemoryType getType() const override;
     virtual int           getGpuId() const override;
 
-private:
     /// @brief Creates a buffer.
     /// @param buf Buffer pointer
     /// @param length Buffer length
     /// @param flags Buffer flags (unused)
-    Buffer(const void *buf, size_t length, int flags);
+    /// @param k  Key class instance (see passkey.h)
+    Buffer(const void *buf, size_t length, int flags, const PassKey<BufferMap> &k);
 
+private:
     /// @brief Pointer to a hip allocated buffer
     void *buffer;
 
@@ -99,8 +104,6 @@ private:
 
     /// @brief Gpu ID
     int gpu_id;
-
-    friend class BufferMap;
 };
 
 class BufferMap {
