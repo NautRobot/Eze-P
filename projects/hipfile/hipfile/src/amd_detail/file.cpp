@@ -6,6 +6,7 @@
 #include "context.h"
 #include "file.h"
 #include "mountinfo.h"
+#include "passkey.h"
 #include "sys.h"
 
 #include <algorithm>
@@ -68,7 +69,7 @@ IFile::getHandle() const
     return reinterpret_cast<hipFileHandle_t>(const_cast<IFile *>(this));
 }
 
-File::File(const UnregisteredFile &uf)
+File::File(const UnregisteredFile &uf, const PassKey<FileMap> &)
     : fd{uf.getFd()}, stx{uf.getStatx()}, status_flags{uf.getFlags()}, mountinfo{uf.getMountInfo()}
 {
 }
@@ -115,7 +116,7 @@ FileMap::registerFile(const UnregisteredFile &uf)
         throw FileAlreadyRegistered();
     }
 
-    auto file                  = std::shared_ptr<IFile>(new File(uf));
+    auto file                  = std::shared_ptr<IFile>(new File(uf, PassKey<FileMap>{}));
     from_fd[file->getFd()]     = file;
     from_fh[file->getHandle()] = file;
 
