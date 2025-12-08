@@ -42,7 +42,7 @@ endif()
 
 # rocjpeg Version
 # NOTE: package version and rocjpeg_version.h is generated with this version
-set(VERSION "1.3.0")
+set(VERSION "1.4.0")
 
 # Set Project Version and Language
 project(rocjpeg VERSION ${VERSION} LANGUAGES CXX)
@@ -133,6 +133,7 @@ message("-- ${White}${PROJECT_NAME} -- AMD GPU_TARGETS: ${GPU_TARGETS}${ColourRe
 # Add an option for enabling the rocprofiler-register
 option(ROCJPEG_ENABLE_ROCPROFILER_REGISTER "Enable rocprofiler-register support" ON)
 
+set (HIP_PLATFORM amd CACHE STRING "HIP platform")
 find_package(HIP QUIET)
 find_package(Libva QUIET)
 find_package(Libdrm_amdgpu QUIET)
@@ -221,6 +222,10 @@ if(HIP_FOUND AND Libva_FOUND AND Libdrm_amdgpu_FOUND)
   set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
   set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
+
+  if(USING_THE_ROCK)
+    set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH "$ORIGIN;$ORIGIN/rocm_sysdeps/lib" BUILD_WITH_INSTALL_RPATH TRUE)
+  endif()
 
   # rocprofiler
   if(rocprofiler-register_FOUND)
