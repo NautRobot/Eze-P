@@ -24,9 +24,16 @@ THE SOFTWARE.
 
 #include <hip_test_common.hh>
 
+#ifdef KERNEL_ARG_PREFETCH
+// Trimmed for mi4xx emu
+#define N 32 * 32
+#define NSTEP 1
+#define NKERNEL 5
+#else
 #define N 1024 * 1024
 #define NSTEP 1000
 #define NKERNEL 25
+#endif  // KERNEL_ARG_PREFETCH
 #define CONSTANT 5.34
 
 static __global__ void simpleKernel(float* out_d, float* in_d) {
@@ -148,7 +155,15 @@ static void hipTestWithoutGraph() {
 /**
  * Simple test to demonstrate usage of graph.
  */
+#ifdef KERNEL_ARG_PREFETCH
+TEST_CASE("Unit_hipGraph_SimpleGraphWithKernel_kernel_arg_prefetch") {
+  if (!HipTest::isKernelArgPrefetchSupported()) {
+    HipTest::HIP_SKIP_TEST("Kernel arg prefetch is not supported on the device. Skipped.");
+    return;
+  }
+#else
 TEST_CASE("Unit_hipGraph_SimpleGraphWithKernel") {
+#endif  // KERNEL_ARG_PREFETCH
   // Sections run test with and without graph.
   SECTION("Run Test Without Graph") { hipTestWithoutGraph(); }
 

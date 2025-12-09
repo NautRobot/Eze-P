@@ -440,6 +440,21 @@ inline bool areWarpMatchFunctionsSupported() {
   return matchFunctionsSupported != 0;
 }
 
+inline bool isKernelArgPrefetchSupported() {
+#if HT_AMD && HT_LINUX
+  int deviceId = 0;
+  HIP_CHECK(hipGetDevice(&deviceId));
+  hipDeviceProp_t props;
+  HIP_CHECK(hipGetDeviceProperties(&props, deviceId));
+  std::cout << "Device Id = " << deviceId << " props.major = " << props.major
+            << " props.minor = " << props.minor << std::endl;
+  return (props.major == 12 && props.minor == 5) ? true : false;
+#else
+  std::cout << "Only Supported for AMD in Linux" << std::endl;
+  return false;
+#endif
+}
+
 /**
  * Causes the test to stop and be skipped at runtime.
  * reason: Message describing the reason the test has been skipped.

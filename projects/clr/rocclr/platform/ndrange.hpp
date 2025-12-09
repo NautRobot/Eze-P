@@ -151,6 +151,10 @@ struct LaunchParams {
     } else {
       // Non HIPLaunchParams, App directly calculated the global and local size,
       // manually deduce the grid (total blocks) size.
+      if (local_[0] == 0 || local_[1] == 0 ||local_[2] == 0) {
+        validConfig_ = false;
+        return;
+      }
       grid_[0] = global_[0] / local_[0];
       grid_[1] = global_[1] / local_[1];
       grid_[2] = global_[2] / local_[2];
