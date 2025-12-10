@@ -10,10 +10,9 @@
 #include <gtest/gtest.h>
 #include <thread>
 
-extern SystemTestOptions test_env;
 HIPFILE_WARN_NO_GLOBAL_CTOR_OFF
 HIPFILE_WARN_NO_EXIT_DTOR_OFF
-SystemTestOptions test_env;
+static UnitTestOptions test_env;
 HIPFILE_WARN_NO_EXIT_DTOR_ON
 HIPFILE_WARN_NO_GLOBAL_CTOR_ON
 
