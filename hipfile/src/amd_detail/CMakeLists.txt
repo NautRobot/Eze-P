@@ -12,7 +12,9 @@ set(HIPFILE_SOURCES
     backend/fastpath.cpp
     batch/batch.cpp
     buffer.cpp
+    configuration.cpp
     context.cpp
+    environment.cpp
     file.cpp
     hip.cpp
     hipfile.cpp
