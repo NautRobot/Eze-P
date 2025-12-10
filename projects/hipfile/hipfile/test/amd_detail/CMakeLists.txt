@@ -12,9 +12,11 @@ set(SHARED_SOURCE_FILES
 set(TEST_SOURCE_FILES
     async.cpp
     batch/batch.cpp
+    configuration.cpp
     context.cpp
     buffer.cpp
     driver.cpp
+    environment.cpp
     handle.cpp
     hip.cpp
     hipfile-api.cpp
