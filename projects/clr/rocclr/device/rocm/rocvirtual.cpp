@@ -4537,6 +4537,9 @@ void VirtualGPU::submitPerfCounter(amd::PerfCounterCommand& vcmd) {
 
 // ================================================================================================
 void VirtualGPU::MetaDataPreloader::Attach(hsa_queue_t* queue) {
+  if (!DEBUG_CLR_ENABLE_PREFETCH_METADATA) {
+    return;
+  }
   Detach();
 
   void* ring_buffer = nullptr;
