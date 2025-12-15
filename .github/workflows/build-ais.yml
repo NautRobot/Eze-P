@@ -18,7 +18,8 @@ permissions:
 jobs:
   compile_on_AMD:
     outputs:
-      ais_hipfile_version: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_VERSION }}
+      ais_hipfile_pkg_filename: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}
+      ais_hipfile_pkg_version: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_VERSION }}
     runs-on: [ubuntu-24.04]
     steps:
       - name: Set early AIS CI environment variables
@@ -134,11 +135,13 @@ jobs:
             -w /ais/hipFile/build \
             ${AIS_CONTAINER_NAME} \
             /bin/bash -c '
-              echo "AIS_HIPFILE_VERSION=$(
+              AIS_HIPFILE_PKG_FILENAME="$(echo hipfile-dev*.${{ inputs.platform == 'ubuntu' && 'deb' || 'rpm' }})"
+              echo "AIS_HIPFILE_PKG_FILENAME=${AIS_HIPFILE_PKG_FILENAME}" >> "${AIS_GITHUB_OUTPUT}"
+              echo "AIS_HIPFILE_PKG_VERSION=$(
                 ${{
                   inputs.platform == 'ubuntu' &&
-                  'dpkg-deb -f hipfile-dev*.deb "Version"' ||
-                  'rpm -qp --qf "%{VERSION}" hipfile-devel*.rpm'
+                  'dpkg-deb -f ${AIS_HIPFILE_PKG_FILENAME} "Version"' ||
+                  'rpm -qp --qf "%{VERSION}" ${AIS_HIPFILE_PKG_FILENAME}'
                 }}
               )" >> "${AIS_GITHUB_OUTPUT}"
             '
@@ -152,16 +155,18 @@ jobs:
             /bin/bash -c '
               echo "$(
                 ${{
-                  inputs.platform == 'ubuntu' &&
-                  'dpkg-deb -I hipfile-dev*.deb' ||
-                  'rpm -qpi --requires hipfile-devel*.rpm'
+                  format(
+                    inputs.platform == 'ubuntu' && 'dpkg-deb -I {0}' || 'rpm -qpi --requires {0}',
+                    steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME
+                  )
                 }}
               )"
             '
       - name: Validate Metadata stored correctly
         run: |
-          echo "hipFile package version: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_VERSION }}"
-          if [[ -z "${{ steps.pkg-metadata.outputs.AIS_HIPFILE_VERSION }}" ]]; then exit 1; fi
+          echo "hipFile package filename: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}"
+          echo "hipFile package version: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_VERSION }}"
+          if [[ -z "${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_VERSION }}" ]]; then exit 1; fi
       - name: Test installing the hipFile package.
         run: |
           docker exec \
@@ -170,12 +175,28 @@ jobs:
             ${AIS_CONTAINER_NAME} \
             /bin/bash -c '
               ${{
-                inputs.platform == 'ubuntu' && 'apt install -y ./hipfile-dev*.deb' ||
-                inputs.platform == 'rocky' && 'dnf install -y ./hipfile-devel*.rpm' ||
-                inputs.platform == 'suse' && 'zypper install -y --allow-unsigned-rpm ./hipfile-devel*.rpm' ||
-                'echo "Unknown platform."; exit 1'
+                format(
+                  inputs.platform == 'ubuntu' && 'apt install -y ./{0}' ||
+                    inputs.platform == 'rocky' && 'dnf install -y ./{0}' ||
+                    inputs.platform == 'suse' && 'zypper install -y --allow-unsigned-rpm ./{0}' ||
+                    'echo "Unknown platform."; exit 1',
+                  steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME
+                )
               }}
             '
+      - name: Copy hipFile package out of the container
+        run: |
+          docker cp \
+            "${AIS_CONTAINER_NAME}:/ais/hipFile/build/${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}" \
+            ${GITHUB_WORKSPACE}
+      - name: Upload hipFile Package as an Artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 #v5.0.0
+        with:
+          name: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}
+          path: ${{ format('{0}/{1}', github.workspace, steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME) }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
       - name: Clean CMake build directories
         run: |
           docker exec \
