@@ -18,12 +18,18 @@ struct MSys : Sys {
     MSys() : co{this}
     {
     }
+    MOCK_METHOD(int, open, (const char *, int), (const, override));
+    MOCK_METHOD(int, open, (const char *, int, mode_t), (const, override));
+    MOCK_METHOD(void, close, (int), (const, override));
+    MOCK_METHOD(void, fdatasync, (int), (const, override));
     MOCK_METHOD(void *, mmap, (void *addr, size_t length, int prot, int flags, int fd, off_t offset),
                 (const, override));
     MOCK_METHOD(void, munmap, (void *addr, size_t length), (const, override));
 
     MOCK_METHOD(ssize_t, pread, (int fd, void *buf, size_t count, off_t offset), (const, override));
     MOCK_METHOD(ssize_t, pwrite, (int fd, void *buf, size_t count, off_t offset), (const, override));
+
+    MOCK_METHOD(ssize_t, readlink, (const char *, char *, size_t), (const, override));
 
     MOCK_METHOD(void, syslog, (int priority, const char *msg), (const, override));
 
