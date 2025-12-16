@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "file-descriptor.h"
 #include "hipfile.h"
 #include "mountinfo.h"
 #include "passkey.h"
@@ -48,30 +49,23 @@ public:
     /// @param fd A valid file descriptor
     UnregisteredFile(int fd);
 
-    /// @return Returns the file descriptor
-    int getFd() const noexcept;
+    /// @brief The file descriptor provided by the client
+    FileDescriptor client_fd;
 
-    /// @return Returns the information provided by statx (2)
-    struct statx getStatx() const noexcept;
+    /// @brief Buffered file descriptor (!O_DIRECT)
+    FileDescriptor buffered_fd;
 
-    /// @return Returns the flags provided by fcntl (2)
-    int getFlags() const noexcept;
-
-    /// @brief Returns information obtained from /proc/self/mountinfo
-    std::optional<MountInfo> getMountInfo() const noexcept;
-
-private:
-    /// @brief The file descriptor
-    int m_fd;
+    /// @brief Unbuffered file descriptor (O_DIRECT)
+    FileDescriptor unbuffered_fd;
 
     /// @brief Information provided by statx (2)
-    struct statx m_stx;
+    struct statx stx;
 
     /// @brief Flags provided by fcntl(2)
-    int m_flags;
+    int flags;
 
     /// @brief Information obtained from /proc/self/mountinfo
-    std::optional<MountInfo> m_mountinfo;
+    std::optional<MountInfo> mountinfo;
 };
 
 class IFile {
@@ -82,7 +76,9 @@ public:
     /// @return The handle for this file
     virtual hipFileHandle_t getHandle() const;
 
-    virtual int                      getFd() const             = 0;
+    virtual int                      getClientFd() const       = 0;
+    virtual int                      getBufferedFd() const     = 0;
+    virtual int                      getUnbufferedFd() const   = 0;
     virtual const struct statx      &getStatx() const noexcept = 0;
     virtual int                      getStatusFlags() const    = 0;
     virtual std::optional<MountInfo> getMountInfo() const      = 0;
@@ -103,7 +99,9 @@ public:
     File(File &&)            = delete;
     File &operator=(File &&) = delete;
 
-    virtual int                      getFd() const override;
+    virtual int                      getClientFd() const override;
+    virtual int                      getBufferedFd() const override;
+    virtual int                      getUnbufferedFd() const override;
     virtual const struct statx      &getStatx() const noexcept override;
     virtual int                      getStatusFlags() const override;
     virtual std::optional<MountInfo> getMountInfo() const override;
@@ -111,11 +109,17 @@ public:
     /// @brief Construct a registered file
     /// @param uf An unregistered file
     /// @param k  Key class instance (see passkey.h)
-    File(const UnregisteredFile &uf, const PassKey<FileMap> &k);
+    File(UnregisteredFile &&uf, const PassKey<FileMap> &k);
 
 private:
-    /// @brief The file descriptor
-    int fd;
+    /// @brief The file descriptor provided by the client
+    FileDescriptor client_fd;
+
+    /// @brief Buffered file descriptor (!O_DIRECT)
+    FileDescriptor buffered_fd;
+
+    /// @brief Unbuffered file descriptor (O_DIRECT)
+    FileDescriptor unbuffered_fd;
 
     /// @brief File status information obtained from statx (2)
     struct statx stx;
@@ -136,7 +140,7 @@ public:
     /// @brief Registers a file. Files must be registered before they can be used with hipFile IO APIs
     /// @attention A unique_lock on HipFileMutex must be held
     /// @param uf An unregistered file
-    virtual hipFileHandle_t registerFile(const UnregisteredFile &uf);
+    virtual hipFileHandle_t registerFile(UnregisteredFile &&uf);
 
     /// @brief Deregisters the file associated with the provided file handle
     /// @attention A unique_lock on HipFileMutex must be held

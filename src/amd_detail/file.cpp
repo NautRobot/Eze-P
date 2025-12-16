@@ -5,11 +5,13 @@
 
 #include "context.h"
 #include "file.h"
+#include "file-descriptor.h"
 #include "mountinfo.h"
 #include "passkey.h"
 #include "sys.h"
 
 #include <algorithm>
+#include <climits>
 #include <cstdlib>
 #include <fcntl.h>
 #include <iterator>
@@ -26,41 +28,29 @@ using std::vector;
 namespace hipFile {
 
 UnregisteredFile::UnregisteredFile(int fd)
-    : m_fd(fd), m_stx{Context<Sys>::get()->statx(fd, "", AT_EMPTY_PATH,
+    : client_fd(FileDescriptor::make_unmanaged(fd)), buffered_fd{}, unbuffered_fd{},
+      stx{Context<Sys>::get()->statx(fd, "", AT_EMPTY_PATH,
 #if defined(STATX_DIOALIGN)
-                                                 STATX_TYPE | STATX_MODE | STATX_DIOALIGN
+                                     STATX_TYPE | STATX_MODE | STATX_DIOALIGN
 #else
-                                                 STATX_TYPE | STATX_MODE
+                                     STATX_TYPE | STATX_MODE
 #endif
-                                                 )},
-      m_flags{Context<Sys>::get()->fcntl(fd, F_GETFL, 0)},
-      m_mountinfo{
-          Context<LibMountHelper>::get()->getMountInfo(makedev(m_stx.stx_dev_major, m_stx.stx_dev_minor))}
+                                     )},
+      flags{Context<Sys>::get()->fcntl(fd, F_GETFL, 0)},
+      mountinfo{Context<LibMountHelper>::get()->getMountInfo(makedev(stx.stx_dev_major, stx.stx_dev_minor))}
 {
-}
+    std::string path = "/proc/self/fd/" + std::to_string(fd);
 
-int
-UnregisteredFile::getFd() const noexcept
-{
-    return m_fd;
-}
-
-struct statx
-UnregisteredFile::getStatx() const noexcept
-{
-    return m_stx;
-}
-
-int
-UnregisteredFile::getFlags() const noexcept
-{
-    return m_flags;
-}
-
-optional<MountInfo>
-UnregisteredFile::getMountInfo() const noexcept
-{
-    return m_mountinfo;
+    if (flags & O_DIRECT) {
+        unbuffered_fd = FileDescriptor::make_unmanaged(fd);
+        buffered_fd   = FileDescriptor::make_managed(
+            Context<Sys>::get()->open(path.c_str(), (flags | O_CLOEXEC) & ~O_DIRECT));
+    }
+    else {
+        buffered_fd   = FileDescriptor::make_unmanaged(fd);
+        unbuffered_fd = FileDescriptor::make_managed(
+            Context<Sys>::get()->open(path.c_str(), (flags | O_CLOEXEC) | O_DIRECT));
+    }
 }
 
 hipFileHandle_t
@@ -69,15 +59,28 @@ IFile::getHandle() const
     return reinterpret_cast<hipFileHandle_t>(const_cast<IFile *>(this));
 }
 
-File::File(const UnregisteredFile &uf, const PassKey<FileMap> &)
-    : fd{uf.getFd()}, stx{uf.getStatx()}, status_flags{uf.getFlags()}, mountinfo{uf.getMountInfo()}
+File::File(UnregisteredFile &&uf, const PassKey<FileMap> &)
+    : client_fd{std::move(uf.client_fd)}, buffered_fd{std::move(uf.buffered_fd)},
+      unbuffered_fd{std::move(uf.unbuffered_fd)}, stx{uf.stx}, status_flags{uf.flags}, mountinfo{uf.mountinfo}
 {
 }
 
 int
-File::getFd() const
+File::getClientFd() const
 {
-    return fd;
+    return client_fd.get();
+}
+
+int
+File::getBufferedFd() const
+{
+    return buffered_fd.get();
+}
+
+int
+File::getUnbufferedFd() const
+{
+    return unbuffered_fd.get();
 }
 
 const struct statx &
@@ -110,15 +113,15 @@ FileMap::getFile(hipFileHandle_t fh)
 }
 
 hipFileHandle_t
-FileMap::registerFile(const UnregisteredFile &uf)
+FileMap::registerFile(UnregisteredFile &&uf)
 {
-    if (from_fd.end() != from_fd.find(uf.getFd())) {
+    if (from_fd.end() != from_fd.find(uf.client_fd.get())) {
         throw FileAlreadyRegistered();
     }
 
-    auto file                  = std::shared_ptr<IFile>(new File(uf, PassKey<FileMap>{}));
-    from_fd[file->getFd()]     = file;
-    from_fh[file->getHandle()] = file;
+    auto file                    = std::shared_ptr<IFile>(new File(std::move(uf), PassKey<FileMap>{}));
+    from_fd[file->getClientFd()] = file;
+    from_fh[file->getHandle()]   = file;
 
     return file->getHandle();
 }
@@ -136,7 +139,7 @@ FileMap::deregisterFile(hipFileHandle_t fh)
         throw FileOperationsOutstanding();
     }
 
-    from_fd.erase(itr->second->getFd());
+    from_fd.erase(itr->second->getClientFd());
     from_fh.erase(fh);
 }
 

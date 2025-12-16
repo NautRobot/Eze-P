@@ -23,6 +23,30 @@ throwOn(const L throw_value, R value)
     return value;
 }
 
+int
+Sys::open(const char *pathname, int flags) const
+{
+    return throwOn<Sys::RuntimeError>(-1, ::open(pathname, flags));
+}
+
+int
+Sys::open(const char *pathname, int flags, mode_t mode) const
+{
+    return throwOn<Sys::RuntimeError>(-1, ::open(pathname, flags, mode));
+}
+
+void
+Sys::close(int fd) const
+{
+    throwOn<Sys::RuntimeError>(-1, ::close(fd));
+}
+
+void
+Sys::fdatasync(int fd) const
+{
+    throwOn<Sys::RuntimeError>(-1, ::fdatasync(fd));
+}
+
 void *
 Sys::mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) const
 {
@@ -46,6 +70,12 @@ ssize_t
 Sys::pwrite(int fd, void *buf, size_t count, off_t offset) const
 {
     return throwOn<Sys::RuntimeError>(-1, ::pwrite(fd, buf, count, offset));
+}
+
+ssize_t
+Sys::readlink(const char *pathname, char *buf, size_t bufsize) const
+{
+    return throwOn<Sys::RuntimeError>(-1, ::readlink(pathname, buf, bufsize));
 }
 
 void
