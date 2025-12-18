@@ -269,7 +269,8 @@ void Timestamp::ExtractSignalTiming(ProfilingSignal* signal,
 bool HsaAmdSignalHandler(hsa_signal_value_t value, void* arg) {
   Timestamp* ts = reinterpret_cast<Timestamp*>(arg);
 
-  if (amd::activity_prof::IsEnabled(OP_ID_DISPATCH)) {
+  if (amd::activity_prof::IsEnabled(OP_ID_DISPATCH) &&
+      !ts->gpu()->dev().settings().ext_dispatch_packet_) {
     amd::Command* head = ts->getParsedCommand();
     if (head == nullptr) {
       head = ts->command().GetBatchHead();
@@ -1132,8 +1133,7 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
 
   if (fence_state_ == amd::Device::kCacheStateSystem
       && expected_fence_state == amd::Device::kCacheStateSystem) {
-    header = dev().settings().useNewDispatchPacket_ ? vendorSpecificPacketHeader_
-                                                    : dispatchPacketHeader_;
+    header = dispatchPacketHeader_;
     setFenceDirty(true);
   }
 
@@ -1148,7 +1148,7 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
       timestamp_ != nullptr) {
     // If profiling is enabled, store the correlation ID in the dispatch packet. The profiler can
     // retrieve this correlation ID to attribute waves to specific dispatch locations.
-    if (amd::activity_prof::IsEnabled(OP_ID_DISPATCH)) {
+    if (amd::activity_prof::IsEnabled(OP_ID_DISPATCH) && !dev().settings().ext_dispatch_packet_) {
       auto dispatchPacket = reinterpret_cast<hsa_kernel_dispatch_packet_t*>(packet);
       dispatchPacket->reserved2 = timestamp_->command().profilingInfo().correlation_id_;
     }
@@ -1182,7 +1182,7 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
     packet_store_release(reinterpret_cast<uint32_t*>(aql_loc), header, rest);
   }
 
-  if (dev().settings().useNewDispatchPacket_) {
+  if (dev().settings().ext_dispatch_packet_) {
     ClPrint(amd::LOG_DEBUG, amd::LOG_AQL,
       "SWq=0x%zx, HWq=0x%zx, id=%d, Dispatch Header = "
       "0x%x (type=%d, barrier=%d, acquire=%d, release=%d), "
@@ -1268,16 +1268,22 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
 }
 
 // ================================================================================================
-void VirtualGPU::dispatchBlockingWait() {
+void VirtualGPU::dispatchBlockingWait(hsa_kernel_dispatch_packet_t* packet) {
   auto wait_signals = Barriers().WaitingSignal();
-  // AQL dispatch doesn't support dependent signals and extra barrier packet must be generated
-  for (uint32_t i = 0; i < wait_signals.size(); ++i) {
-    uint32_t j = i % 5;
-    barrier_packet_.dep_signal[j] = wait_signals[i];
-    constexpr bool kSkipSignal = true;
-    // If runtime reached the packet limit or the count limit, then flush the barrier
-    if ((j == 4) || ((i + 1) == wait_signals.size())) {
-      dispatchBarrierPacket(kNopPacketHeader, kSkipSignal);
+  if (dev().settings().ext_dispatch_packet_ && wait_signals.size() == 1) {
+      // The Ext Dispatch Packet supports only one dependent signal
+      auto ext_packet = reinterpret_cast<hsa_amd_ext_kernel_dispatch_packet_t*>(packet);
+      ext_packet->dep_signal = wait_signals[0];
+  } else {
+    // AQL dispatch doesn't support dependent signals and extra barrier packet must be generated
+    for (uint32_t i = 0; i < wait_signals.size(); ++i) {
+      uint32_t j = i % 5;
+      barrier_packet_.dep_signal[j] = wait_signals[i];
+      constexpr bool kSkipSignal = true;
+      // If runtime reached the packet limit or the count limit, then flush the barrier
+      if ((j == 4) || ((i + 1) == wait_signals.size())) {
+        dispatchBarrierPacket(kNopPacketHeader, kSkipSignal);
+      }
     }
   }
 }
@@ -1292,7 +1298,7 @@ bool VirtualGPU::dispatchAqlPacket(hsa_kernel_dispatch_packet_t* packet, uint16_
     std::memcpy(const_cast<uint8_t*>(aqlPacket), packet, sizeof(hsa_kernel_dispatch_packet_t));
     return true;
   } else {
-    dispatchBlockingWait();
+    dispatchBlockingWait(packet);
     return dispatchGenericAqlPacket(packet, header, rest, blocking, attach_signal);
   }
 }
@@ -1409,7 +1415,7 @@ bool VirtualGPU::dispatchGenericAqlPacketBatch(const std::vector<AqlPacket*>& pa
       if (std::is_same<decltype(packet), hsa_kernel_dispatch_packet_t*>::value &&
           timestamp_ != nullptr) {
         // If profiling is enabled, store the correlation ID in the dispatch packet
-        if (amd::activity_prof::IsEnabled(OP_ID_DISPATCH)) {
+        if (amd::activity_prof::IsEnabled(OP_ID_DISPATCH) && !dev().settings().ext_dispatch_packet_) {
           auto dispatchPacket = reinterpret_cast<hsa_kernel_dispatch_packet_t*>(packet);
           dispatchPacket->reserved2 = timestamp_->command().profilingInfo().correlation_id_;
         }
@@ -1530,14 +1536,17 @@ bool VirtualGPU::dispatchAqlPacketBatch(const std::vector<uint8_t*>& packets,
   amd::ScopedLock lock(execution());
   profilingBegin(*vcmd);
 
-  dispatchBlockingWait();
-
   vcmd->setKernelNamesRef(&kernelNames);
 
   // Dispatch all packets with a single doorbell ring
   // Cast packets vector to AQL packets vector on the fly
   const auto& aqlPackets =
       reinterpret_cast<const std::vector<hsa_kernel_dispatch_packet_t*>&>(packets);
+  dispatchBlockingWait(aqlPackets[0]);
+
+  // Add all kernel names in bulk
+  vcmd->addKernelNames(kernelNames);
+
   bool result = dispatchGenericAqlPacketBatch(aqlPackets, false, attach_signal, &kernelNames);
 
   profilingEnd();
@@ -1812,21 +1821,19 @@ VirtualGPU::VirtualGPU(Device& device, bool profiling, bool cooperative,
                                             << HSA_PACKET_HEADER_TYPE);
 
   if (device.settings().fenceScopeAgent_) {
-    const auto& isa = device.isa();
-    const bool isGfx12 = (isa.versionMajor() == 12) && (isa.versionMinor() == 0) &&
-                         (isa.versionStepping() == 0 || isa.versionStepping() == 1);
-
     dispatchPacketHeaderNoSync_ =
-        (kernelDispatchHBits | (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
-    dispatchPacketHeader_ = (kernelDispatchHBits | barrierHBits |
-                             (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
-    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | agentScopeHBits);
-    vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | agentScopeHBits);
+        ((device.settings().ext_dispatch_packet_ ? vendorSpecificHBits : kernelDispatchHBits) |
+         agentScopeHBits);
+    dispatchPacketHeader_ =
+        ((device.settings().ext_dispatch_packet_ ? vendorSpecificHBits : kernelDispatchHBits) |
+         barrierHBits | agentScopeHBits);
   } else {
-    dispatchPacketHeaderNoSync_ = (kernelDispatchHBits | systemScopeHBits);
-    dispatchPacketHeader_ = (kernelDispatchHBits | barrierHBits | systemScopeHBits);
-    vendorSpecificPacketHeaderNoSync_ = (vendorSpecificHBits | systemScopeHBits);
-    vendorSpecificPacketHeader_ = (vendorSpecificHBits | barrierHBits | systemScopeHBits);
+    dispatchPacketHeaderNoSync_ =
+        ((device.settings().ext_dispatch_packet_ ? vendorSpecificHBits : kernelDispatchHBits) |
+         systemScopeHBits);
+    dispatchPacketHeader_ =
+        ((device.settings().ext_dispatch_packet_ ? vendorSpecificHBits : kernelDispatchHBits) |
+         barrierHBits | systemScopeHBits);
   }
 
   aqlHeader_ = dispatchPacketHeader_;
@@ -1929,7 +1936,7 @@ bool VirtualGPU::create() {
   // Create a object of PrintfDbg
   printfdbg_ = new PrintfDbg(roc_device_);
   if (nullptr == printfdbg_) {
-    LogError("\nCould not create printfDbg Object!");
+    LogError("Could not create printfDbg Object!");
     return false;
   }
 
@@ -4097,12 +4104,13 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     // dispatchPacket.header = aqlHeader_;
     // dispatchPacket.setup |= sizes.dimensions() << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
 
-    bool useNewDispatchPacket = (sizes.dimensions() > 0 && sizes.cluster()[0] > 1) ||
-                                (sizes.dimensions() > 1 && sizes.cluster()[1] > 1) ||
-                                (sizes.dimensions() > 2 && sizes.cluster()[2] > 1) ||
-                                dev().settings().useNewDispatchPacket_;
+    bool extDispatchPacket =
+        (sizes.dimensions() > 0 && sizes.cluster()[0] > 1) ||
+        (sizes.dimensions() > 1 && sizes.cluster()[1] > 1) ||
+        (sizes.dimensions() > 2 && sizes.cluster()[2] > 1) ||
+        dev().settings().ext_dispatch_packet_;
 
-    if (useNewDispatchPacket) {
+    if (extDispatchPacket) {
       auto& dispatchPacketExt = dispatchPacketUnion.extKernelDispatch;
 
       dispatchPacketExt.cluster_size_x = sizes.dimensions() > 0 ? sizes.cluster()[0] : 1;
@@ -4151,7 +4159,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
     }
 
     // Pass the header accordingly
-    auto aqlHeaderWithOrder = (useNewDispatchPacket) ? vendorSpecificPacketHeader_ : aqlHeader_;
+    auto aqlHeaderWithOrder = aqlHeader_;
 
   if (vcmd != nullptr) {
     if (vcmd->getAnyOrderLaunchFlag()) {
@@ -4166,7 +4174,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
   // Copy scheduler's AQL packet for possible relaunch from the scheduler itself
     if (aql_packet != nullptr) {
       *aql_packet = dispatchPacket;
-      if (useNewDispatchPacket) {
+      if (extDispatchPacket) {
         aql_packet->header = (HSA_PACKET_TYPE_VENDOR_SPECIFIC << HSA_PACKET_HEADER_TYPE) |
                               (1 << HSA_PACKET_HEADER_BARRIER) |
                               (HSA_FENCE_SCOPE_SYSTEM << HSA_PACKET_HEADER_ACQUIRE_FENCE_SCOPE) |
@@ -4185,7 +4193,7 @@ bool VirtualGPU::submitKernelInternal(const amd::NDRangeContainer& sizes, const 
 
 
     uint16_t rest = 0;
-    if (useNewDispatchPacket) {
+    if (extDispatchPacket) {
       // When launching an AQL packet, the 32 bits has to be written atomically for CP to track,
       // on normal dispatch packet, first 32 bits are header & setup. In ext dispatch packet,
       // the first 32 bits are header, amd_format, setup. Update the "rest" of the 32 bits, so we

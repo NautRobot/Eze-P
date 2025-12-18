@@ -87,7 +87,7 @@ Settings::Settings() {
   // Use coarse grain system memory for kernel arguments by default (to keep GPU cache)
   fgs_kernel_arg_ = false;
   barrier_value_packet_ = false;
-  useNewDispatchPacket_ = false;
+  ext_dispatch_packet_ = false;
   kernel_arg_impl_ = KernelArgImpl::HostKernelArgs;
   gwsInitSupported_ = true;
   limit_blit_wg_ = 16;
@@ -194,7 +194,7 @@ bool Settings::create(bool fullProfile, const amd::Isa& isa, bool enableXNACK, b
   }
 
   if (gfxipMajor == 12 && gfxipMinor >= 5) {
-    useNewDispatchPacket_ = true;
+    ext_dispatch_packet_ = true;
     groupMemCarveout_ = true;
     groupMemPref_.totalSharedBanks = 7;
     groupMemPref_.preferLDSBanks = 5;
@@ -257,6 +257,8 @@ void Settings::setKernelArgImpl(const amd::Isa& isa, bool isXgmi, bool hasValidH
   const bool isPreGfx908 =
       (gfxipMajor < 9) || ((gfxipMajor == 9) && (gfxipMinor == 0) && (gfxStepping < 8));
   const bool isGfx101x = (gfxipMajor == 10) && ((gfxipMinor == 0) || (gfxipMinor == 1));
+  const bool isGfx125x =
+      (gfxipMajor == 12) && ((gfxipMinor >= 5));
 
   auto kernelArgImpl = KernelArgImpl::HostKernelArgs;
 
@@ -272,14 +274,14 @@ void Settings::setKernelArgImpl(const amd::Isa& isa, bool isXgmi, bool hasValidH
     if (!(isPreGfx908 || isGfx101x)) {
       kernelArgImpl = KernelArgImpl::DeviceKernelArgsHDP;
     }
-  } else if (isGfx94x || isGfx90a) {
+  } else if (isGfx94x || isGfx90a || isGfx125x) {
     // Implement the kernel argument readback workaround
     // (write all args -> sfence -> write last byte -> mfence -> read last byte)
     kernelArgImpl = KernelArgImpl::DeviceKernelArgsReadback;
   }
 
   // Enable device kernel args for gfx94x for now
-  if (isGfx94x) {
+  if (isGfx94x || isGfx125x) {
     kernel_arg_impl_ = kernelArgImpl;
     kernel_arg_opt_ = true;
   }

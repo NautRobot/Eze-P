@@ -51,7 +51,7 @@ class Settings : public device::Settings {
       uint dynamic_queues_ : 2;        //!< Dynamic queues: 0=off, 1=Depth
       uint blocking_blit_ : 1;         //!< Blit ops can be blocking on CPU
       uint queue_pipe_dist_ : 1;       //!< MI300 queue pipe distribution (gfx94x)
-      uint useNewDispatchPacket_ : 1;   //!< Uses new ext dispatch packet for all launches
+      uint ext_dispatch_packet_ : 1;    //!< Uses new ext dispatch packet for all launches
       uint reserved_ : 18;
     };
     uint value_;

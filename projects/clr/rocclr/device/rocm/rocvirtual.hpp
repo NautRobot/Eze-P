@@ -579,7 +579,7 @@ class VirtualGPU : public device::VirtualDevice {
 
  private:
   //! Dispatches a barrier with blocking HSA signals
-  void dispatchBlockingWait();
+  void dispatchBlockingWait(hsa_kernel_dispatch_packet_t* packet);
 
   bool dispatchAqlPacket(hsa_kernel_dispatch_packet_t* packet, uint16_t header, uint16_t rest,
                          bool blocking = true, bool capturing = false,
@@ -745,8 +745,6 @@ class VirtualGPU : public device::VirtualDevice {
 
   uint16_t dispatchPacketHeaderNoSync_;
   uint16_t dispatchPacketHeader_;
-  uint16_t vendorSpecificPacketHeaderNoSync_;
-  uint16_t vendorSpecificPacketHeader_;
 
   //!< bit-vector representing the CU mask. Each active bit represents using one CU
   const std::vector<uint32_t> cuMask_;
