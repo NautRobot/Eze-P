@@ -18,6 +18,7 @@ permissions:
 jobs:
   compile_on_AMD:
     outputs:
+      ais_hipfile_pkg_dev_filename: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_DEV_FILENAME }}
       ais_hipfile_pkg_filename: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}
       ais_hipfile_pkg_version: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_VERSION }}
     runs-on: [ubuntu-24.04]
@@ -135,7 +136,10 @@ jobs:
             -w /ais/hipFile/build \
             ${AIS_CONTAINER_NAME} \
             /bin/bash -c '
-              AIS_HIPFILE_PKG_FILENAME="$(echo hipfile-dev*.${{ inputs.platform == 'ubuntu' && 'deb' || 'rpm' }})"
+              shopt -s nullglob
+              AIS_HIPFILE_PKG_DEV_FILENAME="$(echo hipfile-de{v,vel}{-,_}[0-9]*.{deb,rpm})"
+              AIS_HIPFILE_PKG_FILENAME="$(echo hipfile{-,_}[0-9]*.{deb,rpm})"
+              echo "AIS_HIPFILE_PKG_DEV_FILENAME=${AIS_HIPFILE_PKG_DEV_FILENAME}" >> "${AIS_GITHUB_OUTPUT}"
               echo "AIS_HIPFILE_PKG_FILENAME=${AIS_HIPFILE_PKG_FILENAME}" >> "${AIS_GITHUB_OUTPUT}"
               echo "AIS_HIPFILE_PKG_VERSION=$(
                 ${{
@@ -153,17 +157,24 @@ jobs:
             -w /ais/hipFile/build \
             ${AIS_CONTAINER_NAME} \
             /bin/bash -c '
-              echo "$(
-                ${{
-                  format(
-                    inputs.platform == 'ubuntu' && 'dpkg-deb -I {0}' || 'rpm -qpi --requires {0}',
-                    steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME
-                  )
-                }}
-              )"
+              echo "Runtime Package:"
+              ${{
+                format(
+                  inputs.platform == 'ubuntu' && 'dpkg-deb -I {0}' || 'rpm -qpi --requires {0}',
+                  steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME
+                )
+              }}
+              echo -e "\n\nDevelopment Package:"
+              ${{
+                format(
+                  inputs.platform == 'ubuntu' && 'dpkg-deb -I {0}' || 'rpm -qpi --requires {0}',
+                  steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_DEV_FILENAME
+                )
+              }}
             '
       - name: Validate Metadata stored correctly
         run: |
+          echo "hipFile package dev filename: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_DEV_FILENAME }}"
           echo "hipFile package filename: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}"
           echo "hipFile package version: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_VERSION }}"
           if [[ -z "${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_VERSION }}" ]]; then exit 1; fi
@@ -176,20 +187,32 @@ jobs:
             /bin/bash -c '
               ${{
                 format(
-                  inputs.platform == 'ubuntu' && 'apt install -y ./{0}' ||
-                    inputs.platform == 'rocky' && 'dnf install -y ./{0}' ||
-                    inputs.platform == 'suse' && 'zypper install -y --allow-unsigned-rpm ./{0}' ||
+                  inputs.platform == 'ubuntu' && 'apt install -y ./{0} ./{1}' ||
+                    inputs.platform == 'rocky' && 'dnf install -y ./{0} ./{1}' ||
+                    inputs.platform == 'suse' && 'zypper install -y --allow-unsigned-rpm ./{0} ./{1}' ||
                     'echo "Unknown platform."; exit 1',
+                  steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_DEV_FILENAME,
                   steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME
                 )
               }}
             '
-      - name: Copy hipFile package out of the container
+      - name: Copy hipFile packages out of the container
         run: |
+          docker cp \
+            "${AIS_CONTAINER_NAME}:/ais/hipFile/build/${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_DEV_FILENAME }}" \
+            ${GITHUB_WORKSPACE}
           docker cp \
             "${AIS_CONTAINER_NAME}:/ais/hipFile/build/${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}" \
             ${GITHUB_WORKSPACE}
-      - name: Upload hipFile Package as an Artifact
+      - name: Upload development hipFile Package as an Artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f #v6.0.0
+        with:
+          name: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_DEV_FILENAME }}
+          path: ${{ format('{0}/{1}', github.workspace, steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_DEV_FILENAME) }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Upload runtime hipFile Package as an Artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f #v6.0.0
         with:
           name: ${{ steps.pkg-metadata.outputs.AIS_HIPFILE_PKG_FILENAME }}
