@@ -10,10 +10,10 @@ template <typename TyGroup> struct can_group_do_async_copy : public std::false_t
 template <unsigned int size, typename TyPar>
 struct can_group_do_async_copy<cooperative_groups::thread_block_tile<size, TyPar>>
     : public std::true_type {};
-template <>
-struct can_group_do_async_copy<cooperative_groups::coalesced_group> : public std::true_type {};
-template <>
-struct can_group_do_async_copy<cooperative_groups::thread_block> : public std::true_type {};
+template <> struct can_group_do_async_copy<cooperative_groups::coalesced_group>
+    : public std::true_type {};
+template <> struct can_group_do_async_copy<cooperative_groups::thread_block>
+    : public std::true_type {};
 
 #if __has_builtin(__builtin_amdgcn_global_store_async_from_lds_b128) and                           \
     __has_builtin(__builtin_amdgcn_global_load_async_to_lds_b128)
@@ -154,12 +154,6 @@ __CG_STATIC_QUALIFIER__ void dispatch_async_memcpy(const TyGroup& group, TyElem*
 }
 #endif
 
-__CG_STATIC_QUALIFIER__ void wait_on_async() {
-#if __has_builtin(__builtin_amdgcn_s_wait_asynccnt)
-  __builtin_amdgcn_s_wait_asynccnt(0);
-#endif
-}
-
 template <class TyGroup, typename TyElem, typename TySize, size_t Hint = alignof(TyElem)>
 __CG_STATIC_QUALIFIER__ void memcpy_async_bytes(const TyGroup& group, TyElem* __restrict__ dst,
                                                 const TyElem* __restrict__ src,
@@ -172,7 +166,6 @@ __CG_STATIC_QUALIFIER__ void memcpy_async_bytes(const TyGroup& group, TyElem* __
   // Partition the memory in group of segments which each thread will copy portion of
   // Similar to what we do in accelerated copy
   size_t group_size = group.size();
-  printf("Group size: %d\n", group_size);
   size_t bytes_per_thread = count / group_size; /* each thread will copy this much */
   unsigned char *c_src = ((unsigned char*)src) + (group.thread_rank() * bytes_per_thread),
                 *c_dst = ((unsigned char*)dst) + (group.thread_rank() * bytes_per_thread);
@@ -198,7 +191,6 @@ template <class TyGroup, typename TyElem, typename TySizeT>
 __CG_STATIC_QUALIFIER__ void memcpy_async(const TyGroup& group, TyElem* __restrict__ dst,
                                           const TyElem* __restrict__ src, const TySizeT& count) {
   details::memcpy_async_bytes(group, dst, src, count);
-  details::wait_on_async();
 }
 
 /*
@@ -212,6 +204,5 @@ __CG_STATIC_QUALIFIER__ void memcpy_async(const TyGroup& group, TyElem* __restri
   auto l_min = [](DstLayout d, SrcLayout s) { return d > s ? s : d; };
   auto count = l_min(dstLayout, srcLayout);
   details::memcpy_async_bytes(group, dst, src, count * sizeof(TyElem));
-  details::wait_on_async();
 }
 }  // namespace cooperative_groups
