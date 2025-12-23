@@ -566,13 +566,16 @@ def are_deterministic_counters_equal(test_dfs, baseline_df):
     if not all(baseline_group_keys == keys for keys in tests_group_keys):
         return False
 
+    # series prior to MI350 use CSN, MI350 uses CS{0,1,2,3}
     deterministic_counter_patterns = list(
         map(
             re.compile,
             [
                 "SQ_INSTS_.*",
                 "SPI_CS\\d_NUM_THREADGROUPS",
+                "SPI_CSN_NUM_THREADGROUPS",
                 "SPI_CS\\d_WAVE",
+                "SPI_CSN_WAVE",
                 "SQ_WAVES",
             ],
         )
@@ -2645,15 +2648,31 @@ def test_iteration_multiplexing_kernel_launch_params(
 def test_iteration_multiplexing_deterministic_counter_accuracy(
     binary_handler_profile_rocprof_compute,
 ):
+    # These metrics should cover the deterministic counters being checked
+    options = ["--block", "6.1.5", "6.1.6", "7.2.2", "10.1"]
     workload_dir = test_utils.get_output_dir(param_id="no_iter_mplx")
     _ = binary_handler_profile_rocprof_compute(
-        config, workload_dir, check_success=True, roof=False, app_name="app_laplace_eqn"
+        config,
+        workload_dir,
+        options,
+        check_success=True,
+        roof=False,
+        app_name="app_laplace_eqn",
     )
     counters_no_multiplexing = test_utils.check_csv_files(
         workload_dir, num_devices, num_kernels
     )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
-    options = ["--iteration-multiplexing", "kernel"]
+    options = [
+        "--block",
+        "6.1.5",
+        "6.1.6",
+        "7.2.2",
+        "10.1",
+        "--iteration-multiplexing",
+        "kernel",
+    ]
     workload_dir = test_utils.get_output_dir(param_id="iter_mplx_kernel")
     _ = binary_handler_profile_rocprof_compute(
         config,
@@ -2666,8 +2685,17 @@ def test_iteration_multiplexing_deterministic_counter_accuracy(
     counters_kernel = test_utils.check_csv_files(
         workload_dir, num_devices, num_kernels
     )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
-    options = ["--iteration-multiplexing", "kernel_launch_params"]
+    options = [
+        "--block",
+        "6.1.5",
+        "6.1.6",
+        "7.2.2",
+        "10.1",
+        "--iteration-multiplexing",
+        "kernel_launch_params",
+    ]
     workload_dir = test_utils.get_output_dir(param_id="iter_mplx_params")
     _ = binary_handler_profile_rocprof_compute(
         config,
@@ -2680,25 +2708,90 @@ def test_iteration_multiplexing_deterministic_counter_accuracy(
     counters_kernel_launch_params = test_utils.check_csv_files(
         workload_dir, num_devices, num_kernels
     )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
     assert are_deterministic_counters_equal(
         [counters_kernel, counters_kernel_launch_params], counters_no_multiplexing
     )
-
-    test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
 
 @pytest.mark.iteration_multiplexing_stochastic
 def test_iteration_multiplexing_stochastic_counter_accuracy(
     binary_handler_profile_rocprof_compute,
 ):
-    workload_dir = test_utils.get_output_dir(param_id="no_mplx")
+    workload_dir = test_utils.get_output_dir(param_id="no_iter_mplx")
+    # These metrics should cover the L1 cache stochastic counters
+    options = ["--block", "16.1", "16.3"]
     _ = binary_handler_profile_rocprof_compute(
-        config, workload_dir, check_success=True, roof=False, app_name="app_laplace_eqn"
+        config,
+        workload_dir,
+        options,
+        check_success=True,
+        roof=False,
+        app_name="app_laplace_eqn",
     )
     counters_no_multiplexing = test_utils.check_csv_files(
         workload_dir, num_devices, num_kernels
     )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
+
+    options = ["--block", "16.1", "16.3", "--iteration-multiplexing", "kernel"]
+    workload_dir = test_utils.get_output_dir(param_id="iter_mplx_kernel")
+    _ = binary_handler_profile_rocprof_compute(
+        config,
+        workload_dir,
+        options,
+        check_success=True,
+        roof=False,
+        app_name="app_laplace_eqn_iter",
+    )
+    counters_kernel = test_utils.check_csv_files(
+        workload_dir, num_devices, num_kernels
+    )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
+
+    options = [
+        "--block",
+        "16.1",
+        "16.3",
+        "--iteration-multiplexing",
+        "kernel_launch_params",
+    ]
+    workload_dir = test_utils.get_output_dir(param_id="iter_mplx_params")
+    _ = binary_handler_profile_rocprof_compute(
+        config,
+        workload_dir,
+        options,
+        check_success=True,
+        roof=False,
+        app_name="app_laplace_eqn_iter",
+    )
+    counters_kernel_launch_params = test_utils.check_csv_files(
+        workload_dir, num_devices, num_kernels
+    )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
+
+    assert are_stochastic_counters_similar(
+        [counters_kernel, counters_kernel_launch_params], counters_no_multiplexing
+    )
+
+
+# Not part of automated test runs since testing all counters is expensive
+def test_iteration_multiplexing_all_counter_accuracy(
+    binary_handler_profile_rocprof_compute,
+):
+    workload_dir = test_utils.get_output_dir(param_id="no_iter_mplx")
+    _ = binary_handler_profile_rocprof_compute(
+        config,
+        workload_dir,
+        check_success=True,
+        roof=False,
+        app_name="app_laplace_eqn",
+    )
+    counters_no_multiplexing = test_utils.check_csv_files(
+        workload_dir, num_devices, num_kernels
+    )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
     options = ["--iteration-multiplexing", "kernel"]
     workload_dir = test_utils.get_output_dir(param_id="iter_mplx_kernel")
@@ -2713,6 +2806,7 @@ def test_iteration_multiplexing_stochastic_counter_accuracy(
     counters_kernel = test_utils.check_csv_files(
         workload_dir, num_devices, num_kernels
     )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
     options = ["--iteration-multiplexing", "kernel_launch_params"]
     workload_dir = test_utils.get_output_dir(param_id="iter_mplx_params")
@@ -2727,9 +2821,11 @@ def test_iteration_multiplexing_stochastic_counter_accuracy(
     counters_kernel_launch_params = test_utils.check_csv_files(
         workload_dir, num_devices, num_kernels
     )["pmc_perf.csv"]
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
+    assert are_deterministic_counters_equal(
+        [counters_kernel, counters_kernel_launch_params], counters_no_multiplexing
+    )
     assert are_stochastic_counters_similar(
         [counters_kernel, counters_kernel_launch_params], counters_no_multiplexing
     )
-
-    test_utils.clean_output_dir(config["cleanup"], workload_dir)
