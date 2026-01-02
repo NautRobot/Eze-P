@@ -3,7 +3,7 @@
 ## The University of Illinois/NCSA
 ## Open Source License (NCSA)
 ##
-## Copyright (c) 2018-2020, Advanced Micro Devices, Inc. All rights reserved.
+## Copyright (c) 2018-2026, Advanced Micro Devices, Inc. All rights reserved.
 ##
 ## Permission is hereby granted, free of charge, to any person obtaining a copy
 ## of this software and associated documentation files (the "Software"), to
@@ -32,11 +32,34 @@
 ##
 ################################################################################
 
+# Available defines to be used when building rocr-debug-agent:
+#
+# ENABLE_TESTS
+#
+# Enable building the rocr-debug-agent tests. Default is ON.
+#
+# The debug agent has a small set of validation tests that can be built
+# with a suitable HIP compiler. This is mostly for development, so it isn't
+# required to be built if users are only looking for the tool.
+#
+#
+# rocm-debug-agent has the following dependencies:
+#
+# amd_dbgapi
+# LibElf
+# LibDW
+# hsa-runtime64
+# GIT (optional)
+# Threads
+
 cmake_minimum_required(VERSION 3.10)
 
 project(rocm-debug-agent VERSION 2.1.0)
 
 include(GNUInstallDirs)
+
+# By default build the Debug Agent tests.
+option(ENABLE_TESTS "Enable building Debug Agent tests" ON)
 
 file(GLOB SOURCES "src/*.cpp")
 add_library(rocm-debug-agent SHARED ${SOURCES})
@@ -51,6 +74,50 @@ set_target_properties(rocm-debug-agent PROPERTIES
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
+# Start by looking for libdw (lowercase).
+find_package(libdw CONFIG)
+
+# If libdw is found, we're likely building within TheRock build platform.
+#
+# Note that we use the same CMAKE variables as we would use in a standalone
+# build, to avoid duplication of code.
+if(libdw_FOUND)
+  # Set the include file path for libdw.
+  get_property(LIBDW_INCLUDES
+               TARGET libdw::libdw
+               PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+  # Set the libdw library reference accordingly for the link setup.
+  set(LIBDW_LIBRARIES libdw::libdw)
+
+  # Find the ROCm Runtime.
+  find_package(hsa-runtime64 REQUIRED CONFIG)
+  # Set the include file path for the ROCm Runtime.
+  get_property(ROCR_INCLUDES
+               TARGET hsa-runtime64::hsa-runtime64
+               PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+  # Set the ROCm Runtime library reference accordingly for the link setup.
+  set(ROCR_LIBRARIES hsa-runtime64::hsa-runtime64)
+
+  # Find LibElf.
+  find_package(LibElf REQUIRED CONFIG)
+  # Set the include file path for LibElf.
+  get_property(LIBELF_INCLUDES
+               TARGET elf::elf
+               PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+  # Set the LibElf library reference accordingly for the link setup.
+  set(LIBELF_LIBRARIES elf::elf)
+else()
+  # Otherwise we're doing a regular standalone build, so use our cmake
+  # modules to locate the ROCR and LibElf.
+  find_package(ROCR REQUIRED)
+  find_package(LibDw REQUIRED)
+  find_package(LibElf REQUIRED)
+endif()
+
+message(STATUS "libdw include: ${LIBDW_INCLUDES}")
+message(STATUS "libhsa include: ${ROCR_INCLUDES}")
+message(STATUS "libelf include: ${LIBELF_INCLUDES}")
+
 find_package(amd-dbgapi REQUIRED CONFIG
   PATHS
     /opt/rocm/
@@ -59,9 +126,6 @@ find_package(amd-dbgapi REQUIRED CONFIG
     lib/cmake/amd-dbgapi
 )
 
-find_package(ROCR REQUIRED)
-find_package(LibElf REQUIRED)
-find_package(LibDw REQUIRED)
 find_package(Threads REQUIRED)
 
 target_include_directories(rocm-debug-agent
@@ -121,7 +185,6 @@ target_compile_definitions(rocm-debug-agent
 
 install(TARGETS rocm-debug-agent
   LIBRARY
-    NAMELINK_SKIP
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
   COMPONENT runtime)
 
@@ -131,16 +194,12 @@ install(FILES LICENSE.txt README.md
 # ASAN package requires libraries and license file
 install(TARGETS rocm-debug-agent
   LIBRARY
-    NAMELINK_SKIP
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
   COMPONENT asan)
 
 install(FILES LICENSE.txt
   DESTINATION ${CMAKE_INSTALL_DOCDIR}-asan
   COMPONENT asan)
-
-enable_testing()
-add_subdirectory(test)
 
 # Add packaging directives for rocm-debug-agent
 set(CPACK_PACKAGE_NAME rocm-debug-agent)
@@ -203,6 +262,11 @@ if(NOT ROCM_DEP_ROCMCORE)
     string(REGEX REPLACE ",? ?rocm-core" "" CPACK_DEBIAN_RUNTIME_PACKAGE_DEPENDS ${CPACK_DEBIAN_RUNTIME_PACKAGE_DEPENDS})
     string(REGEX REPLACE ",? ?rocm-core-asan" "" CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS ${CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS})
     string(REGEX REPLACE ",? ?rocm-core-asan" "" CPACK_RPM_ASAN_PACKAGE_REQUIRES ${CPACK_RPM_ASAN_PACKAGE_REQUIRES})
+endif()
+
+if(ENABLE_TESTS)
+  enable_testing()
+  add_subdirectory(test)
 endif()
 
 if(ENABLE_ASAN_PACKAGING)
