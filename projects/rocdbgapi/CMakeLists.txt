@@ -1,4 +1,4 @@
-## Copyright (c) 2019-2024 Advanced Micro Devices, Inc.
+## Copyright (c) 2019-2026 Advanced Micro Devices, Inc.
 ##
 ## Permission is hereby granted, free of charge, to any person obtaining a copy
 ## of this software and associated documentation files (the "Software"), to
@@ -17,6 +17,49 @@
 ## LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 ## FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 ## IN THE SOFTWARE.
+
+# Available defines to be used when building rocdbgapi:
+#
+# THE_ROCK_BUILD
+#
+# Satisfy TheRock's dependency on Threads. Default is OFF.
+#
+# If set to ON, include Threads when building. This is required when
+# rocdbgapi gets built within TheRock build platform due to a dependency
+# coming from amd_comgr.
+#
+# If building on its own, this does not need to be set.
+#
+#
+# API_TRACING
+#
+# Enable/Disable API tracing. Default is ON.
+#
+# For debugging and stepping through code, disabling API_TRACING is
+# recommended.
+#
+#
+# ENABLE_ASSERTIONS
+#
+# Enable/Disable assertions. Default is ON for DEBUG builds and OFF for
+# non-DEBUG builds.
+#
+#
+# BUILD_SHARED_LIBS
+#
+# Enable building ROCdbgapi either as a shared library or static library.
+# The default is ON, which builds ROCdbgapi as a shared library.
+#
+#
+# ROCdbgapi has the following dependencies:
+#
+# amd_comgr
+# libbacktrace (optional)
+# GIT (optional)
+# Doxygen (optional)
+# hsa-runtime64 headers
+# Threads (on request, see THE_ROCK_BUILD)
+
 
 cmake_minimum_required(VERSION 3.8)
 
@@ -38,12 +81,22 @@ string(REPLACE "-" "_" AMD_DBGAPI_NAME ${AMD_DBGAPI_NAME})
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" uppercase_CMAKE_BUILD_TYPE)
 
+option(THE_ROCK_BUILD "Satisfy TheRock's dependency on Threads" OFF)
+option(API_TRACING "Enable API tracing" ON)
+
 # Add an option to enable assertions even in non-debug builds.
 if(NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
   option(ENABLE_ASSERTIONS "Enable assertions" OFF)
 else()
   option(ENABLE_ASSERTIONS "Enable assertions" ON)
 endif()
+
+# Allow building dbgapi as either a shared or static library,
+# depending on BUILD_SHARED_LIBS.
+# Note add_library internally checks BUILD_SHARED_LIBS, but CMake does
+# not define BUILD_SHARED_LIBS by default.  See
+# <https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html>.
+option(BUILD_SHARED_LIBS "Build amd-dbgapi as a shared library" ON)
 
 if(ENABLE_ASSERTIONS)
   if(NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
@@ -78,13 +131,6 @@ configure_file(
 if(NOT CPACK_PACKAGING_INSTALL_PREFIX)
   set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 endif()
-
-# Allow building dbgapi as either a shared or static library,
-# depending on BUILD_SHARED_LIBS.
-# Note add_library internally checks BUILD_SHARED_LIBS, but CMake does
-# not define BUILD_SHARED_LIBS by default.  See
-# <https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html>.
-option(BUILD_SHARED_LIBS "Build amd-dbgapi as a shared library" ON)
 
 add_library(amd-dbgapi
   src/agent.cpp
@@ -130,29 +176,77 @@ if (MINGW)
   target_link_options(amd-dbgapi PRIVATE -static-libgcc -static-libstdc++)
 endif()
 
-execute_process(
-  COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} --print-file-name libbacktrace.a
-  RESULT_VARIABLE libbacktrace_check
-  OUTPUT_VARIABLE libbacktrace_path
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
+# We use libbacktrace when it is available, so look for it.
+#
+# First try find_package, as this is the preferred method when rocdbgapi is
+# built within TheRock build platform.
+#
+# If that does not work, then fallback to using the compiler to tell us
+# where libbacktrace.a is.
+#
+# If both methods fail, then build without libbacktrace.
+find_package(libbacktrace CONFIG)
 
-if(${libbacktrace_check} EQUAL 0)
-  get_filename_component(BACKTRACE_PREFIX ${libbacktrace_path} DIRECTORY)
-  find_path(BACKTRACE_INCLUDE_DIR backtrace-supported.h PATHS ${BACKTRACE_PREFIX}/include)
+if(libbacktrace_FOUND)
+  # Fetch the include directory for libbacktrace.
+  get_property(LIBBACKTRACE_INCLUDE_DIR TARGET libbacktrace::libbacktrace PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
 
-  if(BACKTRACE_INCLUDE_DIR)
-    find_library(BACKTRACE_LIB "backtrace" PATHS ${BACKTRACE_PREFIX})
-  endif()
+  # Enable libbacktrace in the sources.
+  target_compile_definitions(amd-dbgapi PRIVATE HAVE_BACKTRACE)
 
-  if(BACKTRACE_LIB)
-    target_compile_definitions(amd-dbgapi PRIVATE HAVE_BACKTRACE)
-    target_include_directories(amd-dbgapi PRIVATE ${BACKTRACE_INCLUDE_DIR})
-    target_link_libraries(amd-dbgapi PRIVATE ${BACKTRACE_LIB})
+  # Set up including the header in the compilation and linking against
+  # libbacktrace.
+  target_include_directories(amd-dbgapi PRIVATE ${LIBBACKTRACE_INCLUDE_DIR})
+  target_link_libraries(amd-dbgapi PRIVATE libbacktrace::libbacktrace)
+else()
+  message(STATUS "[libbacktrace check] Could not find libbacktrace through find_package.")
+  message(STATUS "[libbacktrace check] Trying compiler fallback.")
+
+  message(STATUS "[libbacktrace check] Executing command: ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} --print-file-name libbacktrace.a")
+
+  # See if the compiler knows where libbacktrace.a is. It is worth mentioning
+  # that both gcc and llvm have the same behavior when --print-file-name is used
+  # but the compiler cannot locate the file anywhere. They output the filename
+  # passed as argument to --print-file-name unchanged.
+  #
+  # This makes it so the libbacktrace_check below will always pass. Though
+  # incorrect, this is somewhat harmless as we will call find_path and
+  # find_library later and we could end up finding includes and library
+  # depending on the system environment variables.
+  execute_process(
+    COMMAND ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS} --print-file-name libbacktrace.a
+    RESULT_VARIABLE libbacktrace_check
+    OUTPUT_VARIABLE libbacktrace_path
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  message(STATUS "[libbacktrace check] Command output: ${libbacktrace_path}")
+
+  if(${libbacktrace_check} EQUAL 0)
+    get_filename_component(BACKTRACE_PREFIX ${libbacktrace_path} DIRECTORY)
+    message(STATUS "[libbacktrace check] libbacktrace.a found at ${libbacktrace_path}")
+
+    find_path(BACKTRACE_INCLUDE_DIR backtrace-supported.h PATHS ${BACKTRACE_PREFIX}/include)
+    message(STATUS "[libbacktrace check] Looking for backtrace-supported.h in ${BACKTRACE_INCLUDE_DIR}")
+
+    if(BACKTRACE_INCLUDE_DIR)
+      find_library(BACKTRACE_LIB "backtrace" PATHS ${BACKTRACE_PREFIX})
+    endif()
+
+    if(BACKTRACE_LIB)
+      message(STATUS "[libbacktrace check] Library found at ${BACKTRACE_LIB}")
+
+      # Enable libbacktrace in the sources.
+      target_compile_definitions(amd-dbgapi PRIVATE HAVE_BACKTRACE)
+      # Set up including the header in the compilation and linking against
+      # libbacktrace.
+      target_include_directories(amd-dbgapi PRIVATE ${BACKTRACE_INCLUDE_DIR})
+      target_link_libraries(amd-dbgapi PRIVATE ${BACKTRACE_LIB})
+    endif()
+  else()
+    message(STATUS "[libbacktrace check] libbacktrace.a not found. Skipping.")
   endif()
 endif()
 
-option(API_TRACING "Enable API tracing" ON)
 if(API_TRACING)
   target_compile_definitions(amd-dbgapi PRIVATE WITH_API_TRACING)
 endif()
@@ -216,6 +310,14 @@ find_package(amd_comgr REQUIRED CONFIG
 )
 MESSAGE(STATUS "Code Object Manager found at ${amd_comgr_DIR}.")
 
+# Depending on how we're building rocdbgapi, we may have a dependency
+# on Threads coming from amd_comgr. If we've been instructed to include
+# Threads, do so now.
+if(THE_ROCK_BUILD)
+  # We need to pull in Threads because we link with it.
+  find_package(Threads)
+endif()
+
 # Determine an imported target's property, from the target's imported
 # configuration.  TARGET_NAME is the target's name.  E.g., if
 # PROPERTY_TYPE is IMPORTED_LOCATION, this fetches the right
@@ -256,10 +358,10 @@ function(get_imported_property TARGET_NAME PROPERTY_TYPE PROPERTY_VAR)
       string(TOUPPER "${CONFIG}" CONFIG_UPPER)
       get_target_property(PROPERTY_VALUE ${TARGET_NAME} ${PROPERTY_TYPE}_${CONFIG_UPPER})
       if(NOT ${PROPERTY_VALUE} STREQUAL "${PROPERTY_TYPE}_${CONFIG_UPPER}-NOTFOUND")
-	set(SELECTED_CONFIG ${CONFIG_UPPER})
-	MESSAGE(STATUS "Selected configuration for ${TARGET_NAME}: ${SELECTED_CONFIG}")
-	set(${PROPERTY_VAR} ${PROPERTY_VALUE} PARENT_SCOPE)
-	break()
+        set(SELECTED_CONFIG ${CONFIG_UPPER})
+        MESSAGE(STATUS "Selected configuration for ${TARGET_NAME}: ${SELECTED_CONFIG}")
+        set(${PROPERTY_VAR} ${PROPERTY_VALUE} PARENT_SCOPE)
+        break()
       endif()
     endforeach()
   endif()
@@ -570,5 +672,4 @@ if(DOXYGEN_FOUND)
     DESTINATION ${CMAKE_INSTALL_DATADIR}/html/amd-dbgapi
     OPTIONAL
     COMPONENT dev)
-
 endif()
