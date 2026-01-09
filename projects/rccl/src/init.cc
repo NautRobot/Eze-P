@@ -56,6 +56,12 @@
 #include "rccl_common.h"
 // [/RCCL]
 
+#ifdef ENABLE_ROCSHMEM
+#include <rocshmem/rocshmem.hpp>
+#define NUM_SYM_BUF 8
+#endif
+
+
 #include "msccl/msccl_lifecycle.h"
 #include "msccl/msccl_status.h"
 #include "latency_profiler/CollTrace.h"
@@ -78,7 +84,7 @@
 
 using namespace rccl;
 
-const char* ncclFuncStr[NCCL_NUM_FUNCTIONS+2] = { "AllGather", "AllReduce", "AllToAllPivot", "Broadcast", "Reduce", "ReduceScatter", "SendRecv"};
+const char* ncclFuncStr[NCCL_NUM_FUNCTIONS+3] = { "AllGather", "AllReduce", "AllToAllPivot", "AllToAllGda", "Broadcast", "Reduce", "ReduceScatter", "SendRecv"};
 const char* ncclAlgoStr[NCCL_NUM_ALGORITHMS] = { "Tree", "Ring", "CollNetDirect", "CollNetChain", "NVLS", "NVLSTree", "PAT" };
 const char* ncclProtoStr[NCCL_NUM_PROTOCOLS] = { "LL", "LL128", "Simple" };
 const char* ncclDevRedOpStr[ncclNumDevRedOps] = { "Sum", "Prod", "MinMax", "PreMulSum", "SumPostDiv" };
@@ -96,6 +102,13 @@ NCCL_PARAM(NvlsChannels, "NVLS_NCHANNELS", NCCL_CONFIG_UNDEF_INT);
 
 struct allocationTracker allocTracker[MAX_ALLOC_TRACK_NGPU] = {};
 ncclResult_t commReclaim(ncclComm_t comm);
+
+
+#ifdef ENABLE_ROCSHMEM
+RCCL_PARAM(RocshmemThreshold, "ROCSHMEM_THRESHOLD", (size_t)(262144));
+RCCL_PARAM(RocshmemEnabled, "ROCSHMEM_ENABLE", 1);
+std::unordered_map<ncclComm_t, rocshmem::rocshmem_team_t> ncclCommToRshmemTeam;
+#endif
 
 #ifdef ENABLE_MSCCLPP
 size_t std::hash<ncclUniqueId>::operator ()(const ncclUniqueId& uniqueId) const noexcept {
@@ -2107,6 +2120,58 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
   // RCCL: determine and set unroll factor for comm
   NCCLCHECK(commSetUnrollFactor(comm));
 
+#ifdef ENABLE_ROCSHMEM
+  if (rcclParamRocshmemEnabled()) { // @TODO - This doesn't seem to disable when I set ROCSHMEM_ENABLE=0 on command line
+    INFO(NCCL_INIT,"Initializing rocSHMEM inside of RCCL");
+    int ret;
+    rocshmem::rocshmem_uniqueid_t rocshmemUniqueId;
+    rocshmem::rocshmem_init_attr_t rocshmemAttr;
+
+    if(comm->rank == 0 ) {
+      ret = rocshmem::rocshmem_get_uniqueid (&rocshmemUniqueId);
+      if (ret != rocshmem::ROCSHMEM_SUCCESS) {
+        ERROR("Error in rocshmem_get_uniqueid, Rocshmem cannot be initialized.");
+        return ncclSystemError;
+      }
+    }
+  
+    NCCLCHECKGOTO(bootstrapBroadcast(comm->bootstrap, comm->rank, comm->nRanks, 0, &rocshmemUniqueId, 
+			    sizeof(rocshmemUniqueId)), res, fail);
+    ret = rocshmem::rocshmem_set_attr_uniqueid_args(job->myrank, job->nranks, &rocshmemUniqueId, &rocshmemAttr);
+    if (ret != rocshmem::ROCSHMEM_SUCCESS) {
+      ERROR("Error in rocshmem_set_attr_uniqueid_args, Rocshmem cannot be initialized.");
+      return ncclSystemError;
+    }
+
+    ret = rocshmem::rocshmem_init_attr(rocshmem::ROCSHMEM_INIT_WITH_UNIQUEID, &rocshmemAttr);
+    if (ret != rocshmem::ROCSHMEM_SUCCESS) {
+      ERROR("Error in rocshmem_init_attr, Rocshmem cannot be initialized.");
+      return ncclSystemError;
+    }
+   
+    comm->sourceRshmem = (void**) malloc(NUM_SYM_BUF * sizeof(void *));
+    comm->destRshmem = (void**) malloc(NUM_SYM_BUF * sizeof(void *));
+ 
+    for (int i = 0; i < NUM_SYM_BUF; i++) { 
+    	comm->sourceRshmem[i] = (void *)rocshmem::rocshmem_malloc((size_t)(1*1024*1024));
+    	comm->destRshmem[i] = (void *)rocshmem::rocshmem_malloc((size_t)(1*1024*1024));
+    }
+
+    comm->enableRocshmem = rcclParamRocshmemEnabled();
+    comm->rocshmemThreshold = rcclParamRocshmemThreshold();
+    comm->numSymBuf = NUM_SYM_BUF;
+    comm->symId = 0;
+    //rocshmem::rocshmem_team_t team_reduce_world_dup;
+    comm->team_reduce_world_dup = rocshmem::ROCSHMEM_TEAM_INVALID;
+    rocshmem::rocshmem_team_split_strided(rocshmem::ROCSHMEM_TEAM_WORLD, 0, 1, job->nranks, nullptr, 0,
+                               &(comm->team_reduce_world_dup));
+
+    ncclCommToRshmemTeam[comm] = comm->team_reduce_world_dup;
+    CUDACHECK(hipDeviceSynchronize());
+  }
+#endif
+
+
 #ifdef ENABLE_MSCCLPP
   if (job->parent) {
     if (job->parent->mscclppCompatible) {
@@ -2932,6 +2997,28 @@ ncclResult_t ncclCommDestroy_impl(ncclComm_t comm) {
 
     comm->mscclppCompatible = false;
     comm->mscclpp_comm = nullptr;
+  }
+#endif
+
+#ifdef ENABLE_ROCSHMEM
+  if (comm->enableRocshmem) {
+     for (int i = 0; i < NUM_SYM_BUF; i++) {	  
+     	rocshmem::rocshmem_free(comm->sourceRshmem[i]);
+     	rocshmem::rocshmem_free(comm->destRshmem[i]);	  
+     }
+     free(comm->sourceRshmem);
+     free(comm->destRshmem);
+
+    //TODO: subcomm check
+    rocshmem::rocshmem_team_t  team;
+    if (!ncclCommToRshmemTeam.empty()) {
+        team = ncclCommToRshmemTeam[comm];
+        rocshmem::rocshmem_team_destroy(team);
+        ncclCommToRshmemTeam.erase(comm);
+    }
+    if (ncclCommToRshmemTeam.empty()) {
+        rocshmem::rocshmem_finalize();
+    }
   }
 #endif
 
