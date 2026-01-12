@@ -1,4 +1,4 @@
-* @ZaricZoran @lancesix @lmoriche @t-tye
+* @lancesix @lmoriche @t-tye
 # Documentation files
 docs/ @ROCm/rocm-documentation
 *.md @ROCm/rocm-documentation
