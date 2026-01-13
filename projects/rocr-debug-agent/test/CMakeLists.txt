@@ -168,16 +168,16 @@ if (GPU_TARGETS)
   add_custom_target(save_code_objects-tgt ALL DEPENDS save_code_objects.hipfb)
 
   # Build the library with no debug info.
-  hip_add_library(rocm-debug-agent-no-dbgapifo ${NO_DEBUG_SOURCES} HIPCC_OPTIONS ${OFFLOAD_STR})
+  hip_add_library(rocm-debug-agent-no-dbginfo ${NO_DEBUG_SOURCES} HIPCC_OPTIONS ${OFFLOAD_STR})
 
   # Build the test executable with debug info.
   hip_add_executable(rocm-debug-agent-test ${MAIN_SOURCES} ${NODEBUG_OBJ} CLANG_OPTIONS -ggdb ${DWARF_INSTALL_PATH} HIPCC_OPTIONS ${OFFLOAD_STR})
-  target_link_libraries(rocm-debug-agent-test rocm-debug-agent-no-dbgapifo)
+  target_link_libraries(rocm-debug-agent-test rocm-debug-agent-no-dbginfo)
 
   add_dependencies(rocm-debug-agent-test snapshot_objfile_on_load-tgt save_code_objects-tgt)
 
   # Install the library.
-  install(TARGETS rocm-debug-agent-no-dbgapifo
+  install(TARGETS rocm-debug-agent-no-dbginfo
     ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
     COMPONENT tests
   )
@@ -217,10 +217,10 @@ else()
   add_custom_target(snapshot_objfile_on_load-tgt ALL DEPENDS snapshot_objfile_on_load.hipfb)
   add_custom_target(save_code_objects-tgt ALL DEPENDS save_code_objects.hipfb)
 
-  hip_add_library(rocm-debug-agent-no-dbgapifo ${NO_DEBUG_SOURCES})
+  hip_add_library(rocm-debug-agent-no-dbginfo ${NO_DEBUG_SOURCES})
 
   hip_add_executable(rocm-debug-agent-test ${MAIN_SOURCES} ${NODEBUG_OBJ} CLANG_OPTIONS -ggdb)
-  target_link_libraries(rocm-debug-agent-test rocm-debug-agent-no-dbgapifo)
+  target_link_libraries(rocm-debug-agent-test rocm-debug-agent-no-dbginfo)
 
   add_dependencies(rocm-debug-agent-test snapshot_objfile_on_load-tgt save_code_objects-tgt)
 
