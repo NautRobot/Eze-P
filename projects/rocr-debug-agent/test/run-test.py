@@ -88,6 +88,7 @@ def filter_warnings(err_str):
                 "Precise memory not supported for all the agents" in line
                 or "architecture not supported" in line
                 or "Warning: Resource leak detected" in line
+                or "rocm-dbgapi: warning: Cannot locate the amdgpu.ids file." in line
             )
         ]
     )
