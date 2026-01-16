@@ -43,6 +43,7 @@
 
 cmake_minimum_required(VERSION 3.7)
 
+# Set the project name
 project("rocr")
 set( CORE_TARGET "hsa-rocr" )
 set( BUILD_ENABLE_LINTIAN_OVERRIDES ON CACHE BOOL "Enable/Disable Lintian Overrides" )
