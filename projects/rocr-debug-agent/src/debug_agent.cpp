@@ -634,16 +634,6 @@ print_wavefronts (amd_dbgapi_process_id_t process_id, bool all_wavefronts,
           agent_error ("amd_dbgapi_wave_get_info failed (rc=%d)", status);
         }
 
-      /* Find the code object that contains this pc.  */
-      code_object_t *code_object_found{ nullptr };
-      for (auto &iter : code_object_map)
-        {
-          auto &code_object = iter.second;
-          if (pc >= code_object.load_address ()
-              && pc < code_object.load_address () + code_object.mem_size ())
-            code_object_found = &code_object;
-        }
-
       if (i)
         agent_out << std::endl;
 
@@ -657,9 +647,16 @@ print_wavefronts (amd_dbgapi_process_id_t process_id, bool all_wavefronts,
         {
           agent_out << "0x" << std::hex << *kernel_entry;
 
-          if (code_object_found)
-            if (auto symbol = code_object_found->find_symbol (*kernel_entry))
-              agent_out << " <" << symbol->m_name << ">";
+          /* Find the code object that contains this kernel.  */
+          for ([[maybe_unused]] auto &&[id, code_object] : code_object_map)
+            if (*kernel_entry >= code_object.load_address ()
+                && *kernel_entry
+                       < code_object.load_address () + code_object.mem_size ())
+              {
+                if (auto symbol = code_object.find_symbol (*kernel_entry))
+                  agent_out << " <" << symbol->m_name << ">";
+                break;
+              }
         }
       else
         agent_out << "not available";
@@ -737,6 +734,16 @@ print_wavefronts (amd_dbgapi_process_id_t process_id, bool all_wavefronts,
 
       print_registers (wave_id);
       print_local_memory (wave_id);
+
+      /* Find the code object that contains this pc.  */
+      code_object_t *code_object_found{ nullptr };
+      for ([[maybe_unused]] auto &&[id, code_object] : code_object_map)
+        if (pc >= code_object.load_address ()
+            && pc < code_object.load_address () + code_object.mem_size ())
+          {
+            code_object_found = &code_object;
+            break;
+          }
 
       if (code_object_found)
         {
