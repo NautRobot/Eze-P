@@ -48,7 +48,7 @@ TEST_CASE("Unit_hipOccupancyMaxPotentialClusterSize_Positive_RangeValidation") {
       hipOccupancyMaxPotentialClusterSize(&clusterSize, reinterpret_cast<const void*>(f1), &config);
 
   if (props.clusterLaunch) {
-    INFO("Max potential cluster size is: " << clusterSize)
+    INFO("Max potential cluster size is: " << clusterSize);
     // at the time of this writing a SPI could be drive up to 15 CUs. The number of CUs per SE
     // varies per silicon, but any AMD silicon should have at least 8
     REQUIRE((clusterSize > 8 && clusterSize <= 16));

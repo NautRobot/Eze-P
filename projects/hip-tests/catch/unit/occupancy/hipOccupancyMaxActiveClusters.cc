@@ -65,7 +65,7 @@ TEST_CASE("Unit_hipOccupancyMaxActiveClusters_Positive_RangeValidation") {
 
   HIP_CHECK(hipOccupancyMaxPotentialClusterSize(&maxClusterSize, reinterpret_cast<const void*>(f1),
                                                 &config));
-  INFO("sharedMemPerBlock: " << props.sharedMemPerBlock)
+  INFO("sharedMemPerBlock: " << props.sharedMemPerBlock);
   HIP_CHECK(hipOccupancyMaxActiveBlocksPerMultiprocessor(
       &maxBlocks, reinterpret_cast<const void*>(f1), 128, 0));
   REQUIRE(maxBlocks > 0);
