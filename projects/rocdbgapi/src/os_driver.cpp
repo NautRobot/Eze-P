@@ -301,17 +301,17 @@ std::string
 to_string (os_queue_snapshot_entry_t snapshot)
 {
   return string_printf (
-    "{ .exception_status=%s, .ring_base_address=%s, "
+    "{ .queue_id=%d, .state=%s, .gpu_id=%d, .queue_type=%s, "
+    ".exception_status=%s, .ring_base_address=%s, .ring_size=%" PRId64 ", "
     ".write_pointer_address=%s, .read_pointer_address=%s, "
-    ".ctx_save_restore_address=%s, .queue_id=%d, .state=%s, "
-    ".gpu_id=%d, .ring_size=%" PRId64 ", .queue_type=%s }",
-    to_string (snapshot.exception_status).c_str (),
-    to_cstring (snapshot.ring_base_address),
+    ".ctx_save_restore_address=%s, .ctx_save_restore_area_size=%" PRId64 " }",
+    snapshot.queue_id, to_cstring (snapshot.state), snapshot.gpu_id,
+    to_cstring (snapshot.queue_type), to_cstring (snapshot.exception_status),
+    to_cstring (snapshot.ring_base_address), snapshot.ring_size,
     to_cstring (snapshot.write_pointer_address),
     to_cstring (snapshot.read_pointer_address),
-    to_cstring (snapshot.ctx_save_restore_address), snapshot.queue_id,
-    to_string (snapshot.state).c_str (), snapshot.gpu_id, snapshot.ring_size,
-    to_string (snapshot.queue_type).c_str ());
+    to_cstring (snapshot.ctx_save_restore_address),
+    snapshot.ctx_save_restore_area_size);
 }
 
 template <>
