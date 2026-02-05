@@ -1215,7 +1215,8 @@ typedef struct {
     char container_name[AMDSMI_MAX_STRING_LENGTH];
     uint32_t cu_occupancy;  //!< Num CUs utilized
     uint32_t evicted_time;    //!< Time that queues are evicted on a GPU in milliseconds
-    uint32_t reserved[10];
+    uint64_t sdma_usage;    //!< SDMA usage in microseconds
+    uint32_t reserved[8];
 } amdsmi_proc_info_t;
 
 /**
