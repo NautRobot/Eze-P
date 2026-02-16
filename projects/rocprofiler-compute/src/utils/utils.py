@@ -67,6 +67,68 @@ rocprof_cmd = ""
 rocprof_args = ""
 
 
+def version_to_numeric(version_parts: list[int], max_len: int) -> int:
+    """Convert version tuple to numeric value using base-1000 positional system."""
+    version_numeric = 0
+    for i, part in enumerate(version_parts):
+        version_numeric += part * (1000 ** (max_len - i - 1))
+    return version_numeric
+
+
+def resolve_rocm_library_path(library_path: Optional[str]) -> Optional[str]:
+    """
+    Resolve ROCm library path with automatic version fallback.
+    Tries exact path first, then falls back to versioned variants
+    (e.g., .so.1, .so.1.2.3).
+    """
+    if not library_path:
+        return library_path
+
+    path = Path(library_path)
+
+    # Try exact path first (handles both unversioned and explicit versioned paths)
+    if path.exists():
+        console_debug(f"Resolved library (exact match): {path}")
+        return str(path)
+
+    # Escape the input path so any glob metacharacters are treated literally.
+    matches = glob.glob(f"{glob.escape(library_path)}.*")
+
+    # First pass: filter to numeric versions and collect version tuples
+    version_tuples: list[tuple[list[int], str]] = []
+    for candidate in matches:
+        # Compute the suffix relative to the requested library path.
+        if not candidate.startswith(library_path):
+            continue
+        suffix = candidate[len(library_path) :]
+        # Expect a suffix like ".1" or ".1.2.3"
+        if not suffix.startswith("."):
+            continue
+        parts = suffix.split(".")[1:]  # drop leading empty element
+        if not parts:
+            continue
+        if not all(part.isdigit() for part in parts):
+            continue
+        version_tuples.append(([int(p) for p in parts], candidate))
+
+    # Find max version length to normalize all versions
+    if not version_tuples:
+        raise FileNotFoundError(f"ROCm library not found: {library_path}")
+
+    # Second pass: convert to numeric values with normalized length
+    max_version_len = max(len(vt[0]) for vt in version_tuples)
+    versioned_candidates: list[tuple[int, str]] = []
+    for version_parts, candidate in version_tuples:
+        version_numeric = version_to_numeric(version_parts, max_version_len)
+        versioned_candidates.append((version_numeric, candidate))
+
+    # Select the candidate with the highest numeric version.
+    versioned_candidates.sort(key=lambda item: item[0], reverse=True)
+    resolved = versioned_candidates[0][1]
+    console_debug(f"Resolved library (versioned): {library_path} -> {resolved}")
+    return resolved
+
+
 def is_tcc_channel_counter(counter: str) -> bool:
     return counter.startswith("TCC") and counter.endswith("]")
 
