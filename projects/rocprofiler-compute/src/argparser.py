@@ -730,6 +730,20 @@ Examples:
         action="store_true",
     )
     analyze_group.add_argument(
+        "--list-torch-operators",
+        dest="list_torch_operators",
+        help="\t\tList all operators from PyTorch trace.",
+        action="store_true",
+    )
+    analyze_group.add_argument(
+        "--torch-operator",
+        metavar="",
+        type=str,
+        dest="torch_operator",
+        nargs="+",
+        help="\t\tSpecify operator name for filtering.",
+    )
+    analyze_group.add_argument(
         "-k",
         "--kernel",
         metavar="",
