@@ -197,17 +197,16 @@ void GraphInstantiateWithParams_StreamCapture() {
   HIP_CHECK(hipMalloc(&C_d, Nbytes));
   REQUIRE(A_d != nullptr);
   REQUIRE(C_d != nullptr);
-  HIP_CHECK(hipGraphCreate(&graph, 0));
-
 
   HIP_CHECK(hipStreamCreate(&stream));
-  constexpr unsigned blocks = 512;
-  constexpr unsigned threadsPerBlock = 256;
-
   HIP_CHECK(hipStreamBeginCapture(stream, hipStreamCaptureModeGlobal));
-  HIP_CHECK(hipMemcpyAsync(A_d, A_h, Nbytes, hipMemcpyHostToDevice, stream));
 
+  HIP_CHECK(hipMemcpyAsync(A_d, A_h, Nbytes, hipMemcpyHostToDevice, stream));
   HIP_CHECK(hipMemsetAsync(C_d, 0, Nbytes, stream));
+
+  constexpr unsigned threadsPerBlock = 256;
+  constexpr unsigned blocks =
+      (N % threadsPerBlock == 0) ? (N / threadsPerBlock) : ((N / threadsPerBlock) + 1);
   hipLaunchKernelGGL(HipTest::vector_square, dim3(blocks), dim3(threadsPerBlock), 0, stream, A_d,
                      C_d, N);
   HIP_CHECK(hipMemcpyAsync(C_h, C_d, Nbytes, hipMemcpyDeviceToHost, stream));

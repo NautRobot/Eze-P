@@ -154,6 +154,7 @@ static bool checkMallocAsync(hipStream_t stream) {
   testObj.freeHostBuf();
   return true;
 }
+
 /**
  * Test Description
  * ------------------------
@@ -165,9 +166,9 @@ static bool checkMallocAsync(hipStream_t stream) {
  *    - HIP_VERSION >= 6.2
  */
 TEST_CASE("Unit_hipMallocAsync_basic") {
-  checkMempoolSupported(0)
-      // create a stream
-      hipStream_t stream;
+  checkMempoolSupported(0);
+  // create a stream
+  hipStream_t stream;
   HIP_CHECK(hipStreamCreate(&stream));
   REQUIRE(true == checkMallocAsync(stream));
   HIP_CHECK(hipStreamDestroy(stream));
@@ -290,7 +291,7 @@ TEST_CASE("Unit_hipMallocAsync_StreamEvent_CrissCross") {
  * ------------------------
  *    - HIP_VERSION >= 6.2
  */
-TEST_CASE("Unit_hipMallocAsync_Multidevice") {
+TEST_CASE("Unit_hipMallocAsync_Multidevice", "[multigpu]") {
   int num_devices;
   HIP_CHECK(hipGetDeviceCount(&num_devices));
   for (int i = 0; i < num_devices; i++) {
@@ -330,7 +331,7 @@ static void threadQAsyncCommands(streamMemAllocTest* testObj, hipStream_t strm, 
   testObj->freeDevBuf(strm);
 }
 
-TEST_CASE("Unit_hipMallocAsync_Multidevice_Concurrent") {
+TEST_CASE("Unit_hipMallocAsync_Multidevice_Concurrent", "[multigpu]") {
   int num_devices;
   HIP_CHECK(hipGetDeviceCount(&num_devices));
   checkIfMultiDev(num_devices) hipStream_t* stream_buf = new hipStream_t[num_devices];
@@ -379,7 +380,7 @@ TEST_CASE("Unit_hipMallocAsync_Multidevice_Concurrent") {
  * ------------------------
  *    - HIP_VERSION >= 6.2
  */
-TEST_CASE("Unit_hipMallocAsync_Multidevice_MultiStream") {
+TEST_CASE("Unit_hipMallocAsync_Multidevice_MultiStream", "[multigpu]") {
   int num_devices;
   HIP_CHECK(hipGetDeviceCount(&num_devices));
   checkIfMultiDev(num_devices)
@@ -418,9 +419,6 @@ TEST_CASE("Unit_hipMallocAsync_Multidevice_MultiStream") {
   // Deallocate resources in each device
   for (int idx = 0; idx < num_devices; idx++) {
     HIP_CHECK(hipSetDevice(idx));
-    // Destroy resources
-    tesObjBuf[streamPerAsic * idx]->freeHostBuf();
-    tesObjBuf[streamPerAsic * idx + 1]->freeHostBuf();
     HIP_CHECK(hipStreamDestroy(stream_buf[streamPerAsic * idx]));
     HIP_CHECK(hipStreamDestroy(stream_buf[streamPerAsic * idx + 1]));
     delete tesObjBuf[streamPerAsic * idx];
@@ -603,6 +601,7 @@ TEST_CASE("Unit_hipMallocAsync_MThread_ThreadSharedStream") {
   REQUIRE(true == testhipMallocAsyncMThreadLocalStrm(stream));
   HIP_CHECK(hipStreamDestroy(stream));
 }
+
 /**
  * Test Description
  * ------------------------

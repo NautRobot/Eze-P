@@ -51,7 +51,7 @@ size_t GetGranularity(hipDevice_t device) {
   size_t granularity = 0;
   HIP_CHECK(
       hipMemGetAllocationGranularity(&granularity, &prop, hipMemAllocationGranularityMinimum));
-  assert(granularity > 0);
+  REQUIRE(granularity > 0);
   return granularity;
 }
 
@@ -94,27 +94,36 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_Negative") {
   constexpr int sizeBytes = size * sizeof(int);
   HIP_CHECK(hipMalloc(&dptr, sizeBytes));
 
+  #if HT_AMD
+    hipDeviceptr_t nptr = nullptr;
+  #else
+    hipDeviceptr_t nptr = 0;
+  #endif
+
   SECTION("nullptr") {
-    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle, nullptr, sizeBytes,
+    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle, nptr, sizeBytes,
                                                    hipMemRangeHandleTypeDmaBufFd, 0),
                     hipErrorInvalidValue);
   }
 
   SECTION("size 0") {
     HIP_CHECK_ERROR(
-        hipMemGetHandleForAddressRange(&handle, dptr, 0, hipMemRangeHandleTypeDmaBufFd, 0),
+        hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(dptr),
+                                       0, hipMemRangeHandleTypeDmaBufFd, 0),
         hipErrorInvalidValue);
   }
 
   SECTION("Invalid Handle type") {
-    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle, dptr, sizeBytes,
-                                                   static_cast<hipMemRangeHandleType>(-1), 0),
+    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle,
+                    reinterpret_cast<hipDeviceptr_t>(dptr), sizeBytes,
+                    static_cast<hipMemRangeHandleType>(-1), 0),
                     hipErrorInvalidValue);
   }
 
   SECTION("Invalid Flags") {
-    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle, dptr, sizeBytes,
-                                                   hipMemRangeHandleTypeDmaBufFd, 0xFF),
+    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle,
+                    reinterpret_cast<hipDeviceptr_t>(dptr), sizeBytes,
+                    hipMemRangeHandleTypeDmaBufFd, 0xFF),
                     hipErrorInvalidValue);
   }
 
@@ -123,7 +132,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_Negative") {
     HIP_CHECK(hipMalloc(&devMem, sizeBytes));
     HIP_CHECK(hipFree(devMem));
 
-    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle, devMem, sizeBytes,
+    HIP_CHECK_ERROR(hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(devMem), sizeBytes,
                                                    hipMemRangeHandleTypeDmaBufFd, 0),
                     hipErrorInvalidValue);
   }
@@ -131,7 +140,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_Negative") {
   SECTION("With Host memory") {
     int* hptr = new int[size];
     HIP_CHECK_ERROR(
-        hipMemGetHandleForAddressRange(&handle, hptr, sizeBytes, hipMemRangeHandleTypeDmaBufFd, 0),
+        hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(hptr), sizeBytes, hipMemRangeHandleTypeDmaBufFd, 0),
         hipErrorInvalidValue);
     delete[] hptr;
   }
@@ -146,9 +155,10 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_Negative") {
     assert(granularity > 0);
 
     size_t size_mem = ((granularity + sizeBytes - 1) / granularity) * granularity;
-    hipDeviceptr_t ptrA = nullptr;
-    HIP_CHECK(hipMemAddressReserve(&ptrA, size_mem, granularity, 0, 0));
-    REQUIRE(ptrA != nullptr);
+    hipDeviceptr_t ptrA;
+    HIP_CHECK(hipMemAddressReserve(reinterpret_cast<void**>(&ptrA), size_mem, granularity, 0, 0));
+
+    REQUIRE(reinterpret_cast<void*>(ptrA) != nullptr);
 
     HIP_CHECK_ERROR(
         hipMemGetHandleForAddressRange(&handle, ptrA, size_mem, hipMemRangeHandleTypeDmaBufFd, 0),
@@ -188,8 +198,7 @@ void* createDeviceMemoryAndFillData(int size) {
 hipDeviceptr_t createVirtualMemoryAndFillData(int size, int* reservedAddrSize, int device = 0) {
   size_t granularity = GetGranularity(device);
   if (granularity <= 0) {
-    std::cout << "Invalid Granularity" << std::endl;
-    return nullptr;
+    return 0;
   }
 
   int* srcHostMem = reinterpret_cast<int*>(malloc(size * sizeof(int)));
@@ -198,21 +207,21 @@ hipDeviceptr_t createVirtualMemoryAndFillData(int size, int* reservedAddrSize, i
   }
 
   size_t size_mem = ((granularity + (size * sizeof(int)) - 1) / granularity) * granularity;
-  hipDeviceptr_t ptrA = nullptr;
-  HIP_CHECK(hipMemAddressReserve(&ptrA, size_mem, granularity, 0, 0));
-  REQUIRE(ptrA != nullptr);
+  hipDeviceptr_t ptrA;
+  HIP_CHECK(hipMemAddressReserve(reinterpret_cast<void**>(&ptrA), size_mem, granularity, 0, 0));
+  REQUIRE(reinterpret_cast<void*>(ptrA) != nullptr);
 
   hipMemGenericAllocationHandle_t handle = GetPhysicalMemory(device, size_mem);
 
-  HIP_CHECK(hipMemMap(ptrA, size_mem, 0, handle, 0));
+  HIP_CHECK(hipMemMap(reinterpret_cast<void*>(ptrA), size_mem, 0, handle, 0));
 
   hipMemAccessDesc accessDesc = {};
   accessDesc.location.type = hipMemLocationTypeDevice;
   accessDesc.location.id = device;
   accessDesc.flags = hipMemAccessFlagsProtReadWrite;
-  HIP_CHECK(hipMemSetAccess(ptrA, size_mem, &accessDesc, 1));
+  HIP_CHECK(hipMemSetAccess(reinterpret_cast<void*>(ptrA), size_mem, &accessDesc, 1));
 
-  HIP_CHECK(hipMemcpy(ptrA, srcHostMem, size * sizeof(int), hipMemcpyHostToDevice));
+  HIP_CHECK(hipMemcpy(reinterpret_cast<void*>(ptrA), srcHostMem, size * sizeof(int), hipMemcpyHostToDevice));
 
   *reservedAddrSize = size_mem;
   return ptrA;
@@ -230,7 +239,6 @@ bool validateHandle(int handle, int size, int device = 0) {
 
   size_t granularity = GetGranularity(device);
   if (granularity <= 0) {
-    std::cout << "Invalid Granularity" << std::endl;
     return false;
   }
   int sizeBytes = size * sizeof(int);
@@ -291,22 +299,26 @@ bool validateHandle(int handle, int size, int device = 0) {
 TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory") {
   constexpr int size = 1024;
   constexpr int sizeBytes = size * sizeof(int);
+  CTX_CREATE();
+
+  hipDevice_t device;
+  constexpr int kDeviceId = 0;
+  HIP_CHECK(hipDeviceGet(&device, kDeviceId));
+  checkDmaBufSupported(device);
+  checkVMMSupported(device);
 
   void* srcDevMem = createDeviceMemoryAndFillData(size);
   REQUIRE(srcDevMem != nullptr);
 
   int handle = -1;
-  HIP_CHECK(hipMemGetHandleForAddressRange(&handle, srcDevMem, sizeBytes,
+  HIP_CHECK(hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(srcDevMem), sizeBytes,
                                            hipMemRangeHandleTypeDmaBufFd, 0));
   REQUIRE(handle > 0);
 
-  hipDevice_t device;
-  constexpr int kDeviceId = 0;
-  HIP_CHECK(hipDeviceGet(&device, kDeviceId));
-  checkVMMSupported(device);
   REQUIRE(validateHandle(handle, size) == true);
 
   HIP_CHECK(hipFree(srcDevMem));
+  CTX_DESTROY();
 }
 
 /**
@@ -324,18 +336,20 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory") {
  *  - HIP_VERSION >= 7.0
  */
 TEST_CASE("Unit_hipMemGetHandleForAddressRange_VM") {
+  CTX_CREATE();
   hipDevice_t device;
   constexpr int kDeviceId = 0;
   HIP_CHECK(hipDeviceGet(&device, kDeviceId));
+  checkDmaBufSupported(device);
   checkVMMSupported(device);
 
   constexpr int size = 1024;
   constexpr int sizeBytes = size * sizeof(int);
 
-  hipDeviceptr_t ptrA = nullptr;
+  hipDeviceptr_t ptrA;
   int reservedAddrSize;
   ptrA = createVirtualMemoryAndFillData(size, &reservedAddrSize);
-  REQUIRE(ptrA != nullptr);
+  REQUIRE(reinterpret_cast<void*>(ptrA) != nullptr);
 
   int handle = -1;
   HIP_CHECK(
@@ -344,8 +358,9 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_VM") {
 
   REQUIRE(validateHandle(handle, size) == true);
 
-  HIP_CHECK(hipMemUnmap(ptrA, reservedAddrSize));
-  HIP_CHECK(hipMemAddressFree(ptrA, reservedAddrSize));
+  HIP_CHECK(hipMemUnmap(reinterpret_cast<void*>(ptrA), reservedAddrSize));
+  HIP_CHECK(hipMemAddressFree(reinterpret_cast<void*>(ptrA), reservedAddrSize));
+  CTX_DESTROY();
 }
 
 /**
@@ -362,7 +377,9 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_VM") {
  * ------------------------
  *  - HIP_VERSION >= 7.0
  */
-TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory_InAnotherDevice") {
+TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory_InAnotherDevice",
+          "[multigpu]") {
+  CTX_CREATE();
   int deviceCount = 0;
   HIP_CHECK(hipGetDeviceCount(&deviceCount));
   if (deviceCount < 2) {
@@ -379,6 +396,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory_InAnotherDevice") {
   HIP_CHECK(hipSetDevice(srcDeviceId));
   hipDevice_t device;
   HIP_CHECK(hipDeviceGet(&device, srcDeviceId));
+  checkDmaBufSupported(device);
   checkVMMSupported(device);
 
   void* srcDevMem = nullptr;
@@ -386,7 +404,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory_InAnotherDevice") {
   REQUIRE(srcDevMem != nullptr);
 
   int handle = -1;
-  HIP_CHECK(hipMemGetHandleForAddressRange(&handle, srcDevMem, sizeBytes,
+  HIP_CHECK(hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(srcDevMem), sizeBytes,
                                            hipMemRangeHandleTypeDmaBufFd, 0));
   REQUIRE(handle > 0);
 
@@ -397,7 +415,8 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory_InAnotherDevice") {
   REQUIRE(validateHandle(handle, size, dstDeviceId) == true);
 
   HIP_CHECK(hipFree(srcDevMem));
-  HIP_CHECK(hipDeviceReset())
+  HIP_CHECK(hipDeviceReset());
+  CTX_DESTROY();
 }
 
 /**
@@ -414,7 +433,9 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_DeviceMemory_InAnotherDevice") {
  * ------------------------
  *  - HIP_VERSION >= 7.0
  */
-TEST_CASE("Unit_hipMemGetHandleForAddressRange_VM_InAnotherDevice") {
+TEST_CASE("Unit_hipMemGetHandleForAddressRange_VM_InAnotherDevice",
+          "[multigpu]") {
+  CTX_CREATE();
   int deviceCount = 0;
   HIP_CHECK(hipGetDeviceCount(&deviceCount));
   if (deviceCount < 2) {
@@ -428,16 +449,17 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_VM_InAnotherDevice") {
   HIP_CHECK(hipSetDevice(srcDeviceId));
   hipDevice_t device;
   HIP_CHECK(hipDeviceGet(&device, srcDeviceId));
+  checkDmaBufSupported(device);
   checkVMMSupported(device);
 
   constexpr int kNumElemsSize = 1024;
   constexpr int size = 1024;
   constexpr int sizeBytes = kNumElemsSize * sizeof(int);
 
-  hipDeviceptr_t ptrA = nullptr;
+  hipDeviceptr_t ptrA;
   int reservedAddrSize;
   ptrA = createVirtualMemoryAndFillData(size, &reservedAddrSize);
-  REQUIRE(ptrA != nullptr);
+  REQUIRE(reinterpret_cast<void*>(ptrA) != nullptr);
 
   int handle = 0;
   HIP_CHECK(
@@ -451,10 +473,11 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_VM_InAnotherDevice") {
 
   REQUIRE(validateHandle(handle, size, dstDeviceId) == true);
 
-  HIP_CHECK(hipMemUnmap(ptrA, reservedAddrSize));
-  HIP_CHECK(hipMemAddressFree(ptrA, reservedAddrSize));
+  HIP_CHECK(hipMemUnmap(reinterpret_cast<void*>(ptrA), reservedAddrSize));
+  HIP_CHECK(hipMemAddressFree(reinterpret_cast<void*>(ptrA), reservedAddrSize));
 
-  HIP_CHECK(hipDeviceReset())
+  HIP_CHECK(hipDeviceReset());
+  CTX_DESTROY();
 }
 
 #if __linux__
@@ -484,6 +507,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_DeviceMem") {
   if (pid == 0) {  // child
     REQUIRE(close(fd[1]) == 0);
     REQUIRE(close(fdSig[0]) == 0);
+    CTX_CREATE();
 
     // Wait for parent process to create the socket.
     int size_mem = 0;
@@ -509,6 +533,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_DeviceMem") {
 
     // Validate the handle
     REQUIRE(validateHandle(shHandle, size_mem / sizeof(int)));
+    CTX_DESTROY();
 
     checkSysCallErrors(sockObj.closeThisSock());
     REQUIRE(close(fd[0]) == 0);
@@ -518,11 +543,13 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_DeviceMem") {
     REQUIRE(close(fd[0]) == 0);
     REQUIRE(close(fdSig[1]) == 0);
 
+    CTX_CREATE();
     constexpr int size = 1024;
     constexpr int sizeBytes = size * sizeof(int);
 
     hipDevice_t device;
     HIP_CHECK(hipDeviceGet(&device, 0));
+    checkDmaBufSupported(device);
     checkVMMSupported(device);
 
     void* srcDevMem = nullptr;
@@ -530,7 +557,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_DeviceMem") {
     REQUIRE(srcDevMem != nullptr);
 
     int handle = -1;
-    HIP_CHECK(hipMemGetHandleForAddressRange(&handle, srcDevMem, sizeBytes,
+    HIP_CHECK(hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(srcDevMem), sizeBytes,
                                              hipMemRangeHandleTypeDmaBufFd, 0));
 
     int size_mem = sizeBytes;
@@ -546,6 +573,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_DeviceMem") {
     int status;
     REQUIRE(wait(&status) >= 0);
     REQUIRE(status == 0);
+    CTX_DESTROY();
     // Free all resources
     checkSysCallErrors(sockObj.closeThisSock());
     // HIP_CHECK(hipMemRelease(handle));
@@ -580,6 +608,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_VM") {
   if (pid == 0) {  // child
     REQUIRE(close(fd[1]) == 0);
     REQUIRE(close(fdSig[0]) == 0);
+    CTX_CREATE();
     // Wait for parent process to create the socket.
     int size_mem = 0;
     REQUIRE(read(fd[0], &size_mem, sizeof(int)) >= 0);
@@ -602,6 +631,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_VM") {
 
     // Validate handle
     REQUIRE(validateHandle(shHandle, size_mem / sizeof(int)));
+    CTX_DESTROY();
 
     checkSysCallErrors(sockObj.closeThisSock());
     REQUIRE(close(fd[0]) == 0);
@@ -610,18 +640,20 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_VM") {
   } else {  // parent
     REQUIRE(close(fd[0]) == 0);
     REQUIRE(close(fdSig[1]) == 0);
+    CTX_CREATE();
 
     constexpr int N = 1024;
     int buffer_size = N * sizeof(int);
 
     hipDevice_t device;
     HIP_CHECK(hipDeviceGet(&device, 0));
+    checkDmaBufSupported(device);
     checkVMMSupported(device);
 
-    hipDeviceptr_t ptrA = nullptr;
+    hipDeviceptr_t ptrA;
     int reservedAddrSize;
     ptrA = createVirtualMemoryAndFillData(N, &reservedAddrSize);
-    REQUIRE(ptrA != nullptr);
+    REQUIRE(reinterpret_cast<void*>(ptrA) != nullptr);
 
     int handle = -1;
     HIP_CHECK(hipMemGetHandleForAddressRange(&handle, ptrA, buffer_size,
@@ -647,8 +679,9 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MulProc_Socket_VM") {
     REQUIRE(close(fd[1]) == 0);
     REQUIRE(close(fdSig[0]) == 0);
 
-    HIP_CHECK(hipMemUnmap(ptrA, reservedAddrSize));
-    HIP_CHECK(hipMemAddressFree(ptrA, reservedAddrSize));
+    HIP_CHECK(hipMemUnmap(reinterpret_cast<void*>(ptrA), reservedAddrSize));
+    HIP_CHECK(hipMemAddressFree(reinterpret_cast<void*>(ptrA), reservedAddrSize));
+    CTX_DESTROY();
   }
 }
 
@@ -663,7 +696,7 @@ void launchForDevMem() {
   void* srcDevMem = createDeviceMemoryAndFillData(size);
 
   int handle = -1;
-  HIP_CHECK(hipMemGetHandleForAddressRange(&handle, srcDevMem, sizeBytes,
+  HIP_CHECK(hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(srcDevMem), sizeBytes,
                                            hipMemRangeHandleTypeDmaBufFd, 0));
   REQUIRE(handle > 0);
   HIP_CHECK(hipFree(srcDevMem));
@@ -676,18 +709,18 @@ void launchForVM() {
   constexpr int size = 1024;
   constexpr int sizeBytes = size * sizeof(int);
 
-  hipDeviceptr_t ptrA = nullptr;
+  hipDeviceptr_t ptrA;
   int reservedAddrSize;
   ptrA = createVirtualMemoryAndFillData(size, &reservedAddrSize);
-  REQUIRE(ptrA != nullptr);
+  REQUIRE(reinterpret_cast<void*>(ptrA) != nullptr);
 
   int handle = -1;
   HIP_CHECK(
       hipMemGetHandleForAddressRange(&handle, ptrA, sizeBytes, hipMemRangeHandleTypeDmaBufFd, 0));
   REQUIRE(handle > 0);
 
-  HIP_CHECK(hipMemUnmap(ptrA, reservedAddrSize));
-  HIP_CHECK(hipMemAddressFree(ptrA, reservedAddrSize));
+  HIP_CHECK(hipMemUnmap(reinterpret_cast<void*>(ptrA), reservedAddrSize));
+  HIP_CHECK(hipMemAddressFree(reinterpret_cast<void*>(ptrA), reservedAddrSize));
 }
 
 /**
@@ -707,6 +740,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MultipleThreads") {
   hipDevice_t device;
   constexpr int kDeviceId = 0;
   HIP_CHECK(hipDeviceGet(&device, kDeviceId));
+  checkDmaBufSupported(device);
   checkVMMSupported(device);
 
   const unsigned int threadsSupported = std::thread::hardware_concurrency();
@@ -746,6 +780,11 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_MultipleThreads") {
  *  - HIP_VERSION >= 7.0
  */
 TEST_CASE("Unit_hipMemGetHandleForAddressRange_DifferentOffsets") {
+  hipDevice_t device;
+  constexpr int kDeviceId = 0;
+  HIP_CHECK(hipDeviceGet(&device, kDeviceId));
+  checkDmaBufSupported(device);
+
   int handle;
   int size = 5;
   int sizeBytes = size * sizeof(int);
@@ -755,7 +794,7 @@ TEST_CASE("Unit_hipMemGetHandleForAddressRange_DifferentOffsets") {
 
   for (int i = 0; i < size; i++) {
     handle = -1;
-    HIP_CHECK(hipMemGetHandleForAddressRange(&handle, dptr + i, sizeBytes - (i * sizeof(int)),
+    HIP_CHECK(hipMemGetHandleForAddressRange(&handle, reinterpret_cast<hipDeviceptr_t>(dptr + i), sizeBytes - (i * sizeof(int)),
                                              hipMemRangeHandleTypeDmaBufFd, 0));
     REQUIRE(handle > 0);
   }

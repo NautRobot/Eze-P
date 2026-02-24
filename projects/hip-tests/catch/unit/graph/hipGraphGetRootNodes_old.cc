@@ -161,9 +161,10 @@ TEST_CASE("Unit_hipGraphGetRootNodes_CapturedStream") {
   hipEvent_t memsetEvent1, memsetEvent2, forkStreamEvent;
   hipGraph_t graph{nullptr};
   hipGraphExec_t graphExec{nullptr};
-  constexpr unsigned blocks = 512;
-  constexpr unsigned threadsPerBlock = 256;
   constexpr size_t N = 1000000;
+  constexpr unsigned threadsPerBlock = 256;
+  constexpr unsigned blocks =
+      (N % threadsPerBlock == 0) ? (N / threadsPerBlock) : ((N / threadsPerBlock) + 1);
   constexpr int numMemsetNodes = 2;
   size_t Nbytes = N * sizeof(float), numRootNodes{};
   float *A_d, *C_d;
@@ -321,6 +322,7 @@ TEST_CASE("Unit_hipGraphGetRootNodes_ParamValidation") {
     HIP_CHECK(hipGraphCreate(&emptyGraph, 0));
     HIP_CHECK(hipGraphGetRootNodes(emptyGraph, nullptr, &numRootNodes));
     REQUIRE(numRootNodes == 0);
+    HIP_CHECK(hipGraphDestroy(emptyGraph));
   }
 
   SECTION("numRootNodes less than actual number of nodes") {
@@ -394,7 +396,6 @@ TEST_CASE("Unit_hipGraphGetRootNodes_Complx_NumRootNodes_ClonedGrph") {
   hipGraphNode_t kernelnode[NUM_OF_DUMMY_NODES];
   hipKernelNodeParams kernelNodeParams[NUM_OF_DUMMY_NODES];
   HIP_CHECK(hipGraphCreate(&graph, 0));
-  HIP_CHECK(hipGraphCreate(&clonedgraph, 0));
   // Create graph with no dependencies
   for (int i = 0; i < NUM_OF_DUMMY_NODES; i++) {
     void* kernelArgs[] = {nullptr};

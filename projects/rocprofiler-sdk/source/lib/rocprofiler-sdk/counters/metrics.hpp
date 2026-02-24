@@ -30,6 +30,7 @@
 #include <hsa/hsa_ven_amd_aqlprofile.h>
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -106,8 +107,6 @@ loadMetrics(bool reload = false, std::optional<ArchMetric> add_metric = std::nul
 
 /**
  * Get the metrics that apply to a specific agent.
- * The returned metrics will have counter IDs that are unique per agent
- * (encoding both base metric ID and agent's logical_node_id).
  */
 std::vector<Metric>
 getMetricsForAgent(const rocprofiler_agent_t* agent);
@@ -117,7 +116,7 @@ getMetricsForAgent(const rocprofiler_agent_t* agent);
  * applicable only for GFX9 agents and SQ block counters
  */
 std::unordered_map<uint64_t, int>
-getPerfCountersIdMap();
+getPerfCountersIdMap(const rocprofiler_agent_t* agent);
 
 /**
  * Checks if a metric is valid for a given agent

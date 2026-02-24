@@ -26,7 +26,7 @@
 import os
 import shutil
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
@@ -81,7 +81,7 @@ def test_list_metrics_gfx90a(binary_handler_analyze_rocprof_compute):
         "--list-metrics",
         "gfx90a",
     ])
-    assert code == 1
+    assert code == 0
 
     for dir in indirs:
         workload_dir = test_utils.setup_workload_dir(dir)
@@ -104,7 +104,7 @@ def test_list_metrics_gfx908(binary_handler_analyze_rocprof_compute):
         "--list-metrics",
         "gfx908",
     ])
-    assert code == 1
+    assert code == 0
 
     for dir in indirs:
         workload_dir = test_utils.setup_workload_dir(dir)
@@ -144,7 +144,7 @@ def test_list_metrics_gfx908_with_block(binary_handler_analyze_rocprof_compute):
         ])
         assert code == 1
 
-    test_utils.clean_output_dir(config["cleanup"], workload_dir)
+        test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
 
 @pytest.mark.list_metrics
@@ -167,10 +167,8 @@ def test_list_available_metrics(binary_handler_analyze_rocprof_compute, capsys):
 
         # Test output
         output = capsys.readouterr().out
-        assert "0. Top Stats" in output
-        assert "1. System Info" in output
-
-    test_utils.clean_output_dir(config["cleanup"], workload_dir)
+        assert "0 -> Top Stats" in output
+        assert "1 -> System Info" in output
 
 
 @pytest.mark.list_metrics
@@ -197,7 +195,7 @@ def test_list_available_metrics_with_block(
         ])
         assert code == 1
 
-    test_utils.clean_output_dir(config["cleanup"], workload_dir)
+        test_utils.clean_output_dir(config["cleanup"], workload_dir)
 
 
 @pytest.mark.filter_block
@@ -993,7 +991,7 @@ def test_parser_utility_functions():
     assert result == 9, "to_max should return maximum value"
 
     result = to_median(None)
-    assert result is None, "to_median should return None for None input"
+    assert np.isnan(result), "to_median should return np.nan for None input"
 
     try:
         to_median("invalid_string")
@@ -1008,7 +1006,7 @@ def test_parser_utility_functions():
         assert "unsupported type" in str(e)
 
     result = to_int(None)
-    assert result is None, "to_int should return None for None input"
+    assert np.isnan(result), "to_int should return np.nan for None input"
 
     try:
         to_int(["list", "not", "supported"])
@@ -1017,7 +1015,7 @@ def test_parser_utility_functions():
         assert "unsupported type" in str(e)
 
     result = to_quantile(None, 0.5)
-    assert result is None, "to_quantile should return None for None input"
+    assert np.isnan(result), "to_quantile should return np.nan for None input"
 
     try:
         to_quantile("invalid_string", 0.5)
@@ -1379,6 +1377,42 @@ def test_update_functions_coverage():
     assert result[0].isupper()
 
 
+def test_metric_evaluation_no_valid_data():
+    """Test emetric evaluation with no valid data"""
+    import numpy as np
+
+    from utils.parser import MetricEvaluator
+
+    metric_evaluator = MetricEvaluator({}, {}, {})
+    with patch("builtins.eval") as mock_eval, patch("builtins.compile"):
+        # Test when eval returns None
+        mock_eval.return_value = None
+        assert metric_evaluator.eval_expression("Mock Metric") == "N/A"
+
+        # Test when eval returns NaN
+        mock_eval.return_value = np.nan
+        assert metric_evaluator.eval_expression("Mock Metric") == "N/A"
+
+        # Test when eval raises an exception
+        mock_eval.side_effect = TypeError("Mock exception")
+        assert metric_evaluator.eval_expression("Mock Metric") == "N/A"
+
+        mock_eval.side_effect = NameError("empirical_peak")
+        assert metric_evaluator.eval_expression("Mock Metric") == "N/A"
+
+        mock_eval.side_effect = KeyError("Some KeyError")
+        assert metric_evaluator.eval_expression("Mock Metric") == "N/A"
+
+        with patch("sys.exit"):
+            mock_eval.side_effect = AttributeError("Some AttributeError")
+            assert metric_evaluator.eval_expression("Mock Metric") == "N/A"
+
+        mock_eval.side_effect = AttributeError(
+            "'NoneType' object has no attribute 'get'"
+        )
+        assert metric_evaluator.eval_expression("Mock Metric") == "N/A"
+
+
 @pytest.fixture
 def sample_time_data():
     return pd.DataFrame({
@@ -1626,3 +1660,57 @@ def test_edge_cases_and_error_handling():
     result = convert_time_columns(mixed_case_df, "ms")
     assert result.loc[0, "Unit"] == "ms"
     assert result.loc[1, "Unit"] == "ms"
+
+
+@pytest.mark.iteration_multiplexing
+def test_iteration_multiplexing(binary_handler_analyze_rocprof_compute):
+    workload = "tests/workloads/vcopy_iteration_multiplexing/MI350"
+    workload_dir = test_utils.setup_workload_dir(workload)
+
+    # Test with dispatch filtering
+    code = binary_handler_analyze_rocprof_compute([
+        "analyze",
+        "--dispatch",
+        "0",
+        "--path",
+        workload_dir,
+    ])
+    assert code == 0
+
+    # Test without dispatch filtering
+    code = binary_handler_analyze_rocprof_compute([
+        "analyze",
+        "--path",
+        workload_dir,
+    ])
+    assert code == 0
+
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)
+
+
+@pytest.mark.torch_trace
+def test_list_torch_operators_no_path(binary_handler_analyze_rocprof_compute):
+    """Test --list-torch-operators fails gracefully without --path"""
+    code = binary_handler_analyze_rocprof_compute([
+        "--experimental",
+        "analyze",
+        "--list-torch-operators",
+    ])
+    assert code == 1
+
+
+@pytest.mark.torch_trace
+def test_list_torch_operators_no_trace_data(binary_handler_analyze_rocprof_compute):
+    """Test graceful handling when torch_trace/ directory doesn't exist"""
+    # Use regular vcopy workload (no torch data)
+    workload_dir = test_utils.setup_workload_dir(indirs[0])
+    code = binary_handler_analyze_rocprof_compute([
+        "--experimental",
+        "analyze",
+        "--path",
+        workload_dir,
+        "--list-torch-operators",
+    ])
+    # Should show warning but exit successfully
+    assert code == 0
+    test_utils.clean_output_dir(config["cleanup"], workload_dir)

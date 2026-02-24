@@ -131,7 +131,7 @@ Settings::Settings() {
                                                           : HIP_FORCE_DEV_KERNARG;
 
   limit_blit_wg_ = 16;
-  DEBUG_CLR_GRAPH_PACKET_CAPTURE = false;  // disable graph performance optimizations for PAL
+  DEBUG_HIP_GRAPH_SEGMENT_SCHEDULING = 0;  // disable graph performance optimizations for PAL
 }
 
 bool Settings::create(const Pal::DeviceProperties& palProp,
@@ -166,6 +166,8 @@ bool Settings::create(const Pal::DeviceProperties& palProp,
     // Fall through for Navi2x ...
     case Pal::AsicRevision::StrixHalo:
     case Pal::AsicRevision::Strix1:
+    case Pal::AsicRevision::Krackan1:
+    case Pal::AsicRevision::Krackan2:
     case Pal::AsicRevision::Phoenix1:
     case Pal::AsicRevision::Phoenix2:
     case Pal::AsicRevision::HawkPoint1:
@@ -344,6 +346,12 @@ bool Settings::create(const Pal::DeviceProperties& palProp,
 #if !defined(_LP64)
     resourceCacheSize_ = std::min(resourceCacheSize_, 1 * Gi);
 #endif
+  }
+  uint64_t resourceCacheCap = static_cast<uint64_t>(GPU_MAX_RESOURCE_CACHE_SIZE) * Mi;
+  if (resourceCacheCap < static_cast<uint64_t>(resourceCacheSize_)) {
+    // In 32 bit build, if the above is true, resourceCacheCap is smaller than
+    // 32 bit variable resourceCacheSize_, truncation doesn't happen in the following assignment.
+    resourceCacheSize_ = static_cast<size_t>(resourceCacheCap);
   }
 
   // If is Rebar, override prepinned memory size.

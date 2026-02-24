@@ -113,7 +113,11 @@ TEST_CASE("Unit_hipGetProcAddress_MemoryApisMallocFree") {
     REQUIRE(d_ptr_size == 256);
 
     HIP_CHECK(dyn_hipFree_ptr(d_ptr));
+
+    // With ASAN Enabled, this might pass since we do not release the memory at the line above
+#if !defined(ENABLE_ADDRESS_SANITIZER)
     REQUIRE(hipMemPtrGetInfo(d_ptr, &d_ptr_size) == hipErrorInvalidValue);
+#endif
   }
 
   // Validating hipExtMallocWithFlags API
@@ -307,6 +311,8 @@ TEST_CASE("Unit_hipGetProcAddress_MemoryApisMallocFree") {
     }
   }
 
+  // Skip these if we have address sanitizer enable because free might not actually free it
+#if !defined(ENABLE_ADDRESS_SANITIZER)
   // Validating hipFreeHost API
   {
     void* h_ptr = nullptr;
@@ -330,6 +336,7 @@ TEST_CASE("Unit_hipGetProcAddress_MemoryApisMallocFree") {
     HIP_CHECK(dyn_hipHostFree_ptr(h_ptr));
     REQUIRE(hipMemPtrGetInfo(h_ptr, &h_ptr_size) == hipErrorInvalidValue);
   }
+#endif
 }
 
 /**
@@ -679,6 +686,7 @@ TEST_CASE("Unit_hipGetProcAddress_MemoryApisArrayRelated") {
   desc3d.Width = 8;
   desc3d.Height = 4;
   desc3d.Depth = 2;
+  desc3d.Flags = 0;
 
   HIP_CHECK(hipArray3DCreate(&array3d, &desc3d));
   HIP_CHECK(dyn_hipArray3DCreate_ptr(&array3d_ptr, &desc3d));
@@ -715,6 +723,7 @@ TEST_CASE("Unit_hipGetProcAddress_MemoryApisArrayRelated") {
   gd_desc3d.Width = 16;
   gd_desc3d.Height = 4;
   gd_desc3d.Depth = 8;
+  gd_desc3d.Flags = 0;
 
   HIP_CHECK(hipArray3DCreate(&gd_array3d, &gd_desc3d));
   HIP_CHECK(hipArray3DCreate(&gd_array3d_ptr, &gd_desc3d));
@@ -2705,7 +2714,7 @@ TEST_CASE("Unit_hipGetProcAddress_MemoryApisGetMemInfoRelated") {
  * ------------------------
  *  - HIP_VERSION >= 6.2
  */
-TEST_CASE("Unit_hipGetProcAddress_MemoryApisMemcpy2DRelated") {
+TEST_CASE("Unit_hipGetProcAddress_MemoryApisMemcpy2DRelated", "[multigpu]") {
   CHECK_IMAGE_SUPPORT
 
   void* hipMemcpy2D_ptr = nullptr;
@@ -6008,7 +6017,7 @@ TEST_CASE("Unit_hipGetProcAddress_MemoryApisStreamOrderedMemory") {
  * ------------------------
  *  - HIP_VERSION >= 6.2
  */
-TEST_CASE("Unit_hipGetProcAddress_MemoryApisPeerToPeer") {
+TEST_CASE("Unit_hipGetProcAddress_MemoryApisPeerToPeer", "[multigpu]") {
   int deviceCount = 0;
   HIP_CHECK(hipGetDeviceCount(&deviceCount));
 

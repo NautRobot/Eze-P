@@ -60,7 +60,11 @@ struct AqlPacketMgmt : public amd::EmbeddedObject {
   static constexpr uint32_t kAqlPacketsListSize = 4 * Ki;
   AqlPacketMgmt(const Device& dev);
 
+#if defined(WITH_HSA_DEVICE)
+  amd_queue_v2_t amd_queue_{};
+#else
   amd_queue_t amd_queue_{};
+#endif
   alignas(sizeof(hsa_kernel_dispatch_packet_t))
       hsa_kernel_dispatch_packet_t aql_packets_[kAqlPacketsListSize];  //!< The list of AQL packets
   GpuEvent aql_events_[kAqlPacketsListSize];    //!< The list of gpu for each AQL packet
@@ -317,6 +321,7 @@ class VirtualGPU : public device::VirtualDevice {
   void submitWriteMemory(amd::WriteMemoryCommand& vcmd);
   void submitCopyMemory(amd::CopyMemoryCommand& vcmd);
   void submitCopyMemoryP2P(amd::CopyMemoryP2PCommand& vcmd);
+  void submitBatchCopyMemory(amd::BatchCopyMemoryCommand& vcmd);
   void submitMapMemory(amd::MapMemoryCommand& vcmd);
   void submitUnmapMemory(amd::UnmapMemoryCommand& vcmd);
   void submitKernel(amd::NDRangeKernelCommand& vcmd);
@@ -361,7 +366,7 @@ class VirtualGPU : public device::VirtualDevice {
   //! Dispatches multiple AQL packets in a single batch operation
   bool dispatchAqlPacketBatch(const std::vector<uint8_t*>& packets,
                               const std::vector<std::string>& kernelNames,
-                              amd::AccumulateCommand* vcmd = nullptr) {
+                              amd::AccumulateCommand* vcmd = nullptr, bool attach_signal = false) {
     return false;
   }
 
@@ -624,7 +629,7 @@ class VirtualGPU : public device::VirtualDevice {
   ) {
     amd::Memory* mem = new (amdImage.getContext()) amd::Buffer(amdImage, 0, 0, amdImage.getSize());
     mem->setVirtualDevice(this);
-    if ((mem != nullptr) && !mem->create()) {
+    if (!mem->create()) {
       mem->release();
     }
     return mem;

@@ -38,7 +38,8 @@ This testcase verifies hipMemcpyDtoD API
 6.Kernel Launch
 7.DtoH copy and validating the result
 */
-TEMPLATE_TEST_CASE("Unit_hipMemcpyDtoD_Basic", "", int, float, double) {
+TEMPLATE_TEST_CASE("Unit_hipMemcpyDtoD_Basic", "[multigpu]", int, float,
+                   double) {
   size_t Nbytes = NUM_ELM * sizeof(TestType);
   int numDevices = 0;
   TestType *A_d{nullptr}, *B_d{nullptr}, *C_d{nullptr}, *X_d{nullptr}, *Y_d{nullptr}, *Z_d{nullptr};
@@ -49,11 +50,12 @@ TEMPLATE_TEST_CASE("Unit_hipMemcpyDtoD_Basic", "", int, float, double) {
     int canAccessPeer = 0;
     HIP_CHECK(hipDeviceCanAccessPeer(&canAccessPeer, 0, 1));
     HIP_CHECK(hipSetDevice(0));
-    if (canAccessPeer) {
-      HIP_CHECK(hipDeviceEnablePeerAccess(1, 0));
-    } else {
-      INFO("Machine does not have P2P Capabilities");
+    if (!canAccessPeer) {
+      std::string msg = "Device is not capable of directly accessing memory from peerDevice. Skipping the test.";
+      HipTest::HIP_SKIP_TEST(msg.c_str());
+      return;
     }
+    HIP_CHECK(hipDeviceEnablePeerAccess(1, 0));
     HipTest::initArrays<TestType>(&A_d, &B_d, &C_d, &A_h, &B_h, &C_h, NUM_ELM, false);
     HIP_CHECK(hipSetDevice(1));
     HIP_CHECK(hipMalloc(&X_d, Nbytes));
@@ -63,7 +65,7 @@ TEMPLATE_TEST_CASE("Unit_hipMemcpyDtoD_Basic", "", int, float, double) {
     HIP_CHECK(hipSetDevice(0));
     HIP_CHECK(hipMemcpy(A_d, A_h, Nbytes, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(B_d, B_h, Nbytes, hipMemcpyHostToDevice));
-    hipLaunchKernelGGL(HipTest::vectorADD, dim3(1), dim3(1), 0, 0,
+    hipLaunchKernelGGL(HipTest::vectorADD, dim3(1), NUM_ELM, 0, 0,
                        static_cast<const TestType*>(A_d), static_cast<const TestType*>(B_d), C_d,
                        NUM_ELM);
     HIP_CHECK(hipGetLastError());
@@ -80,7 +82,7 @@ TEMPLATE_TEST_CASE("Unit_hipMemcpyDtoD_Basic", "", int, float, double) {
     END_CAPTURE_SYNC(memcpy_err);
 
     if (memcpy_err == hipSuccess) {
-      hipLaunchKernelGGL(HipTest::vectorADD, dim3(1), dim3(1), 0, 0,
+      hipLaunchKernelGGL(HipTest::vectorADD, dim3(1), NUM_ELM, 0, 0,
                          static_cast<const TestType*>(X_d), static_cast<const TestType*>(Y_d), Z_d,
                          NUM_ELM);
       HIP_CHECK(hipGetLastError());
@@ -89,9 +91,10 @@ TEMPLATE_TEST_CASE("Unit_hipMemcpyDtoD_Basic", "", int, float, double) {
       HipTest::checkVectorADD<TestType>(A_h, B_h, C_h, NUM_ELM);
     }
 
-    HipTest::freeArrays<TestType>(A_d, B_d, C_d, A_h, B_h, C_h, false);
     HIP_CHECK(hipFree(X_d));
     HIP_CHECK(hipFree(Y_d));
     HIP_CHECK(hipFree(Z_d));
+    (void)hipGetLastError();
   }
+  HipTest::freeArrays<TestType>(A_d, B_d, C_d, A_h, B_h, C_h, false);
 }
