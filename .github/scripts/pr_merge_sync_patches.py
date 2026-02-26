@@ -81,7 +81,7 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--keep-clone-dir",
         metavar="DIR",
         default=None,
-        help="Clone the subrepo into DIR instead of a temp dir (implies --no-push). Use with --no-push to inspect the result.",
+        help="Clone the subrepo into DIR instead of a temp dir (implies --no-push).",
     )
     parser.add_argument(
         "--debug", action="store_true", help="If set, enables detailed debug logging."
@@ -389,6 +389,11 @@ def apply_patch_to_subrepo(
     """
     if keep_clone_dir is not None:
         subrepo_path = Path(keep_clone_dir) / entry.name
+        if subrepo_path.exists():
+            raise RuntimeError(
+                f"Clone path already exists: {subrepo_path}. "
+                "Remove it or use a different --keep-clone-dir for a fresh clone."
+            )
         subrepo_path.parent.mkdir(parents=True, exist_ok=True)
         _clone_subrepo(entry.url, entry.branch, subrepo_path)
         tmpdir = None
@@ -406,8 +411,6 @@ def apply_patch_to_subrepo(
             return
 
         _configure_git_user(subrepo_path)
-        if not no_push:
-            _set_authenticated_remote(subrepo_path, entry.url)
 
         # Apply each patch and create separate commits (skip empty patches)
         committed = 0
@@ -429,7 +432,12 @@ def apply_patch_to_subrepo(
             logger.info(
                 f"[Mock run] Applied {committed} patch(es) and committed locally at {subrepo_path}; not pushed."
             )
+        elif committed == 0:
+            logger.info(
+                f"No commits created for {entry.url} (all patches were empty); nothing to push."
+            )
         else:
+            _set_authenticated_remote(subrepo_path, entry.url)
             _push_changes(subrepo_path, entry.branch)
             logger.info(
                 f"Applied {committed} patch(es), committed, and pushed to {entry.url} as {author_name} <{author_email}>"
@@ -463,6 +471,9 @@ def main(argv: Optional[List[str]] = None) -> None:
         return
     logger.debug(f"Base commit for PR #{args.pr} in {args.repo}: {base_sha}")
 
+    if args.keep_clone_dir:
+        args.no_push = True
+
     keep_clone_path = Path(args.keep_clone_dir) if args.keep_clone_dir else None
 
     for entry in relevant_subtrees:
@@ -472,6 +483,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         if args.keep_patches_dir:
             patch_dir = Path(args.keep_patches_dir) / f"{entry.category}-{entry.name}"
             patch_dir.mkdir(parents=True, exist_ok=True)
+            for f in patch_dir.glob("*.patch"):
+                f.unlink()
         else:
             patch_dir = Path(tempfile.mkdtemp())
         patch_file = patch_dir / f"{entry.name}.patch"
