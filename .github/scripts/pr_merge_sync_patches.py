@@ -150,8 +150,8 @@ def _apply_patch(repo_path: Path, patch_path: Path) -> bool:
     Returns True if the patch applied with changes, False if it was empty/no-op.
     """
     _run_git(["apply", "--allow-empty", str(patch_path)], cwd=repo_path)
-    # git apply only modifies working tree; check for any changes
-    has_changes = _run_git(["diff", "--name-only"], cwd=repo_path).strip()
+    # git apply only modifies working tree (does not stage); include untracked (new files)
+    has_changes = _run_git(["status", "--porcelain"], cwd=repo_path).strip()
     if has_changes:
         logger.info(f"Applied patch to working tree at {repo_path}")
     else:
@@ -320,7 +320,8 @@ def generate_patch(
     patch_files = sorted(patch_dir.glob("*.patch"))
     if not patch_files:
         raise RuntimeError(
-            f"No patch files generated for range {base_sha}..{merge_sha} with prefix '{prefix}'."
+            f"No patch files generated for range {base_sha}..{merge_sha} with prefix '{prefix}' "
+            f"(expected patches for {len(commits)} commit(s) touching subtree)."
         )
 
     if debug:
@@ -388,14 +389,13 @@ def apply_patch_to_subrepo(
                 "Remove it or use a different --keep-clone-dir for a fresh clone."
             )
         subrepo_path.parent.mkdir(parents=True, exist_ok=True)
-        _clone_subrepo(entry.url, entry.branch, subrepo_path)
         tmpdir = None
     else:
         tmpdir = tempfile.TemporaryDirectory()
         subrepo_path = Path(tmpdir.name) / entry.name
-        _clone_subrepo(entry.url, entry.branch, subrepo_path)
 
     try:
+        _clone_subrepo(entry.url, entry.branch, subrepo_path)
         if dry_run:
             patch_count = len(patch_paths)
             logger.info(
@@ -435,6 +435,10 @@ def apply_patch_to_subrepo(
             logger.info(
                 f"Applied {committed} patch(es), committed, and pushed to {entry.url} as {author_name} <{author_email}>"
             )
+    except Exception:
+        if keep_clone_dir is not None and subrepo_path.exists():
+            shutil.rmtree(subrepo_path, ignore_errors=True)
+        raise
     finally:
         if tmpdir is not None:
             tmpdir.cleanup()
@@ -467,7 +471,10 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.keep_clone_dir:
         args.no_push = True
 
-    keep_clone_path = Path(args.keep_clone_dir) if args.keep_clone_dir else None
+    # In dry-run do not write to keep_clone_dir (use temp clone only for logging)
+    keep_clone_path = (
+        Path(args.keep_clone_dir) if args.keep_clone_dir and not args.dry_run else None
+    )
 
     for entry in relevant_subtrees:
         prefix = f"{entry.category}/{entry.name}/"
@@ -480,14 +487,17 @@ def main(argv: Optional[List[str]] = None) -> None:
                 f.unlink()
         else:
             patch_dir = Path(tempfile.mkdtemp())
-        patch_file = patch_dir / f"{entry.name}.patch"
+        # generate_patch uses only the parent dir; path is a placeholder for patch_dir
+        patch_dir_anchor = patch_dir / f"{entry.name}.patch"
 
         try:
             patch_result = generate_patch(
-                prefix, merge_sha, patch_file, base_sha, debug=args.debug
+                prefix, merge_sha, patch_dir_anchor, base_sha, debug=args.debug
             )
             if patch_result is None:
                 logger.debug(f"No patches to apply for subtree {prefix}, skipping")
+                if args.keep_patches_dir and patch_dir.exists():
+                    shutil.rmtree(patch_dir, ignore_errors=True)
                 continue
             author_name, author_email = resolve_patch_author(client, args.repo, args.pr)
             apply_patch_to_subrepo(
@@ -503,7 +513,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 keep_clone_dir=keep_clone_path,
             )
         finally:
-            if not args.keep_patches_dir and patch_dir.exists():
+            if not args.keep_patches_dir:
                 shutil.rmtree(patch_dir, ignore_errors=True)
 
 
