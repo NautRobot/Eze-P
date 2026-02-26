@@ -164,7 +164,7 @@ def _apply_patch(repo_path: Path, patch_path: Path) -> bool:
     if has_changes:
         logger.info(f"Applied patch to working tree at {repo_path}")
     else:
-        logger.debug(f"Patch was empty (no hunks) at {repo_path}, skipping commit")
+        logger.debug(f"Patch produced no changes in working tree at {repo_path}, skipping commit")
     return bool(has_changes)
 
 
