@@ -436,8 +436,12 @@ def apply_patch_to_subrepo(
                 f"Applied {committed} patch(es), committed, and pushed to {entry.url} as {author_name} <{author_email}>"
             )
     except Exception:
-        if keep_clone_dir is not None and subrepo_path.exists():
-            shutil.rmtree(subrepo_path, ignore_errors=True)
+        # Preserve the clone directory on error so it can be inspected when --keep-clone-dir is used.
+        logger.exception(
+            "Error while applying patches to %s; clone directory preserved at %s for inspection.",
+            entry.url,
+            subrepo_path,
+        )
         raise
     finally:
         if tmpdir is not None:
