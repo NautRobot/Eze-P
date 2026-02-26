@@ -150,21 +150,14 @@ def _apply_patch(repo_path: Path, patch_path: Path) -> bool:
     Returns True if the patch applied with changes, False if it was empty/no-op.
     """
     _run_git(["apply", "--allow-empty", str(patch_path)], cwd=repo_path)
-    # Check if apply actually produced any changes (empty patches leave working tree unchanged)
-    has_changes = (
-        _run_git(
-            ["diff", "--cached", "--name-only"],
-            cwd=repo_path,
-        ).strip()
-        or _run_git(
-            ["diff", "--name-only"],
-            cwd=repo_path,
-        ).strip()
-    )
+    # git apply only modifies working tree; check for any changes
+    has_changes = _run_git(["diff", "--name-only"], cwd=repo_path).strip()
     if has_changes:
         logger.info(f"Applied patch to working tree at {repo_path}")
     else:
-        logger.debug(f"Patch produced no changes in working tree at {repo_path}, skipping commit")
+        logger.debug(
+            f"Patch produced no changes in working tree at {repo_path}, skipping commit"
+        )
     return bool(has_changes)
 
 
