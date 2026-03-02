@@ -211,33 +211,19 @@ class grid_group : public thread_group {
   __CG_QUALIFIER__ bool is_valid() const { return internal::grid::is_valid(); }
   //! @copydoc thread_group::sync
   __CG_QUALIFIER__ void sync() const { internal::grid::sync(); }
-<<<<<<< HEAD
   __CG_QUALIFIER__ dim3 group_dim() const { return internal::grid::grid_dim(); }
   struct arrival_token {
     unsigned int signal;
-=======
-  __CG_QUALIFIER__ dim3 group_dim() const { return internal::workgroup::block_dim(); }
-  struct arrival_token {
-    unsigned int value;
->>>>>>> 31e459a799 (SWDEV-493792 - add split barriers for thread_group and grid_group (#822))
   };
   //! Arrive at a barrier
   __CG_QUALIFIER__ arrival_token barrier_arrive() const {
     arrival_token t;
-<<<<<<< HEAD
     t.signal = internal::grid::barrier_signal();
-=======
-    t.value = internal::grid::barrier_arrive();
->>>>>>> 31e459a799 (SWDEV-493792 - add split barriers for thread_group and grid_group (#822))
     return t;
   }
   //! Arrive at a barrier
   __CG_QUALIFIER__ void barrier_wait(arrival_token&& t) const {
-<<<<<<< HEAD
     internal::grid::barrier_wait(t.signal);
-=======
-    internal::grid::barrier_wait(t.value);
->>>>>>> 31e459a799 (SWDEV-493792 - add split barriers for thread_group and grid_group (#822))
   }
 };
 
@@ -328,15 +314,8 @@ class thread_block : public thread_group {
     internal::workgroup::barrier_arrive();
     return arrival_token{};
   }
-<<<<<<< HEAD
   //! Arrive at a barrier
   __CG_QUALIFIER__ void barrier_wait(arrival_token&&) const { internal::workgroup::barrier_wait(); }
-=======
-    //! Arrive at a barrier
-  __CG_QUALIFIER__ void barrier_wait(arrival_token&&) const {
-    internal::workgroup::barrier_wait();
-  }
->>>>>>> 31e459a799 (SWDEV-493792 - add split barriers for thread_group and grid_group (#822))
 };
 
 /** \ingroup CooperativeGConstruct
