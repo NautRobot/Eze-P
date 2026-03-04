@@ -8,6 +8,15 @@ env:
   AIS_INPUT_PLATFORM: ${{ inputs.platform }}
   AIS_INPUT_ROCM_VERSION: ${{ inputs.rocm_version }}
   AIS_MOUNT_PATH: /mnt/ais/ext4
+  AIS_PKG_INSTALL_CMD: >-
+    ${{
+      case(
+        inputs.platform == 'rocky', 'dnf install -y',
+        inputs.platform == 'suse', 'zypper install -y --allow-unsigned-rpm',
+        inputs.platform == 'ubuntu', 'apt update; apt install -y',
+        ''
+      )
+    }}
   AIS_PKG_MGR: >-
     ${{
       inputs.platform == 'rocky' && 'dnf' ||
@@ -49,12 +58,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
         with:
           path: hipFile
-      - name: Fetching fio repository...
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
-        with:
-          repository: ROCm/fio
-          ref: hipFile
-          path: fio
       - name: Download hipFile runtime package
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 #v8.0.0
         with:
@@ -101,7 +104,6 @@ jobs:
             /bin/bash -c '
               cp -R /mnt/ais /ais
               mkdir /ais/hipFile/build
-              mkdir /ais/fio/build
             '
       - name: Copy the hipFile packages into the container
         run: |
@@ -182,29 +184,168 @@ jobs:
                 /ais/hipFile/util/ci-aiscp-test.sh \
                 /ais/hipFile/build/examples/aiscp/aiscp
             '
-      - name: Configure fio
+      - name: Destroy hipfile IO test directory
+        if: ${{ always() }}
+        run: |
+          docker exec -t "${AIS_CONTAINER_NAME}" /bin/bash -c "rm -fr /mnt/ais-fs/${AIS_CONTAINER_NAME}"
+      - name: Cleanup & Stop the Docker container
+        if: ${{ always() }}
+        run: |
+          docker stop "${AIS_CONTAINER_NAME}"
+      - name: Cleanup self-hosted runner workspace
+        if: ${{ always() }}
+        run: |
+          shopt -s dotglob
+          rm -rf ${GITHUB_WORKSPACE}/*
+  build_FIO:
+    uses: ROCm/fio/.github/workflows/build-fio.yml@hipFile
+    with:
+      ais_hipfile_pkg_filename: ${{ inputs.ais_hipfile_pkg_filename }}
+      ais_hipfile_pkg_dev_filename: ${{ inputs.ais_hipfile_pkg_dev_filename }}
+      platform: ${{ inputs.platform }}
+  run_FIO_tests:
+    runs-on: [linux, AIS]
+    needs: [build_FIO]
+    env:
+      FIO_RUNTIME_PKG_FILENAME: >-
+        ${{
+          case(
+            inputs.platform == 'rocky', needs.build_FIO.outputs.fio_pkg_fedora_filename,
+            inputs.platform == 'suse', needs.build_FIO.outputs.fio_pkg_suse_filename,
+            inputs.platform == 'ubuntu', needs.build_FIO.outputs.fio_pkg_debian_filename,
+            ''
+          )
+        }}
+      FIO_HIPFILE_ENGINE_PKG_FILENAME: >-
+        ${{
+          case(
+            inputs.platform == 'rocky', needs.build_FIO.outputs.fio_pkg_fedora_hipfile_engine_filename,
+            ''
+          )
+        }}
+    steps:
+      - name: Set early AIS CI environment variables
+        run: echo "AIS_PR_NUMBER=$(echo ${{ github.ref }} | sed 's|[^0-9]||g')" >> "${GITHUB_ENV}"
+      - name: Set AIS CI container name
+        run: |
+          echo "AIS_CONTAINER_NAME=${AIS_PR_NUMBER}_${{ github.job }}_${AIS_INPUT_PLATFORM}_${AIS_INPUT_ROCM_VERSION}" >> "${GITHUB_ENV}"
+      # hipFile repo needed for //util directory
+      - name: Fetching hipFile repository...
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+        with:
+          path: hipFile
+      - name: Download hipFile runtime package
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 #v8.0.0
+        with:
+          name: ${{ inputs.ais_hipfile_pkg_filename }}
+      - name: Download hipFile development package
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 #v8.0.0
+        with:
+          name: ${{ inputs.ais_hipfile_pkg_dev_filename }}
+      - name: Download FIO runtime package
+        # Fedora-based distro's need to download multiple packages as the FIO IO engines
+        # are dynamically linked instead of built into the FIO executable.
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 #v8.0.0
+        with:
+          artifact-ids: >-
+            ${{
+              case(
+                inputs.platform == 'rocky',
+                format(
+                  '{0},{1}',
+                  needs.build_FIO.outputs.fio_pkg_fedora_artifact_id,
+                  needs.build_FIO.outputs.fio_pkg_fedora_hipfile_engine_artifact_id
+                ),
+                inputs.platform == 'suse', needs.build_FIO.outputs.fio_pkg_suse_artifact_id,
+                inputs.platform == 'ubuntu', needs.build_FIO.outputs.fio_pkg_debian_artifact_id,
+                format('Platform "{0}" is not supported by build_FIO.', inputs.platform)
+              )
+            }}
+          merge-multiple: true
+      - name: Authenticating to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 #v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Starting Docker Container
+        run: |
+          docker run \
+            -dt \
+            --rm \
+            --device=/dev/kfd \
+            --device=/dev/dri \
+            --security-opt seccomp=unconfined \
+            --pull always \
+            -v ${GITHUB_WORKSPACE}:/mnt/ais:ro \
+            -v "${AIS_MOUNT_PATH}:/mnt/ais-fs" \
+            --name "${AIS_CONTAINER_NAME}" \
+            "${AIS_INPUT_CI_IMAGE}"
+      - name: Create hipfile IO test directory
+        run: |
+          docker exec -t "${AIS_CONTAINER_NAME}" /bin/bash -c "mkdir -p /mnt/ais-fs/${AIS_CONTAINER_NAME}"
+      - name: Copy the hipFile packages into the container
+        run: |
+          docker cp \
+            "${GITHUB_WORKSPACE}/${AIS_INPUT_HIPFILE_PKG_FILENAME}" \
+            "${AIS_CONTAINER_NAME}:/root"
+          docker cp \
+            "${GITHUB_WORKSPACE}/${AIS_INPUT_HIPFILE_PKG_DEV_FILENAME}" \
+            "${AIS_CONTAINER_NAME}:/root"
+      - name: Install the hipFile packages
+        # Note: We need to re-run the `ldconfig` post-install step.
+        #       This really should just be done automatically by the ROCm package.
         run: |
           docker exec \
             -t \
-            -w /ais/fio/build \
+            -w /root \
             "${AIS_CONTAINER_NAME}" \
             /bin/bash -c '
-              ROCM=/opt/rocm-${ROCM_VERSION} \
-              HIPFILE=/ais/hipFile \
-              HIPFILELIB=${HIPFILE}/build/src/amd_detail/ \
-              HIP_PLATFORM=amd \
-              CFLAGS="-I${ROCM}/include" \
-              LDFLAGS="-L${ROCM}/lib -Wl,-rpath,${ROCM}/lib" \
-              ../configure --enable-libhipfile
+              ${{
+                format(
+                  env.AIS_PKG_MGR == 'apt' && 'apt update; apt install -y "./{0}" "./{1}"' ||
+                    env.AIS_PKG_MGR == 'dnf' && 'dnf install -y --cacheonly "./{0}" "./{1}"' ||
+                    env.AIS_PKG_MGR == 'zypper' && 'zypper --no-refresh install -y --allow-unsigned-rpm "./{0}" "./{1}"' ||
+                    'echo "Unknown platform."; exit 1',
+                  inputs.ais_hipfile_pkg_filename,
+                  inputs.ais_hipfile_pkg_dev_filename
+                )
+              }}
+              ldconfig
             '
-      - name: Build fio
+      - name: Copy the FIO packages into the container
+        run: |
+          docker cp \
+            "${GITHUB_WORKSPACE}/${FIO_RUNTIME_PKG_FILENAME}" \
+            "${AIS_CONTAINER_NAME}:/root"
+          ${{
+            case(
+              inputs.platform == 'rocky',
+                'docker cp \
+                  "${GITHUB_WORKSPACE}/${FIO_HIPFILE_ENGINE_PKG_FILENAME}" \
+                  "${AIS_CONTAINER_NAME}:/root"
+                ',
+              ''
+            )
+          }}
+      - name: Install the FIO packages
         run: |
           docker exec \
             -t \
-            -w /ais/fio/build \
+            -w /root \
             "${AIS_CONTAINER_NAME}" \
             /bin/bash -c '
-              make -j
+              ${{
+                format(
+                  '{0} {1}',
+                  env.AIS_PKG_INSTALL_CMD,
+                  case(
+                    inputs.platform == 'rocky',
+                      format('./{0} ./{1}', env.FIO_RUNTIME_PKG_FILENAME, env.FIO_HIPFILE_ENGINE_PKG_FILENAME),
+                    format('./{0}', env.FIO_RUNTIME_PKG_FILENAME)
+                  )
+                )
+              }}
             '
       - name: hipFile fallback/POSIX IO test using fio
         run: |
@@ -214,8 +355,8 @@ jobs:
             "${AIS_CONTAINER_NAME}" \
             /bin/bash -c '
               HIPFILE_FORCE_COMPAT_MODE=true \
-                /ais/fio/build/fio \
-                /ais/hipFile/util/fio/write-read-verify.fio
+                fio \
+                /mnt/ais/hipFile/util/fio/write-read-verify.fio
             '
       - name: hipFile AIS IO test using fio
         run: |
@@ -225,8 +366,8 @@ jobs:
             "${AIS_CONTAINER_NAME}" \
             /bin/bash -c '
               HIPFILE_ALLOW_COMPAT_MODE=false \
-                /ais/fio/build/fio \
-                /ais/hipFile/util/fio/write-read-verify.fio
+                fio \
+                /mnt/ais/hipFile/util/fio/write-read-verify.fio
             '
       - name: Destroy hipfile IO test directory
         if: ${{ always() }}
@@ -238,4 +379,6 @@ jobs:
           docker stop "${AIS_CONTAINER_NAME}"
       - name: Cleanup self-hosted runner workspace
         if: ${{ always() }}
-        run: rm -rf ${GITHUB_WORKSPACE}/* ${GITHUB_WORKSPACE}/.*
+        run: |
+          shopt -s dotglob
+          rm -rf ${GITHUB_WORKSPACE}/*
