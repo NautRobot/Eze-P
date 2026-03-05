@@ -96,22 +96,22 @@
  * CPC (Command Processor Compute) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmCPC_PERFCOUNTER0_SELECT 0xD819 /* regCPC_PERFCOUNTER0_SELECT */
-#define mmCPC_PERFCOUNTER0_LO 0xD006 /* regCPC_PERFCOUNTER0_LO */
-#define mmCPC_PERFCOUNTER0_HI 0xD007 /* regCPC_PERFCOUNTER0_HI */
-#define mmCPC_PERFCOUNTER1_SELECT 0xD813 /* regCPC_PERFCOUNTER1_SELECT */
-#define mmCPC_PERFCOUNTER1_LO 0xD004 /* regCPC_PERFCOUNTER1_LO */
-#define mmCPC_PERFCOUNTER1_HI 0xD005 /* regCPC_PERFCOUNTER1_HI */
+#define mmCPC_PERFCOUNTER0_SELECT 0xD809 /* 0xA000 + 0x3809 */
+#define mmCPC_PERFCOUNTER0_LO 0xD006 /* 0xA000 + 0x3006 */
+#define mmCPC_PERFCOUNTER0_HI 0xD007 /* 0xA000 + 0x3007 */
+#define mmCPC_PERFCOUNTER1_SELECT 0xD803 /* 0xA000 + 0x3803 */
+#define mmCPC_PERFCOUNTER1_LO 0xD004 /* 0xA000 + 0x3004 */
+#define mmCPC_PERFCOUNTER1_HI 0xD005 /* 0xA000 + 0x3005 */
 
 /* =============================================================================
  * SQ (Shader Sequencer) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
 #define mmSQ_PERFCOUNTER0_SELECT 0xD9C0 /* regSQ_PERFCOUNTER0_SELECT */
 #define mmSQ_PERFCOUNTER0_LO 0xD1C0 /* regSQ_PERFCOUNTER0_LO */
@@ -134,31 +134,22 @@
  * GRBM (Graphics Register Bus Manager) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 1 (offset-adjusted UCONFIG addressing)
- * Address calculation: 0xC000 + (offset - 0x2000)
- *
- * Example: regGRBM_PERFCOUNTER0_SELECT = 0x3840 (BASE_IDX=1)
- *          Absolute = 0xC000 + (0x3840 - 0x2000) = 0xD840
- *
- * NOTE: Values below are ABSOLUTE UCONFIG addresses ready for PM4 packets.
- *       Do NOT apply additional BASE_IDX adjustments at runtime.
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmGRBM_PERFCOUNTER0_SELECT 0xd840 /* 0xC000 + (0x3840 - 0x2000) */
-#define mmGRBM_PERFCOUNTER0_LO 0xd040 /* 0xC000 + (0x3040 - 0x2000) */
-#define mmGRBM_PERFCOUNTER0_HI 0xd041 /* 0xC000 + (0x3041 - 0x2000) */
-#define mmGRBM_PERFCOUNTER1_SELECT 0xd841 /* 0xC000 + (0x3841 - 0x2000) */
-#define mmGRBM_PERFCOUNTER1_LO 0xd043 /* 0xC000 + (0x3043 - 0x2000) */
-#define mmGRBM_PERFCOUNTER1_HI 0xd044 /* 0xC000 + (0x3044 - 0x2000) */
+#define mmGRBM_PERFCOUNTER0_SELECT 0xD840 /* 0xA000 + 0x3840 */
+#define mmGRBM_PERFCOUNTER0_LO 0xD040 /* 0xA000 + 0x3040 */
+#define mmGRBM_PERFCOUNTER0_HI 0xD041 /* 0xA000 + 0x3041 */
+#define mmGRBM_PERFCOUNTER1_SELECT 0xD841 /* 0xA000 + 0x3841 */
+#define mmGRBM_PERFCOUNTER1_LO 0xD043 /* 0xA000 + 0x3043 */
+#define mmGRBM_PERFCOUNTER1_HI 0xD044 /* 0xA000 + 0x3044 */
 
 /* =============================================================================
  * GL2C (Graphics L2 Cache Channel) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 1 (offset-adjusted UCONFIG addressing)
- * Address calculation: 0xC000 + (offset - 0x2000)
- *
- * Example: regGL2C_PERFCOUNTER0_SELECT = 0x3b80 (BASE_IDX=1)
- *          Absolute = 0xC000 + (0x3b80 - 0x2000) = 0xDB80
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  *
  * IMPORTANT: GL2C counters require:
  *   1. Per-instance configuration in START packet (16 instances)
@@ -166,217 +157,214 @@
  *   3. Broadcast->instance toggle before each instance read
  *   4. Absolute UCONFIG addresses in COPY_DATA (use values below directly)
  */
-#define mmGL2C_PERFCOUNTER0_SELECT 0xDB80 /* regGL2C_PERFCOUNTER0_SELECT, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER0_LO 0xD380 /* regGL2C_PERFCOUNTER0_LO, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER0_HI 0xD381 /* regGL2C_PERFCOUNTER0_HI, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER1_SELECT 0xDB82 /* regGL2C_PERFCOUNTER1_SELECT, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER1_LO 0xD382 /* regGL2C_PERFCOUNTER1_LO, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER1_HI 0xD383 /* regGL2C_PERFCOUNTER1_HI, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER2_SELECT 0xDB84 /* regGL2C_PERFCOUNTER2_SELECT, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER2_LO 0xD384 /* regGL2C_PERFCOUNTER2_LO, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER2_HI 0xD385 /* regGL2C_PERFCOUNTER2_HI, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER3_SELECT 0xDB86 /* regGL2C_PERFCOUNTER3_SELECT, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER3_LO 0xD386 /* regGL2C_PERFCOUNTER3_LO, BASE_IDX=1 */
-#define mmGL2C_PERFCOUNTER3_HI 0xD387 /* regGL2C_PERFCOUNTER3_HI, BASE_IDX=1 */
+#define mmGL2C_PERFCOUNTER0_SELECT 0xDB80 /* 0xA000 + 0x3B80 */
+#define mmGL2C_PERFCOUNTER0_LO 0xD380 /* 0xA000 + 0x3380 */
+#define mmGL2C_PERFCOUNTER0_HI 0xD381 /* 0xA000 + 0x3381 */
+#define mmGL2C_PERFCOUNTER1_SELECT 0xDB82 /* 0xA000 + 0x3B82 */
+#define mmGL2C_PERFCOUNTER1_LO 0xD382 /* 0xA000 + 0x3382 */
+#define mmGL2C_PERFCOUNTER1_HI 0xD383 /* 0xA000 + 0x3383 */
+#define mmGL2C_PERFCOUNTER2_SELECT 0xDB84 /* 0xA000 + 0x3B84 */
+#define mmGL2C_PERFCOUNTER2_LO 0xD384 /* 0xA000 + 0x3384 */
+#define mmGL2C_PERFCOUNTER2_HI 0xD385 /* 0xA000 + 0x3385 */
+#define mmGL2C_PERFCOUNTER3_SELECT 0xDB86 /* 0xA000 + 0x3B86 */
+#define mmGL2C_PERFCOUNTER3_LO 0xD386 /* 0xA000 + 0x3386 */
+#define mmGL2C_PERFCOUNTER3_HI 0xD387 /* 0xA000 + 0x3387 */
 
 /* =============================================================================
  * SPI (Shader Processor Input) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmSPI_PERFCOUNTER0_SELECT 0x3980 /* regSPI_PERFCOUNTER0_SELECT */
-#define mmSPI_PERFCOUNTER0_LO 0x3181 /* regSPI_PERFCOUNTER0_LO */
-#define mmSPI_PERFCOUNTER0_HI 0x3180 /* regSPI_PERFCOUNTER0_HI */
-#define mmSPI_PERFCOUNTER1_SELECT 0x3981 /* regSPI_PERFCOUNTER1_SELECT */
-#define mmSPI_PERFCOUNTER1_LO 0x3183 /* regSPI_PERFCOUNTER1_LO */
-#define mmSPI_PERFCOUNTER1_HI 0x3182 /* regSPI_PERFCOUNTER1_HI */
-#define mmSPI_PERFCOUNTER2_SELECT 0x3982 /* regSPI_PERFCOUNTER2_SELECT */
-#define mmSPI_PERFCOUNTER2_LO 0x3185 /* regSPI_PERFCOUNTER2_LO */
-#define mmSPI_PERFCOUNTER2_HI 0x3184 /* regSPI_PERFCOUNTER2_HI */
-#define mmSPI_PERFCOUNTER3_SELECT 0x3983 /* regSPI_PERFCOUNTER3_SELECT */
-#define mmSPI_PERFCOUNTER3_LO 0x3187 /* regSPI_PERFCOUNTER3_LO */
-#define mmSPI_PERFCOUNTER3_HI 0x3186 /* regSPI_PERFCOUNTER3_HI */
-#define mmSPI_PERFCOUNTER4_SELECT 0x3984 /* regSPI_PERFCOUNTER4_SELECT */
-#define mmSPI_PERFCOUNTER4_LO 0x3189 /* regSPI_PERFCOUNTER4_LO */
-#define mmSPI_PERFCOUNTER4_HI 0x3188 /* regSPI_PERFCOUNTER4_HI */
-#define mmSPI_PERFCOUNTER5_SELECT 0x3985 /* regSPI_PERFCOUNTER5_SELECT */
-#define mmSPI_PERFCOUNTER5_LO 0x318B /* regSPI_PERFCOUNTER5_LO */
-#define mmSPI_PERFCOUNTER5_HI 0x318A /* regSPI_PERFCOUNTER5_HI */
+#define mmSPI_PERFCOUNTER0_SELECT 0xD980 /* 0xA000 + 0x3980 */
+#define mmSPI_PERFCOUNTER0_LO 0xD181 /* 0xA000 + 0x3181 */
+#define mmSPI_PERFCOUNTER0_HI 0xD180 /* 0xA000 + 0x3180 */
+#define mmSPI_PERFCOUNTER1_SELECT 0xD981 /* 0xA000 + 0x3981 */
+#define mmSPI_PERFCOUNTER1_LO 0xD183 /* 0xA000 + 0x3183 */
+#define mmSPI_PERFCOUNTER1_HI 0xD182 /* 0xA000 + 0x3182 */
+#define mmSPI_PERFCOUNTER2_SELECT 0xD982 /* 0xA000 + 0x3982 */
+#define mmSPI_PERFCOUNTER2_LO 0xD185 /* 0xA000 + 0x3185 */
+#define mmSPI_PERFCOUNTER2_HI 0xD184 /* 0xA000 + 0x3184 */
+#define mmSPI_PERFCOUNTER3_SELECT 0xD983 /* 0xA000 + 0x3983 */
+#define mmSPI_PERFCOUNTER3_LO 0xD187 /* 0xA000 + 0x3187 */
+#define mmSPI_PERFCOUNTER3_HI 0xD186 /* 0xA000 + 0x3186 */
+#define mmSPI_PERFCOUNTER4_SELECT 0xD984 /* 0xA000 + 0x3984 */
+#define mmSPI_PERFCOUNTER4_LO 0xD189 /* 0xA000 + 0x3189 */
+#define mmSPI_PERFCOUNTER4_HI 0xD188 /* 0xA000 + 0x3188 */
+#define mmSPI_PERFCOUNTER5_SELECT 0xD985 /* 0xA000 + 0x3985 */
+#define mmSPI_PERFCOUNTER5_LO 0xD18B /* 0xA000 + 0x318B */
+#define mmSPI_PERFCOUNTER5_HI 0xD18A /* 0xA000 + 0x318A */
 
 /* =============================================================================
  * TA (Texture Addresser) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmTA_PERFCOUNTER0_SELECT 0x3AC0 /* regTA_PERFCOUNTER0_SELECT */
-#define mmTA_PERFCOUNTER0_LO 0x32C0 /* regTA_PERFCOUNTER0_LO */
-#define mmTA_PERFCOUNTER0_HI 0x32C1 /* regTA_PERFCOUNTER0_HI */
-#define mmTA_PERFCOUNTER1_SELECT 0x3AC2 /* regTA_PERFCOUNTER1_SELECT */
-#define mmTA_PERFCOUNTER1_LO 0x32C2 /* regTA_PERFCOUNTER1_LO */
-#define mmTA_PERFCOUNTER1_HI 0x32C3 /* regTA_PERFCOUNTER1_HI */
+#define mmTA_PERFCOUNTER0_SELECT 0xDAC0 /* 0xA000 + 0x3AC0 */
+#define mmTA_PERFCOUNTER0_LO 0xD2C0 /* 0xA000 + 0x32C0 */
+#define mmTA_PERFCOUNTER0_HI 0xD2C1 /* 0xA000 + 0x32C1 */
+#define mmTA_PERFCOUNTER1_SELECT 0xDAC2 /* 0xA000 + 0x3AC2 */
+#define mmTA_PERFCOUNTER1_LO 0xD2C2 /* 0xA000 + 0x32C2 */
+#define mmTA_PERFCOUNTER1_HI 0xD2C3 /* 0xA000 + 0x32C3 */
 
 /* =============================================================================
  * TCP (Texture Cache Processor) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmTCP_PERFCOUNTER0_SELECT 0x3B40 /* regTCP_PERFCOUNTER0_SELECT */
-#define mmTCP_PERFCOUNTER0_LO 0x3340 /* regTCP_PERFCOUNTER0_LO */
-#define mmTCP_PERFCOUNTER0_HI 0x3341 /* regTCP_PERFCOUNTER0_HI */
-#define mmTCP_PERFCOUNTER1_SELECT 0x3B42 /* regTCP_PERFCOUNTER1_SELECT */
-#define mmTCP_PERFCOUNTER1_LO 0x3342 /* regTCP_PERFCOUNTER1_LO */
-#define mmTCP_PERFCOUNTER1_HI 0x3343 /* regTCP_PERFCOUNTER1_HI */
-#define mmTCP_PERFCOUNTER2_SELECT 0x3B44 /* regTCP_PERFCOUNTER2_SELECT */
-#define mmTCP_PERFCOUNTER2_LO 0x3344 /* regTCP_PERFCOUNTER2_LO */
-#define mmTCP_PERFCOUNTER2_HI 0x3345 /* regTCP_PERFCOUNTER2_HI */
-#define mmTCP_PERFCOUNTER3_SELECT 0x3B46 /* regTCP_PERFCOUNTER3_SELECT */
-#define mmTCP_PERFCOUNTER3_LO 0x3346 /* regTCP_PERFCOUNTER3_LO */
-#define mmTCP_PERFCOUNTER3_HI 0x3347 /* regTCP_PERFCOUNTER3_HI */
+#define mmTCP_PERFCOUNTER0_SELECT 0xDB40 /* 0xA000 + 0x3B40 */
+#define mmTCP_PERFCOUNTER0_LO 0xD340 /* 0xA000 + 0x3340 */
+#define mmTCP_PERFCOUNTER0_HI 0xD341 /* 0xA000 + 0x3341 */
+#define mmTCP_PERFCOUNTER1_SELECT 0xDB42 /* 0xA000 + 0x3B42 */
+#define mmTCP_PERFCOUNTER1_LO 0xD342 /* 0xA000 + 0x3342 */
+#define mmTCP_PERFCOUNTER1_HI 0xD343 /* 0xA000 + 0x3343 */
+#define mmTCP_PERFCOUNTER2_SELECT 0xDB44 /* 0xA000 + 0x3B44 */
+#define mmTCP_PERFCOUNTER2_LO 0xD344 /* 0xA000 + 0x3344 */
+#define mmTCP_PERFCOUNTER2_HI 0xD345 /* 0xA000 + 0x3345 */
+#define mmTCP_PERFCOUNTER3_SELECT 0xDB45 /* 0xA000 + 0x3B45 */
+#define mmTCP_PERFCOUNTER3_LO 0xD346 /* 0xA000 + 0x3346 */
+#define mmTCP_PERFCOUNTER3_HI 0xD347 /* 0xA000 + 0x3347 */
 
 /* =============================================================================
  * TD (Texture Data) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmTD_PERFCOUNTER0_SELECT 0x3BC0 /* regTD_PERFCOUNTER0_SELECT */
-#define mmTD_PERFCOUNTER0_LO 0x33C0 /* regTD_PERFCOUNTER0_LO */
-#define mmTD_PERFCOUNTER0_HI 0x33C1 /* regTD_PERFCOUNTER0_HI */
-#define mmTD_PERFCOUNTER1_SELECT 0x3BC2 /* regTD_PERFCOUNTER1_SELECT */
-#define mmTD_PERFCOUNTER1_LO 0x33C2 /* regTD_PERFCOUNTER1_LO */
-#define mmTD_PERFCOUNTER1_HI 0x33C3 /* regTD_PERFCOUNTER1_HI */
+#define mmTD_PERFCOUNTER0_SELECT 0xDB00 /* 0xA000 + 0x3B00 */
+#define mmTD_PERFCOUNTER0_LO 0xD300 /* 0xA000 + 0x3300 */
+#define mmTD_PERFCOUNTER0_HI 0xD301 /* 0xA000 + 0x3301 */
+#define mmTD_PERFCOUNTER1_SELECT 0xDB02 /* 0xA000 + 0x3B02 */
+#define mmTD_PERFCOUNTER1_LO 0xD302 /* 0xA000 + 0x3302 */
+#define mmTD_PERFCOUNTER1_HI 0xD303 /* 0xA000 + 0x3303 */
 
 /* =============================================================================
  * TCC (Texture Cache Controller) REGISTERS
  * =============================================================================
- * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
- *
- * IMPORTANT: TCC counters require same special handling as GL2C:
- *   1. Per-instance configuration in START packet (16 instances)
- *   2. Split 32-bit LO+HI reads in READ packet
- *   3. Broadcast->instance toggle before each instance read
+ * WARNING: TCC does not exist in GFX12 — it was renamed to GL2C.
+ * These registers are from GFX9 (gc_9_2_1_offset.h, BASE_IDX: 1).
+ * Kept for potential multi-arch support; not used in GFX12 counter_registry.
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmTCC_PERFCOUNTER0_SELECT 0x3C40 /* regTCC_PERFCOUNTER0_SELECT */
-#define mmTCC_PERFCOUNTER0_LO 0x3440 /* regTCC_PERFCOUNTER0_LO */
-#define mmTCC_PERFCOUNTER0_HI 0x3441 /* regTCC_PERFCOUNTER0_HI */
-#define mmTCC_PERFCOUNTER1_SELECT 0x3C42 /* regTCC_PERFCOUNTER1_SELECT */
-#define mmTCC_PERFCOUNTER1_LO 0x3442 /* regTCC_PERFCOUNTER1_LO */
-#define mmTCC_PERFCOUNTER1_HI 0x3443 /* regTCC_PERFCOUNTER1_HI */
-#define mmTCC_PERFCOUNTER2_SELECT 0x3C44 /* regTCC_PERFCOUNTER2_SELECT */
-#define mmTCC_PERFCOUNTER2_LO 0x3444 /* regTCC_PERFCOUNTER2_LO */
-#define mmTCC_PERFCOUNTER2_HI 0x3445 /* regTCC_PERFCOUNTER2_HI */
-#define mmTCC_PERFCOUNTER3_SELECT 0x3C46 /* regTCC_PERFCOUNTER3_SELECT */
-#define mmTCC_PERFCOUNTER3_LO 0x3446 /* regTCC_PERFCOUNTER3_LO */
-#define mmTCC_PERFCOUNTER3_HI 0x3447 /* regTCC_PERFCOUNTER3_HI */
+#define mmTCC_PERFCOUNTER0_SELECT 0xDB80 /* 0xA000 + 0x3B80 (same as GL2C in GFX12) */
+#define mmTCC_PERFCOUNTER0_LO 0xD380 /* 0xA000 + 0x3380 */
+#define mmTCC_PERFCOUNTER0_HI 0xD381 /* 0xA000 + 0x3381 */
+#define mmTCC_PERFCOUNTER1_SELECT 0xDB82 /* 0xA000 + 0x3B82 */
+#define mmTCC_PERFCOUNTER1_LO 0xD382 /* 0xA000 + 0x3382 */
+#define mmTCC_PERFCOUNTER1_HI 0xD383 /* 0xA000 + 0x3383 */
+#define mmTCC_PERFCOUNTER2_SELECT 0xDB84 /* 0xA000 + 0x3B84 */
+#define mmTCC_PERFCOUNTER2_LO 0xD384 /* 0xA000 + 0x3384 */
+#define mmTCC_PERFCOUNTER2_HI 0xD385 /* 0xA000 + 0x3385 */
+#define mmTCC_PERFCOUNTER3_SELECT 0xDB86 /* 0xA000 + 0x3B86 */
+#define mmTCC_PERFCOUNTER3_LO 0xD386 /* 0xA000 + 0x3386 */
+#define mmTCC_PERFCOUNTER3_HI 0xD387 /* 0xA000 + 0x3387 */
 
 /* =============================================================================
  * SX (Shader Export) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmSX_PERFCOUNTER0_SELECT 0x3A80 /* regSX_PERFCOUNTER0_SELECT */
-#define mmSX_PERFCOUNTER0_LO 0x3280 /* regSX_PERFCOUNTER0_LO */
-#define mmSX_PERFCOUNTER0_HI 0x3281 /* regSX_PERFCOUNTER0_HI */
-#define mmSX_PERFCOUNTER1_SELECT 0x3A82 /* regSX_PERFCOUNTER1_SELECT */
-#define mmSX_PERFCOUNTER1_LO 0x3282 /* regSX_PERFCOUNTER1_LO */
-#define mmSX_PERFCOUNTER1_HI 0x3283 /* regSX_PERFCOUNTER1_HI */
-#define mmSX_PERFCOUNTER2_SELECT 0x3A84 /* regSX_PERFCOUNTER2_SELECT */
-#define mmSX_PERFCOUNTER2_LO 0x3284 /* regSX_PERFCOUNTER2_LO */
-#define mmSX_PERFCOUNTER2_HI 0x3285 /* regSX_PERFCOUNTER2_HI */
-#define mmSX_PERFCOUNTER3_SELECT 0x3A86 /* regSX_PERFCOUNTER3_SELECT */
-#define mmSX_PERFCOUNTER3_LO 0x3286 /* regSX_PERFCOUNTER3_LO */
-#define mmSX_PERFCOUNTER3_HI 0x3287 /* regSX_PERFCOUNTER3_HI */
+#define mmSX_PERFCOUNTER0_SELECT 0xDA80 /* 0xA000 + 0x3A80 */
+#define mmSX_PERFCOUNTER0_LO 0xD280 /* 0xA000 + 0x3280 */
+#define mmSX_PERFCOUNTER0_HI 0xD281 /* 0xA000 + 0x3281 */
+#define mmSX_PERFCOUNTER1_SELECT 0xDA82 /* 0xA000 + 0x3A82 */
+#define mmSX_PERFCOUNTER1_LO 0xD282 /* 0xA000 + 0x3282 */
+#define mmSX_PERFCOUNTER1_HI 0xD283 /* 0xA000 + 0x3283 */
+#define mmSX_PERFCOUNTER2_SELECT 0xDA84 /* 0xA000 + 0x3A84 */
+#define mmSX_PERFCOUNTER2_LO 0xD284 /* 0xA000 + 0x3284 */
+#define mmSX_PERFCOUNTER2_HI 0xD285 /* 0xA000 + 0x3285 */
+#define mmSX_PERFCOUNTER3_SELECT 0xDA86 /* 0xA000 + 0x3A86 */
+#define mmSX_PERFCOUNTER3_LO 0xD286 /* 0xA000 + 0x3286 */
+#define mmSX_PERFCOUNTER3_HI 0xD287 /* 0xA000 + 0x3287 */
 
 /* =============================================================================
  * DB (Depth Buffer) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmDB_PERFCOUNTER0_SELECT 0x3900 /* regDB_PERFCOUNTER0_SELECT */
-#define mmDB_PERFCOUNTER0_LO 0x3200 /* regDB_PERFCOUNTER0_LO */
-#define mmDB_PERFCOUNTER0_HI 0x3201 /* regDB_PERFCOUNTER0_HI */
-#define mmDB_PERFCOUNTER1_SELECT 0x3902 /* regDB_PERFCOUNTER1_SELECT */
-#define mmDB_PERFCOUNTER1_LO 0x3202 /* regDB_PERFCOUNTER1_LO */
-#define mmDB_PERFCOUNTER1_HI 0x3203 /* regDB_PERFCOUNTER1_HI */
-#define mmDB_PERFCOUNTER2_SELECT 0x3904 /* regDB_PERFCOUNTER2_SELECT */
-#define mmDB_PERFCOUNTER2_LO 0x3204 /* regDB_PERFCOUNTER2_LO */
-#define mmDB_PERFCOUNTER2_HI 0x3205 /* regDB_PERFCOUNTER2_HI */
-#define mmDB_PERFCOUNTER3_SELECT 0x3906 /* regDB_PERFCOUNTER3_SELECT */
-#define mmDB_PERFCOUNTER3_LO 0x3206 /* regDB_PERFCOUNTER3_LO */
-#define mmDB_PERFCOUNTER3_HI 0x3207 /* regDB_PERFCOUNTER3_HI */
+#define mmDB_PERFCOUNTER0_SELECT 0xDC40 /* 0xA000 + 0x3C40 */
+#define mmDB_PERFCOUNTER0_LO 0xD440 /* 0xA000 + 0x3440 */
+#define mmDB_PERFCOUNTER0_HI 0xD441 /* 0xA000 + 0x3441 */
+#define mmDB_PERFCOUNTER1_SELECT 0xDC42 /* 0xA000 + 0x3C42 */
+#define mmDB_PERFCOUNTER1_LO 0xD442 /* 0xA000 + 0x3442 */
+#define mmDB_PERFCOUNTER1_HI 0xD443 /* 0xA000 + 0x3443 */
+#define mmDB_PERFCOUNTER2_SELECT 0xDC44 /* 0xA000 + 0x3C44 */
+#define mmDB_PERFCOUNTER2_LO 0xD444 /* 0xA000 + 0x3444 */
+#define mmDB_PERFCOUNTER2_HI 0xD445 /* 0xA000 + 0x3445 */
+#define mmDB_PERFCOUNTER3_SELECT 0xDC46 /* 0xA000 + 0x3C46 */
+#define mmDB_PERFCOUNTER3_LO 0xD446 /* 0xA000 + 0x3446 */
+#define mmDB_PERFCOUNTER3_HI 0xD447 /* 0xA000 + 0x3447 */
 
 /* =============================================================================
  * PA_SC (Primitive Assembly - Scan Converter) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmPA_SC_PERFCOUNTER0_SELECT 0x3780 /* regPA_SC_PERFCOUNTER0_SELECT */
-#define mmPA_SC_PERFCOUNTER0_LO 0x3180 /* regPA_SC_PERFCOUNTER0_LO */
-#define mmPA_SC_PERFCOUNTER0_HI 0x3181 /* regPA_SC_PERFCOUNTER0_HI */
-#define mmPA_SC_PERFCOUNTER1_SELECT 0x3782 /* regPA_SC_PERFCOUNTER1_SELECT */
-#define mmPA_SC_PERFCOUNTER1_LO 0x3182 /* regPA_SC_PERFCOUNTER1_LO */
-#define mmPA_SC_PERFCOUNTER1_HI 0x3183 /* regPA_SC_PERFCOUNTER1_HI */
-#define mmPA_SC_PERFCOUNTER2_SELECT 0x3784 /* regPA_SC_PERFCOUNTER2_SELECT */
-#define mmPA_SC_PERFCOUNTER2_LO 0x3184 /* regPA_SC_PERFCOUNTER2_LO */
-#define mmPA_SC_PERFCOUNTER2_HI 0x3185 /* regPA_SC_PERFCOUNTER2_HI */
-#define mmPA_SC_PERFCOUNTER3_SELECT 0x3786 /* regPA_SC_PERFCOUNTER3_SELECT */
-#define mmPA_SC_PERFCOUNTER3_LO 0x3186 /* regPA_SC_PERFCOUNTER3_LO */
-#define mmPA_SC_PERFCOUNTER3_HI 0x3187 /* regPA_SC_PERFCOUNTER3_HI */
+#define mmPA_SC_PERFCOUNTER0_SELECT 0xD940 /* 0xA000 + 0x3940 */
+#define mmPA_SC_PERFCOUNTER0_LO 0xD140 /* 0xA000 + 0x3140 */
+#define mmPA_SC_PERFCOUNTER0_HI 0xD141 /* 0xA000 + 0x3141 */
+#define mmPA_SC_PERFCOUNTER1_SELECT 0xD942 /* 0xA000 + 0x3942 */
+#define mmPA_SC_PERFCOUNTER1_LO 0xD142 /* 0xA000 + 0x3142 */
+#define mmPA_SC_PERFCOUNTER1_HI 0xD143 /* 0xA000 + 0x3143 */
+#define mmPA_SC_PERFCOUNTER2_SELECT 0xD943 /* 0xA000 + 0x3943 */
+#define mmPA_SC_PERFCOUNTER2_LO 0xD144 /* 0xA000 + 0x3144 */
+#define mmPA_SC_PERFCOUNTER2_HI 0xD145 /* 0xA000 + 0x3145 */
+#define mmPA_SC_PERFCOUNTER3_SELECT 0xD944 /* 0xA000 + 0x3944 */
+#define mmPA_SC_PERFCOUNTER3_LO 0xD146 /* 0xA000 + 0x3146 */
+#define mmPA_SC_PERFCOUNTER3_HI 0xD147 /* 0xA000 + 0x3147 */
 
 /* =============================================================================
  * PA_SU (Primitive Assembly - Setup Unit) REGISTERS
  * =============================================================================
  * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * BASE_IDX: 1
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmPA_SU_PERFCOUNTER0_SELECT 0x3788 /* regPA_SU_PERFCOUNTER0_SELECT */
-#define mmPA_SU_PERFCOUNTER0_LO 0x3188 /* regPA_SU_PERFCOUNTER0_LO */
-#define mmPA_SU_PERFCOUNTER0_HI 0x3189 /* regPA_SU_PERFCOUNTER0_HI */
-#define mmPA_SU_PERFCOUNTER1_SELECT 0x378A /* regPA_SU_PERFCOUNTER1_SELECT */
-#define mmPA_SU_PERFCOUNTER1_LO 0x318A /* regPA_SU_PERFCOUNTER1_LO */
-#define mmPA_SU_PERFCOUNTER1_HI 0x318B /* regPA_SU_PERFCOUNTER1_HI */
-#define mmPA_SU_PERFCOUNTER2_SELECT 0x378C /* regPA_SU_PERFCOUNTER2_SELECT */
-#define mmPA_SU_PERFCOUNTER2_LO 0x318C /* regPA_SU_PERFCOUNTER2_LO */
-#define mmPA_SU_PERFCOUNTER2_HI 0x318D /* regPA_SU_PERFCOUNTER2_HI */
-#define mmPA_SU_PERFCOUNTER3_SELECT 0x378E /* regPA_SU_PERFCOUNTER3_SELECT */
-#define mmPA_SU_PERFCOUNTER3_LO 0x318E /* regPA_SU_PERFCOUNTER3_LO */
-#define mmPA_SU_PERFCOUNTER3_HI 0x318F /* regPA_SU_PERFCOUNTER3_HI */
+#define mmPA_SU_PERFCOUNTER0_SELECT 0xD900 /* 0xA000 + 0x3900 */
+#define mmPA_SU_PERFCOUNTER0_LO 0xD100 /* 0xA000 + 0x3100 */
+#define mmPA_SU_PERFCOUNTER0_HI 0xD101 /* 0xA000 + 0x3101 */
+#define mmPA_SU_PERFCOUNTER1_SELECT 0xD902 /* 0xA000 + 0x3902 */
+#define mmPA_SU_PERFCOUNTER1_LO 0xD102 /* 0xA000 + 0x3102 */
+#define mmPA_SU_PERFCOUNTER1_HI 0xD103 /* 0xA000 + 0x3103 */
+#define mmPA_SU_PERFCOUNTER2_SELECT 0xD904 /* 0xA000 + 0x3904 */
+#define mmPA_SU_PERFCOUNTER2_LO 0xD104 /* 0xA000 + 0x3104 */
+#define mmPA_SU_PERFCOUNTER2_HI 0xD105 /* 0xA000 + 0x3105 */
+#define mmPA_SU_PERFCOUNTER3_SELECT 0xD906 /* 0xA000 + 0x3906 */
+#define mmPA_SU_PERFCOUNTER3_LO 0xD106 /* 0xA000 + 0x3106 */
+#define mmPA_SU_PERFCOUNTER3_HI 0xD107 /* 0xA000 + 0x3107 */
 
 /* =============================================================================
  * GDS (Global Data Store) REGISTERS
  * =============================================================================
- * Source: gc_12_0_0_offset.h
- * BASE_IDX: 0 (standard UCONFIG addressing)
- * Address calculation: 0xC000 + offset
+ * WARNING: GDS does not exist in GFX12. These registers are from GFX9
+ * (gc_9_2_1_offset.h, BASE_IDX: 1). Kept for potential multi-arch support.
+ * Not used in GFX12 counter_registry.
+ * Address calculation: 0xA000 + offset (absolute UCONFIG addresses)
  */
-#define mmGDS_PERFCOUNTER0_SELECT 0x3810 /* regGDS_PERFCOUNTER0_SELECT */
-#define mmGDS_PERFCOUNTER0_LO 0x3210 /* regGDS_PERFCOUNTER0_LO */
-#define mmGDS_PERFCOUNTER0_HI 0x3211 /* regGDS_PERFCOUNTER0_HI */
-#define mmGDS_PERFCOUNTER1_SELECT 0x3812 /* regGDS_PERFCOUNTER1_SELECT */
-#define mmGDS_PERFCOUNTER1_LO 0x3212 /* regGDS_PERFCOUNTER1_LO */
-#define mmGDS_PERFCOUNTER1_HI 0x3213 /* regGDS_PERFCOUNTER1_HI */
-#define mmGDS_PERFCOUNTER2_SELECT 0x3814 /* regGDS_PERFCOUNTER2_SELECT */
-#define mmGDS_PERFCOUNTER2_LO 0x3214 /* regGDS_PERFCOUNTER2_LO */
-#define mmGDS_PERFCOUNTER2_HI 0x3215 /* regGDS_PERFCOUNTER2_HI */
-#define mmGDS_PERFCOUNTER3_SELECT 0x3816 /* regGDS_PERFCOUNTER3_SELECT */
-#define mmGDS_PERFCOUNTER3_LO 0x3216 /* regGDS_PERFCOUNTER3_LO */
-#define mmGDS_PERFCOUNTER3_HI 0x3217 /* regGDS_PERFCOUNTER3_HI */
+#define mmGDS_PERFCOUNTER0_SELECT 0xDA80 /* 0xA000 + 0x3A80 (GFX9) */
+#define mmGDS_PERFCOUNTER0_LO 0xD210 /* 0xA000 + 0x3210 (GFX9) */
+#define mmGDS_PERFCOUNTER0_HI 0xD211 /* 0xA000 + 0x3211 (GFX9) */
+#define mmGDS_PERFCOUNTER1_SELECT 0xDA82 /* 0xA000 + 0x3A82 (GFX9) */
+#define mmGDS_PERFCOUNTER1_LO 0xD212 /* 0xA000 + 0x3212 (GFX9) */
+#define mmGDS_PERFCOUNTER1_HI 0xD213 /* 0xA000 + 0x3213 (GFX9) */
+#define mmGDS_PERFCOUNTER2_SELECT 0xDA84 /* 0xA000 + 0x3A84 (GFX9) */
+#define mmGDS_PERFCOUNTER2_LO 0xD214 /* 0xA000 + 0x3214 (GFX9) */
+#define mmGDS_PERFCOUNTER2_HI 0xD215 /* 0xA000 + 0x3215 (GFX9) */
+#define mmGDS_PERFCOUNTER3_SELECT 0xDA86 /* 0xA000 + 0x3A86 (GFX9) */
+#define mmGDS_PERFCOUNTER3_LO 0xD216 /* 0xA000 + 0x3216 (GFX9) */
+#define mmGDS_PERFCOUNTER3_HI 0xD217 /* 0xA000 + 0x3217 (GFX9) */
 
 /* Block info constants - from Rust block_info.rs */
 #define GFX12_CPC_COUNTER_BLOCK_NUM_COUNTERS 2

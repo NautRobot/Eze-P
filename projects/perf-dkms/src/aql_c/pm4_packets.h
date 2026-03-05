@@ -242,6 +242,27 @@ int pm4_set_grbm_index(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg, uint32
 		       uint32_t sa_index, uint32_t se_index);
 
 /**
+ * @brief Set GRBM index with per-instance addressing for WGP-level blocks
+ *
+ * Like pm4_set_grbm_index but adds an instance sub-index for blocks with
+ * instance_count > 1 (e.g., TA with 2 instances per WGP).
+ * Matches aqlprofile's grbm_inst_se_sh_wgp_index_value().
+ *
+ * INSTANCE_INDEX encoding: (wgp_index << 2) | instance_index
+ *
+ * @param buffer PM4 buffer to append packet to
+ * @param grbm_gfx_index_reg GRBM_GFX_INDEX register offset
+ * @param wg_index Work group index (shifted by 2 before use)
+ * @param instance_index Sub-instance within WGP (0 or 1 for TA)
+ * @param sa_index Shader Array index
+ * @param se_index Shader Engine index
+ * @return 0 on success, negative on error
+ */
+int pm4_set_grbm_index_with_instance(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg,
+				     uint32_t wg_index, uint32_t instance_index,
+				     uint32_t sa_index, uint32_t se_index);
+
+/**
  * @brief Enable or disable performance monitoring
  *
  * Writes to CP_PERFMON_CNTL register to control performance monitoring state.

@@ -36,10 +36,6 @@ struct pmu_dimension_coords;
 /* Per-event private data */
 struct amdgpu_pmu_event {
 	struct perf_event *event;
-	u64 prev_count;
-	u64 period;
-	bool active;
-	bool uses_aql_hardware; /* Event uses AQL hardware counters */
 };
 
 /* Main PMU structure */
@@ -64,19 +60,12 @@ struct amdgpu_pmu {
 	atomic64_t total_events;
 	atomic64_t total_samples;
 	atomic64_t hardware_events; /* Number of hardware events */
-	atomic64_t simulation_events; /* Number of simulation events */
-
-	/* Simulated counter values */
-	atomic64_t counter_sq_waves;
-	atomic64_t counter_sq_instructions;
-	atomic64_t counter_ta_busy;
 };
 
 /* Function prototypes */
 
 /* Helper functions - shared between modules */
 enum hrtimer_restart amdgpu_pmu_timer_handler(struct hrtimer *timer);
-void amdgpu_pmu_update_counters(struct amdgpu_pmu *pmu);
 int amdgpu_pmu_get_event_idx(struct amdgpu_pmu *pmu);
 void amdgpu_pmu_free_event_idx(struct amdgpu_pmu *pmu, int idx);
 void amdgpu_pmu_start_timer(void);
@@ -87,10 +76,6 @@ const char *amdgpu_pmu_get_event_name(u64 config);
 const char *amdgpu_pmu_get_event_description(u64 config);
 bool amdgpu_pmu_is_valid_event(u64 config);
 size_t amdgpu_pmu_get_event_count(void);
-u64 amdgpu_pmu_get_counter_value(struct amdgpu_pmu *pmu, u64 config);
-void amdgpu_pmu_update_counter(struct amdgpu_pmu *pmu, u64 config, s64 delta);
-void amdgpu_pmu_reset_counters(struct amdgpu_pmu *pmu);
-void amdgpu_pmu_print_event_stats(struct amdgpu_pmu *pmu);
 
 /* Sysfs functions */
 int amdgpu_pmu_init_sysfs(struct amdgpu_pmu *pmu);

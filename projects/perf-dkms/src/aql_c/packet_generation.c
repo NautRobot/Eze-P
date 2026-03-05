@@ -219,28 +219,32 @@ int generate_start_packet(pm4_buffer_t *buffer, const arch_t *arch,
 	if (ret < 0)
 		return ret;
 
-	/* 4. Enable SQ control for SQ counters (force_en=1, vmid_en=0xFFFF) */
-	bool has_sq_counters = false;
-	for (size_t i = 0; i < collection->counter_count; i++) {
-		if (collection->counters[i].block_id == HW_IP_BLOCK_SQ) {
-			has_sq_counters = true;
-			break;
+	/* 4. Enable SQ_PERFCOUNTER_CTRL2 (force_en=1, vmid_en=0xFFFF)
+	 * Only programmed for SQ-type or TC-type (GL2C/TCC) counter blocks.
+	 * Matches aqlprofile: conditioned on CounterBlockSqAttr | CounterBlockTcAttr.
+	 * Programming this for blocks like GRBM breaks their counter collection.
+	 */
+	{
+		bool needs_sq_ctrl2 = false;
+		for (size_t i = 0; i < collection->counter_count; i++) {
+			uint32_t bid = collection->counters[i].block_id;
+			/* SqAttr blocks: SQ. TcAttr blocks: GL2C, TCC, TA, TCP, TD */
+			if (bid == HW_IP_BLOCK_SQ || bid == HW_IP_BLOCK_GL2C ||
+			    bid == HW_IP_BLOCK_TCC || bid == HW_IP_BLOCK_TA ||
+			    bid == HW_IP_BLOCK_TCP || bid == HW_IP_BLOCK_TD) {
+				needs_sq_ctrl2 = true;
+				break;
+			}
 		}
-	}
-
-	if (has_sq_counters) {
-		uint32_t sq_ctrl2_value = (1U << 0) | (0xFFFFU << 1); /* force_en | vmid_en */
-		ret = pm4_append_set_uconfig_reg(
-			buffer,
-			arch->control_regs.sq_perfcounter_ctrl2, /* mmSQ_PERFCOUNTER_CTRL2 */
-			sq_ctrl2_value);
-		if (ret < 0)
-			return ret;
-
-		/* Reset GRBM_GFX_INDEX to broadcast before configuring counters */
-		ret = generate_grbm_broadcast(buffer, arch);
-		if (ret < 0)
-			return ret;
+		if (needs_sq_ctrl2) {
+			uint32_t sq_ctrl2_value = (1U << 0) | (0xFFFFU << 1); /* force_en | vmid_en */
+			ret = pm4_append_set_uconfig_reg(
+				buffer,
+				arch->control_regs.sq_perfcounter_ctrl2,
+				sq_ctrl2_value);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	/* 5. Configure each counter */
@@ -420,37 +424,65 @@ int generate_read_packet(pm4_buffer_t *buffer, const arch_t *arch,
        * Software filtering in aql_perf_measurement_read() handles dimension-specific
        * requests by indexing into the results array using encode_dimension_index().
        */
+			/* For blocks with instance_count > 1 (e.g., TA with 2 instances per WGP),
+		 * iterate per-instance using grbm_inst_se_sh_wgp_index_value encoding.
+		 * This matches aqlprofile's behavior for CounterBlockWgpAttr blocks. */
+			uint32_t num_instances = block->instance_count;
 			for (uint32_t se = 0; se < num_se; se++) {
 				for (uint32_t sa = 0; sa < num_sa; sa++) {
 					for (uint32_t wgp = 0; wgp < num_wgp; wgp++) {
-						/* Set GRBM index for specific location */
-						ret = pm4_set_grbm_index(
-							buffer, arch->control_regs.grbm_gfx_index,
-							wgp, /* instance_index - will be shifted in pm4_set_grbm_index */
-							sa, se);
-						if (ret < 0)
-							return ret;
+						for (uint32_t inst = 0; inst < num_instances; inst++) {
+							/* Set GRBM index for specific location + instance */
+							if (num_instances > 1) {
+								ret = pm4_set_grbm_index_with_instance(
+									buffer, arch->control_regs.grbm_gfx_index,
+									wgp, inst, sa, se);
+							} else {
+								ret = pm4_set_grbm_index(
+									buffer, arch->control_regs.grbm_gfx_index,
+									wgp, sa, se);
+							}
+							if (ret < 0)
+								return ret;
 
-						/* Copy counter data to memory */
-						pm4_copy_data_flags_t flags = {
-							.bits = { .src_sel =
-									  0, /* Non-priv registers */
-								  .dst_sel = 2, /* TC_L2 memory */
-								  .src_temporal =
-									  3, /* LU cache policy */
-								  .dst_temporal =
-									  3, /* LU cache policy */
-								  .count_sel = 0, /* 32-bit data */
-								  .wr_confirm = 0 }
-						};
+							/* Copy counter data to memory.
+							 * Match aqlprofile dw_mask logic:
+							 * - If register_addr_hi != 0: read both LO and HI
+							 *   as separate 32-bit COPY_DATA packets
+							 * - If register_addr_hi == 0: read only LO (32-bit counter)
+							 * Always allocate 8 bytes per read location.
+							 */
+							pm4_copy_data_flags_t flags = {
+								.bits = { .src_sel =
+										  0, /* Non-priv registers */
+									  .dst_sel = 2, /* TC_L2 memory */
+									  .src_temporal =
+										  3, /* LU cache policy */
+									  .dst_temporal =
+										  3, /* LU cache policy */
+									  .count_sel = 0, /* 32-bit data */
+									  .wr_confirm = 0 }
+							};
 
-						ret = pm4_append_copy_data(
-							buffer, flags, reg_info->register_addr_lo,
-							reg_info->register_addr_hi, current_addr);
-						if (ret < 0)
-							return ret;
+							/* Read LO register */
+							ret = pm4_append_copy_data(
+								buffer, flags, reg_info->register_addr_lo,
+								0, current_addr);
+							if (ret < 0)
+								return ret;
 
-						current_addr += 8; /* 64-bit counter value */
+							if (reg_info->register_addr_hi != 0) {
+								/* 64-bit counter: read HI register */
+								ret = pm4_append_copy_data(
+									buffer, flags,
+									reg_info->register_addr_hi,
+									0, current_addr + 4);
+								if (ret < 0)
+									return ret;
+							}
+
+							current_addr += 8; /* Always 8 bytes per read */
+						}
 					}
 				}
 			}

@@ -82,7 +82,7 @@ find_and_install_shared_counter(struct aql_perf_session *session, uint32_t count
 			measurement->owns_counter = false;
 			measurement->allocated_counter = ref->measurement->allocated_counter;
 			spin_unlock_irqrestore(&session->shared_lock, flags);
-			aql_info("[PMU] Found shared counter for counter_id=%u, new refcount=%d",
+			aql_debug("[PMU] Found shared counter for counter_id=%u, new refcount=%d",
 				 counter_id, atomic_read(&ref->ref_count));
 			return ref;
 		}
@@ -120,7 +120,7 @@ static struct shared_counter_ref *create_shared_counter(struct aql_perf_session 
 	list_add(&ref->list, &session->shared_counters);
 	spin_unlock_irqrestore(&session->shared_lock, flags);
 
-	aql_info("[PMU] Created shared counter for counter_id=%u, ref_count=1", counter_id);
+	aql_debug("[PMU] Created shared counter for counter_id=%u, ref_count=1", counter_id);
 
 	return ref;
 }
@@ -147,11 +147,11 @@ void release_shared_counter(struct aql_perf_session *session, struct shared_coun
 		list_del(&ref->list);
 		spin_unlock_irqrestore(&session->shared_lock, flags);
 
-		aql_info("[PMU] Released shared counter for counter_id=%u (ref_count %d -> 0)",
+		aql_debug("[PMU] Released shared counter for counter_id=%u (ref_count %d -> 0)",
 			 ref->counter_id, old_count);
 		kfree(ref);
 	} else {
-		aql_info("[PMU] Decremented shared counter for counter_id=%u (ref_count %d -> %d)",
+		aql_debug("[PMU] Decremented shared counter for counter_id=%u (ref_count %d -> %d)",
 			 ref->counter_id, old_count, atomic_read(&ref->ref_count));
 	}
 }
@@ -232,7 +232,7 @@ int aql_perf_create_start_packet(struct aql_measurement *measurement, pm4_buffer
 		/* Reuse existing allocation - counter and references installed atomically */
 		const counter_def_t *counter_def_for_log =
 			lookup_counter_by_id((counter_id_t)measurement->counter_id);
-		aql_info("[PMU] Sharing counter for %s (counter_id=%u, ref_count=%d)",
+		aql_debug("[PMU] Sharing counter for %s (counter_id=%u, ref_count=%d)",
 			 counter_def_for_log ? counter_def_for_log->name : "unknown",
 			 measurement->counter_id, atomic_read(&shared_ref->ref_count));
 
@@ -241,7 +241,7 @@ int aql_perf_create_start_packet(struct aql_measurement *measurement, pm4_buffer
 		return 0;
 	}
 
-	aql_info("[PMU] generate_start_packet: Allocating counter from block=%s, event_id=0x%x",
+	aql_debug("[PMU] generate_start_packet: Allocating counter from block=%s, event_id=0x%x",
 		 block->name, event_id);
 
 	/* First event for this counter - allocate hardware counter */
@@ -283,7 +283,7 @@ int aql_perf_create_start_packet(struct aql_measurement *measurement, pm4_buffer
 		(uint64_t)(uintptr_t)allocated_counter->allocation.data_buffer->gpu_addr;
 	collection.memory_size = PAGE_SIZE;
 
-	aql_info("[PMU] generate_start_packet: counter_index=%u, event_id=0x%x, gpu_addr=0x%llx",
+	aql_debug("[PMU] generate_start_packet: counter_index=%u, event_id=0x%x, gpu_addr=0x%llx",
 		 counter_info.counter_index, counter_info.event_id, collection.gpu_memory_addr);
 
 	/* Validate counter collection */
@@ -323,7 +323,7 @@ int aql_perf_create_start_packet(struct aql_measurement *measurement, pm4_buffer
 		return ret;
 	}
 
-	aql_info("[PMU] generate_start_packet: PM4 buffer created, size=%zu DWORDs",
+	aql_debug("[PMU] generate_start_packet: PM4 buffer created, size=%zu DWORDs",
 		 pm4_buffer->size);
 
 	/* Store allocated counter in measurement */
@@ -352,7 +352,7 @@ int aql_perf_create_read_packet(struct aql_measurement *measurement, pm4_buffer_
 	counter_reg_info_t *counter;
 	int ret;
 
-	aql_info("[PMU] aql_perf_create_read_packet: Entry for GPU %u, counter_id=%u",
+	aql_debug("[PMU] aql_perf_create_read_packet: Entry for GPU %u, counter_id=%u",
 		 measurement ? measurement->gpu_id : 0, measurement ? measurement->counter_id : 0);
 
 	if (!measurement || !measurement->session || !out_pm4_buffer) {
@@ -374,7 +374,7 @@ int aql_perf_create_read_packet(struct aql_measurement *measurement, pm4_buffer_
 		return -ESHUTDOWN;
 	}
 
-	aql_info("[PMU] aql_perf_create_read_packet: GPU %u, allocated_counter=%p",
+	aql_debug("[PMU] aql_perf_create_read_packet: GPU %u, allocated_counter=%p",
 		 measurement->gpu_id, counter);
 
 	session = measurement->session;
@@ -402,7 +402,7 @@ int aql_perf_create_read_packet(struct aql_measurement *measurement, pm4_buffer_
 	collection.gpu_memory_addr = (uint64_t)(uintptr_t)counter->allocation.data_buffer->gpu_addr;
 	collection.memory_size = PAGE_SIZE;
 
-	aql_info("[PMU] generate_read_packet: counter_index=%u, gpu_addr=0x%llx",
+	aql_debug("[PMU] generate_read_packet: counter_index=%u, gpu_addr=0x%llx",
 		 counter_info.counter_index, collection.gpu_memory_addr);
 
 	/* Create PM4 buffer */
@@ -420,7 +420,7 @@ int aql_perf_create_read_packet(struct aql_measurement *measurement, pm4_buffer_
 		return ret;
 	}
 
-	aql_info("[PMU] generate_read_packet: PM4 buffer created, size=%zu DWORDs",
+	aql_debug("[PMU] generate_read_packet: PM4 buffer created, size=%zu DWORDs",
 		 pm4_buffer->size);
 
 	*out_pm4_buffer = pm4_buffer;
@@ -458,7 +458,7 @@ int aql_perf_create_end_packet(struct aql_measurement *measurement, pm4_buffer_t
 	}
 	arch = session->archs[gpu_idx];
 
-	aql_info("[PMU] generate_stop_packet: GPU %u", measurement->gpu_id);
+	aql_debug("[PMU] generate_stop_packet: GPU %u", measurement->gpu_id);
 
 	/* Create PM4 buffer */
 	pm4_buffer = pm4_buffer_create(256, GFP_KERNEL);
@@ -475,7 +475,7 @@ int aql_perf_create_end_packet(struct aql_measurement *measurement, pm4_buffer_t
 		return ret;
 	}
 
-	aql_info("[PMU] generate_stop_packet: PM4 buffer created, size=%zu DWORDs",
+	aql_debug("[PMU] generate_stop_packet: PM4 buffer created, size=%zu DWORDs",
 		 pm4_buffer->size);
 
 	*out_pm4_buffer = pm4_buffer;
@@ -504,7 +504,7 @@ int aql_perf_submit_pm4_packet(struct aql_perf_session *session, uint32_t gpu_id
 	/* IB length is already in DWORDs from pm4_buffer->size */
 	ib_len = pm4_buffer->size;
 
-	aql_info(
+	aql_debug(
 		"[PMU] kfd_ioctl_submit_ib_packet: gpu_id=%u, buffer=%p, size=%zu DWORDs (%zu bytes)",
 		gpu_id, pm4_buffer->data, pm4_buffer->size, pm4_buffer->size * 4);
 
@@ -765,10 +765,10 @@ int aql_perf_measurement_start(struct aql_measurement *measurement)
          * and configured counter registers. Safe to read baseline now. */
 		aql_info("[PMU] Session %llu: START packet completed", session->session_id);
 
-		aql_info("[PMU] Session %llu: Started measurement for GPU %u (owns_counter=true)",
+		aql_debug("[PMU] Session %llu: Started measurement for GPU %u (owns_counter=true)",
 			 session->session_id, measurement->gpu_id);
 	} else {
-		aql_info(
+		aql_debug(
 			"[PMU] Session %llu: Started measurement for GPU %u (sharing counter, owns_counter=false)",
 			session->session_id, measurement->gpu_id);
 	}
@@ -785,7 +785,7 @@ int aql_perf_measurement_start(struct aql_measurement *measurement)
 	/* Read initial counter value for delta tracking.
      * GPU counters don't reset on START, so we need to track the baseline. */
 	measurement->start_counter_value = aql_perf_measurement_read(measurement);
-	aql_info("[PMU] Session %llu: GPU %u baseline counter value=%llu", session->session_id,
+	aql_debug("[PMU] Session %llu: GPU %u baseline counter value=%llu", session->session_id,
 		 measurement->gpu_id, measurement->start_counter_value);
 
 	mutex_unlock(&session->session_mutex);
@@ -879,11 +879,11 @@ int aql_perf_measurement_stop(struct aql_measurement *measurement)
 			measurement->owns_counter = false;
 		}
 
-		aql_info(
+		aql_debug(
 			"[PMU] Session %llu: Stopped measurement for GPU %u (owned counter, released)",
 			session->session_id, measurement->gpu_id);
 	} else {
-		aql_info(
+		aql_debug(
 			"[PMU] Session %llu: Stopped measurement for GPU %u (shared counter, not releasing)",
 			session->session_id, measurement->gpu_id);
 	}
@@ -947,7 +947,7 @@ static uint64_t aql_aggregate_counter_instances(struct aql_perf_session *session
 		num_instances *= block->dimensions[dim_idx].size;
 	}
 
-	aql_info("[PMU] Aggregating %u instances (block dimensions: count=%zu)", num_instances,
+	aql_debug("[PMU] Aggregating %u instances (block dimensions: count=%zu)", num_instances,
 		 block->dimension_count);
 
 	/* Sum all instances and log individual values for debugging */
@@ -957,14 +957,14 @@ static uint64_t aql_aggregate_counter_instances(struct aql_perf_session *session
 
 		/* Log first 20 and last 5 values to see patterns */
 		if (i < 20 || i >= (num_instances - 5)) {
-			aql_info("[PMU]   instance[%u] = %llu", i, value);
+			aql_debug("[PMU]   instance[%u] = %llu", i, value);
 		} else if (i == 20) {
-			aql_info("[PMU]   ... (skipping middle instances) ...");
+			aql_debug("[PMU]   ... (skipping middle instances) ...");
 		}
 	}
 
-	aql_info("[PMU] Aggregated %u instances, total=%llu", num_instances, sum);
-	aql_info("[PMU] ========== AGGREGATION RESULT: %llu (0x%llx) ==========", sum, sum);
+	aql_debug("[PMU] Aggregated %u instances, total=%llu", num_instances, sum);
+	aql_debug("[PMU] ========== AGGREGATION RESULT: %llu (0x%llx) ==========", sum, sum);
 
 	return sum;
 }
@@ -985,11 +985,11 @@ static void read_diagnostic_log_buffer(struct aql_measurement *measurement, cons
 	buffer = (uint64_t *)counter->allocation.data_buffer->cpu_addr;
 
 	if (strcmp(when, "BEFORE READ") == 0) {
-		aql_info(
+		aql_debug(
 			"[PMU] READ_SYNC: GPU %u, buffer %s: [0]=0x%llx [1]=0x%llx [2]=0x%llx [3]=0x%llx",
 			measurement->gpu_id, when, buffer[0], buffer[1], buffer[2], buffer[3]);
 	} else {
-		aql_info(
+		aql_debug(
 			"[PMU] READ_SYNC: GPU %u, buffer %s: [0]=0x%llx [1]=0x%llx [2]=0x%llx [3]=0x%llx [4]=0x%llx [5]=0x%llx [6]=0x%llx [7]=0x%llx",
 			measurement->gpu_id, when, buffer[0], buffer[1], buffer[2], buffer[3],
 			buffer[4], buffer[5], buffer[6], buffer[7]);
@@ -1008,7 +1008,7 @@ static int read_submit_packet(struct aql_perf_session *session, struct aql_measu
 	pm4_buffer_t *pm4_buffer = NULL;
 	int ret;
 
-	aql_info("[PMU] READ_SYNC: GPU %u, creating READ packet", measurement->gpu_id);
+	aql_debug("[PMU] READ_SYNC: GPU %u, creating READ packet", measurement->gpu_id);
 	ret = aql_perf_create_read_packet(measurement, &pm4_buffer);
 	if (ret) {
 		aql_err("[PMU] READ_SYNC: GPU %u, failed to create READ packet: %d",
@@ -1016,7 +1016,7 @@ static int read_submit_packet(struct aql_perf_session *session, struct aql_measu
 		return ret;
 	}
 
-	aql_info("[PMU] READ_SYNC: GPU %u, submitting PM4 READ packet (size=%zu DWORDs)",
+	aql_debug("[PMU] READ_SYNC: GPU %u, submitting PM4 READ packet (size=%zu DWORDs)",
 		 measurement->gpu_id, pm4_buffer ? pm4_buffer->size : (size_t)0);
 	ret = aql_perf_submit_pm4_packet(session, measurement->gpu_id, pm4_buffer);
 	pm4_buffer_destroy(pm4_buffer);
@@ -1026,7 +1026,7 @@ static int read_submit_packet(struct aql_perf_session *session, struct aql_measu
 		return ret;
 	}
 
-	aql_info("[PMU] READ_SYNC: GPU %u, READ packet submitted successfully",
+	aql_debug("[PMU] READ_SYNC: GPU %u, READ packet submitted successfully",
 		 measurement->gpu_id);
 	return 0;
 }
@@ -1044,7 +1044,7 @@ static uint64_t *read_get_result_buffer(struct aql_measurement *measurement)
 
 	if (counter && counter->allocation.data_buffer) {
 		result_buffer = (uint64_t *)counter->allocation.data_buffer->cpu_addr;
-		aql_info("[PMU] READ_SYNC: GPU %u, data_buffer CPU addr=%p, GPU addr=0x%llx",
+		aql_debug("[PMU] READ_SYNC: GPU %u, data_buffer CPU addr=%p, GPU addr=0x%llx",
 			 measurement->gpu_id, result_buffer,
 			 (unsigned long long)counter->allocation.data_buffer->gpu_addr);
 	} else {
@@ -1088,7 +1088,7 @@ static uint64_t read_extract_counter_value(struct aql_perf_session *session,
 
 		counter_value = result_buffer[flat_idx];
 
-		aql_info(
+		aql_debug(
 			"[PMU] READ_SYNC: GPU %u, dimension-specific read: SE=%u SA=%u WGP=%u -> flat_idx=%u, value=%llu",
 			measurement->gpu_id, measurement->target_dims.se,
 			measurement->target_dims.sa, measurement->target_dims.wgp, flat_idx,
@@ -1125,9 +1125,9 @@ static uint64_t read_compute_delta(struct aql_measurement *measurement, uint64_t
 		delta = counter_value; /* Best effort */
 	}
 
-	aql_info("[PMU] READ_SYNC: GPU %u, delta=%llu (current=%llu - start=%llu)",
+	aql_debug("[PMU] READ_SYNC: GPU %u, delta=%llu (current=%llu - start=%llu)",
 		 measurement->gpu_id, delta, counter_value, measurement->start_counter_value);
-	aql_info("[PMU] ========== COMPUTED DELTA: %llu (0x%llx) ==========", delta, delta);
+	aql_debug("[PMU] ========== COMPUTED DELTA: %llu (0x%llx) ==========", delta, delta);
 
 	return delta;
 }
@@ -1146,7 +1146,7 @@ uint64_t aql_perf_measurement_read(struct aql_measurement *measurement)
 	int gpu_idx;
 	int ret;
 
-	aql_info("[PMU] READ_SYNC: Entry for GPU %u", measurement ? measurement->gpu_id : 0);
+	aql_debug("[PMU] READ_SYNC: Entry for GPU %u", measurement ? measurement->gpu_id : 0);
 
 	if (!measurement || !measurement->session) {
 		aql_err("[PMU] READ_SYNC: Invalid measurement for read");
@@ -1155,11 +1155,11 @@ uint64_t aql_perf_measurement_read(struct aql_measurement *measurement)
 
 	session = measurement->session;
 
-	aql_info("[PMU] READ_SYNC: GPU %u, state=%d, allocated_counter=%p", measurement->gpu_id,
+	aql_debug("[PMU] READ_SYNC: GPU %u, state=%d, allocated_counter=%p", measurement->gpu_id,
 		 measurement->state, measurement->allocated_counter);
 
 	if (measurement->state != MEASUREMENT_ACTIVE) {
-		aql_info(
+		aql_debug(
 			"[PMU] READ_SYNC: GPU %u not active (state=%d), returning cached value %llu",
 			measurement->gpu_id, measurement->state, measurement->last_counter_value);
 		return measurement->last_counter_value;
@@ -1187,9 +1187,9 @@ uint64_t aql_perf_measurement_read(struct aql_measurement *measurement)
 	result_buffer = read_get_result_buffer(measurement);
 	counter_value = read_extract_counter_value(session, measurement, result_buffer, gpu_idx);
 
-	aql_info("[PMU] READ_SYNC: GPU %u, absolute counter_value=%llu (dimension_specific=%d)",
+	aql_debug("[PMU] READ_SYNC: GPU %u, absolute counter_value=%llu (dimension_specific=%d)",
 		 measurement->gpu_id, counter_value, measurement->dimension_specific);
-	aql_info("[PMU] ========== RAW COUNTER VALUE: %llu (0x%llx) ==========", counter_value,
+	aql_debug("[PMU] ========== RAW COUNTER VALUE: %llu (0x%llx) ==========", counter_value,
 		 counter_value);
 
 	/* Update cached value with absolute counter value */
@@ -1309,9 +1309,9 @@ void aql_work_handler(struct work_struct *work)
 		break;
 
 	case AQL_WORK_READ: {
-		aql_info("[PMU] WORK_READ: Starting for GPU %u", measurement->gpu_id);
+		aql_debug("[PMU] WORK_READ: Starting for GPU %u", measurement->gpu_id);
 		uint64_t counter_value = aql_perf_measurement_read(measurement);
-		aql_info("[PMU] WORK_READ: GPU %u, read returned counter_value=%llu",
+		aql_debug("[PMU] WORK_READ: GPU %u, read returned counter_value=%llu",
 			 measurement->gpu_id, counter_value);
 
 		/* Update cached value with fresh read */
@@ -1322,10 +1322,10 @@ void aql_work_handler(struct work_struct *work)
 		measurement->cache_valid = true;
 		spin_unlock_irqrestore(&measurement->cache_lock, flags);
 
-		aql_info(
+		aql_debug(
 			"[PMU] WORK_READ: GPU %u, updated cache: old=%llu (valid=%d) -> new=%llu (valid=1)",
 			measurement->gpu_id, old_cached, was_valid, counter_value);
-		aql_info("[PMU] ========== CACHED VALUE UPDATED: %llu (0x%llx) ==========",
+		aql_debug("[PMU] ========== CACHED VALUE UPDATED: %llu (0x%llx) ==========",
 			 counter_value, counter_value);
 		result = 0; /* Read operations always succeed if we get here */
 	} break;
@@ -1483,14 +1483,14 @@ uint64_t aql_perf_measurement_read_atomic(struct aql_measurement *measurement)
 	uint64_t cached_value = 0;
 	bool cache_was_valid = false;
 
-	aql_info("[PMU] READ_ATOMIC: Entry for GPU %u", measurement ? measurement->gpu_id : 0);
+	aql_debug("[PMU] READ_ATOMIC: Entry for GPU %u", measurement ? measurement->gpu_id : 0);
 
 	if (!measurement) {
 		aql_warn("[PMU] READ_ATOMIC: NULL measurement");
 		return 0;
 	}
 
-	aql_info("[PMU] READ_ATOMIC: GPU %u, state=%d, allocated_counter=%p", measurement->gpu_id,
+	aql_debug("[PMU] READ_ATOMIC: GPU %u, state=%d, allocated_counter=%p", measurement->gpu_id,
 		 measurement->state, measurement->allocated_counter);
 
 	/* Return cached value immediately */
@@ -1501,7 +1501,7 @@ uint64_t aql_perf_measurement_read_atomic(struct aql_measurement *measurement)
 	}
 	spin_unlock_irqrestore(&measurement->cache_lock, flags);
 
-	aql_info("[PMU] READ_ATOMIC: GPU %u, cache_valid=%d, cached_value=%llu",
+	aql_debug("[PMU] READ_ATOMIC: GPU %u, cache_valid=%d, cached_value=%llu",
 		 measurement->gpu_id, cache_was_valid, cached_value);
 
 	/* Schedule background refresh of cached value on global workqueue */
@@ -1511,12 +1511,12 @@ uint64_t aql_perf_measurement_read_atomic(struct aql_measurement *measurement)
 		if (!IS_ERR(work_item)) {
 			if (!queue_work(wq, &work_item->work)) {
 				/* Work already queued - release our reference and free work_item */
-				aql_info("[PMU] READ_ATOMIC: GPU %u, READ work already queued",
+				aql_debug("[PMU] READ_ATOMIC: GPU %u, READ work already queued",
 					 measurement->gpu_id);
 				aql_measurement_put(measurement);
 				kfree(work_item);
 			} else {
-				aql_info(
+				aql_debug(
 					"[PMU] READ_ATOMIC: GPU %u, scheduled READ work for background refresh",
 					measurement->gpu_id);
 			}
@@ -1528,7 +1528,7 @@ uint64_t aql_perf_measurement_read_atomic(struct aql_measurement *measurement)
 		aql_warn("[PMU] READ_ATOMIC: Global workqueue not available");
 	}
 
-	aql_info("[PMU] READ_ATOMIC: GPU %u, returning cached_value=%llu", measurement->gpu_id,
+	aql_debug("[PMU] READ_ATOMIC: GPU %u, returning cached_value=%llu", measurement->gpu_id,
 		 cached_value);
 	return cached_value;
 }

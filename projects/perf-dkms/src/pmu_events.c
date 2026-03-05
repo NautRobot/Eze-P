@@ -79,43 +79,6 @@ size_t amdgpu_pmu_get_event_count(void)
 	return get_counter_count();
 }
 
-// TODO: Remove legacy stubs.
-/*
- * NOTE: Counter values are now managed by the AQL hardware layer.
- * The following functions are legacy stubs kept for compatibility.
- * Actual counter values are read from GPU hardware via AQL packets.
- */
-
-/* Get counter value based on event type */
-u64 amdgpu_pmu_get_counter_value(struct amdgpu_pmu *pmu, u64 config)
-{
-	/* Counter values are now read from hardware via AQL */
-	pmu_debug("Legacy counter read for config 0x%llx - values managed by AQL\n", config);
-	return 0;
-}
-
-/* Update counter value based on event type */
-void amdgpu_pmu_update_counter(struct amdgpu_pmu *pmu, u64 config, s64 delta)
-{
-	/* Counter updates are now handled by hardware via AQL */
-	pmu_debug("Legacy counter update for config 0x%llx - managed by AQL\n", config);
-}
-
-/* Reset all counters */
-void amdgpu_pmu_reset_counters(struct amdgpu_pmu *pmu)
-{
-	/* Counter resets are now handled by hardware via AQL */
-	pmu_debug("Legacy counter reset - managed by AQL\n");
-}
-
-/* Print event statistics (for debugging) */
-void amdgpu_pmu_print_event_stats(struct amdgpu_pmu *pmu)
-{
-	pmu_info("Event Statistics:\n");
-	pmu_info("  Total Events: %lld\n", atomic64_read(&pmu->total_events));
-	pmu_info("  Hardware Events: %lld\n", atomic64_read(&pmu->hardware_events));
-	pmu_info("  Simulation Events: %lld\n", atomic64_read(&pmu->simulation_events));
-}
 
 /* Export symbols if needed by other modules */
 EXPORT_SYMBOL_GPL(amdgpu_pmu_get_event_name);

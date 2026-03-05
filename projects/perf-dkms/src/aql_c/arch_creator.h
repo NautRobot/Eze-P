@@ -49,18 +49,4 @@ arch_t *arch_create_gfx12(void);
  */
 void arch_destroy(arch_t *arch);
 
-/**
- * @brief Initialize an architecture structure (currently unused)
- *
- * Placeholder function for potential future use in architecture initialization.
- * Currently not implemented in arch_creator.c.
- *
- * @param arch Pointer to architecture structure to initialize
- * @param type Architecture type to initialize
- * @return 0 on success, negative error code on failure
- *
- * @note This function is not currently used; use arch_create_by_name() instead
- */
-int arch_init(arch_t *arch, arch_type_t type);
-
 #endif /* ARCH_CREATOR_H */

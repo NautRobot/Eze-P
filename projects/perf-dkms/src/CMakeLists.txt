@@ -19,14 +19,11 @@ set(KERNEL_MODULE_SOURCES
     amdgpu_pmu_uapi.h
     amdgpu_pmu.h
     pmu_dimension.h
-    kfd_test.c
-    kfd_test.h
     aql_perf.c
     aql_perf.h
     aql_packet_ops.c
     aql_error_recovery.c
     aql_pmu_integration.c
-    example_kfd_usage.c
 )
 
 # Create symbolic links to source files in build directory
@@ -51,7 +48,7 @@ file(WRITE ${KBUILD_BIN_DIR}/Kbuild
 obj-m := amdgpu_pmu.o
 
 # Include AMD GPU PMU, KFD test, and minimal AQL integration
-amdgpu_pmu-y := pmu_main.o pmu_events.o amdgpu_pmu_trace.o amdgpu_pmu_trace_dev.o kfd_test.o \\
+amdgpu_pmu-y := pmu_main.o pmu_events.o amdgpu_pmu_trace.o amdgpu_pmu_trace_dev.o \\
               aql_perf.o aql_packet_ops.o aql_error_recovery.o aql_pmu_integration.o \\
               aql_c/arch_creator.o aql_c/gfx12_creator.o \\
               aql_c/pm4_packets.o aql_c/counter_registry.o aql_c/gfx12_events.o \\
@@ -76,7 +73,6 @@ add_custom_command(
         ${KBUILD_SRC_DIR}/pmu_events.c
         ${KBUILD_SRC_DIR}/amdgpu_pmu_trace.c
         ${KBUILD_SRC_DIR}/amdgpu_pmu_trace_dev.c
-        ${KBUILD_SRC_DIR}/kfd_test.c
         ${KBUILD_SRC_DIR}/aql_perf.c
         ${KBUILD_SRC_DIR}/aql_packet_ops.c
         ${KBUILD_SRC_DIR}/aql_error_recovery.c

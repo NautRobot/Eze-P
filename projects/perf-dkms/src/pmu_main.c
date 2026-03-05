@@ -17,7 +17,6 @@
 #include <linux/device.h>
 
 #include "amdgpu_pmu.h"
-#include "kfd_test.h"
 #include "aql_perf.h"
 #include "aql_c/counter_registry.h"
 #include "pmu_dimension.h"
@@ -385,7 +384,6 @@ void amdgpu_pmu_free_event_idx(struct amdgpu_pmu *pmu, int idx)
 	if (idx >= 0 && idx < AMDGPU_PMU_MAX_EVENTS) {
 		clear_bit(idx, pmu->used_mask);
 		pmu->events[idx].event = NULL;
-		pmu->events[idx].active = false;
 	}
 }
 
@@ -915,13 +913,9 @@ static int __init amdgpu_pmu_init(void)
 	pmu->num_events = 0;
 
 	/* Initialize counters */
-	atomic64_set(&pmu->counter_sq_waves, 0);
-	atomic64_set(&pmu->counter_sq_instructions, 0);
-	atomic64_set(&pmu->counter_ta_busy, 0);
 	atomic64_set(&pmu->total_events, 0);
 	atomic64_set(&pmu->total_samples, 0);
 	atomic64_set(&pmu->hardware_events, 0);
-	atomic64_set(&pmu->simulation_events, 0);
 
 	/* Initialize AQL hardware integration */
 	mutex_init(&pmu->aql_mutex);
@@ -1026,7 +1020,6 @@ static void __exit amdgpu_pmu_exit(void)
 		/* Print statistics */
 		pmu_info("Total events created: %lld\n", atomic64_read(&pmu->total_events));
 		pmu_info("Hardware events: %lld\n", atomic64_read(&pmu->hardware_events));
-		pmu_info("Simulation events: %lld\n", atomic64_read(&pmu->simulation_events));
 		pmu_info("Total samples: %lld\n", atomic64_read(&pmu->total_samples));
 
 		/* Free memory */
@@ -1044,6 +1037,6 @@ module_init(amdgpu_pmu_init);
 module_exit(amdgpu_pmu_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Your Name");
-MODULE_DESCRIPTION("Skeleton PMU driver for Linux perf subsystem");
+MODULE_AUTHOR("Advanced Micro Devices, Inc.");
+MODULE_DESCRIPTION("AMD GPU PMU driver for Linux perf subsystem");
 MODULE_VERSION(AMDGPU_PMU_VERSION);

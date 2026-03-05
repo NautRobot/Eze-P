@@ -5,12 +5,12 @@
 > This is a research and development project. The module is not ready for general use and may cause system instability.
 >
 > **Requirements:**
-> - GFX12/RDNA3 GPUs only (MI300, RX 7000 series)
+> - GFX12/RDNA4 GPUs only (RX 9070 series)
 > - **Patched Linux kernel required** (see Prerequisites section)
 >
 > Use at your own risk in development/testing environments only.
 
-A Linux kernel module implementing AMD GPU performance counter integration with the perf subsystem. This module provides AQL (Asynchronous Queuing Language) packet generation for GPU performance monitoring on GFX12/RDNA3 architectures.
+A Linux kernel module implementing AMD GPU performance counter integration with the perf subsystem. This module provides AQL (Asynchronous Queuing Language) packet generation for GPU performance monitoring on GFX12/RDNA4 architectures.
 
 ## Overview
 
@@ -18,14 +18,14 @@ This kernel module bridges AMD GPU hardware performance counters with the Linux 
 
 - **AQL C Library**: Pure C implementation of PM4 packet generation for GPU counter programming
 - **Perf PMU Driver**: Complete Linux perf subsystem integration
-- **Hardware Support**: GFX12/RDNA3 GPU architecture support
+- **Hardware Support**: GFX12/RDNA4 GPU architecture support
 - **Counter Registry**: Architecture-specific performance event definitions
 
 ## Features
 
 - ✅ Linux perf subsystem integration
 - ✅ AQL/PM4 packet generation for GPU counter control
-- ✅ GFX12/RDNA3 hardware support
+- ✅ GFX12/RDNA4 hardware support
 - ✅ Multi-GPU architecture support
 - ✅ Hardware block counter definitions (SQ, CPC, GL2C, etc.)
 - ✅ **Dimension-Specific Monitoring** - Monitor specific SE/SA/WGP hardware units
@@ -266,9 +266,8 @@ For detailed information, see:
 
 ### Supported GPUs
 
-- **GFX12 (RDNA3)**: ✅ **Currently Supported**
-  - MI300 series
-  - Radeon RX 7000 series
+- **GFX12 (RDNA4)**: ✅ **Currently Supported**
+  - Radeon RX 9070 series
   - All hardware blocks (SQ, CPC, CPF, GL1, GL2, CHA, CHC, etc.)
 
 - **GFX9/10/11**: ❌ **Not Currently Supported**
@@ -397,7 +396,7 @@ perf-pmu-stub/
        │ PM4 commands
 ┌──────▼──────────────────────┐
 │   AMD GPU Hardware          │
-│   (GFX12/RDNA3)             │
+│   (GFX12/RDNA4)             │
 └─────────────────────────────┘
 ```
 
@@ -483,19 +482,19 @@ dmesg | tail -20
    - System shutdown interrupts the cleanup sequence
    - GPU state transitions happen during stop operations
 
-3. **GFX12 Only**: **This module currently only supports GFX12/RDNA3 GPUs**. Attempting to use on GFX9/10/11 architectures will fail. The architecture detection code exists but event mappings and register definitions are incomplete for older generations.
+3. **GFX12 Only**: **This module currently only supports GFX12/RDNA4 GPUs**. Attempting to use on GFX9/10/11 architectures will fail. The architecture detection code exists but event mappings and register definitions are incomplete for older generations.
 
 ### Current Restrictions
 
 1. **Kernel Patch Required**: This module requires the `linux-kernel.patch` to be applied to your Linux kernel source. The module will not function without the patched kernel. Tested on base commit `e6b9dce0aeeb91dfc0974ab87f02454e24566182`.
 
-2. **Hardware Integration**: Currently uses simulation; real GPU hardware access requires:
+2. **Hardware Integration**: Uses real GPU hardware access via:
    - KFD (Kernel Fusion Driver) integration
    - AMDGPU driver coordination
    - GPU memory allocation for PM4 buffers
 
 3. **Architecture Support**:
-   - **GFX12/RDNA3: Full support** (MI300, RX 7000 series)
+   - **GFX12/RDNA4: Full support** (RX 9070 series)
    - **GFX9/10/11: Not supported** (framework only, missing event definitions)
 
 4. **Kernel Compatibility**:
@@ -504,8 +503,6 @@ dmesg | tail -20
 
 ### Future Work
 
-- [ ] Real GPU hardware integration via KFD
-- [ ] AMDGPU driver coordination
 - [ ] Complete GFX9/10/11 support
 - [ ] Interrupt-driven counter collection
 - [ ] SPM (Streaming Performance Monitor) support
@@ -516,7 +513,7 @@ dmesg | tail -20
 ### AMD Documentation
 - [AMD GPU Performance Counters](https://www.amd.com)
 - PM4 Packet Format Specifications
-- GFX12/RDNA3 Architecture Documentation
+- GFX12/RDNA4 Architecture Documentation
 
 ### Linux Kernel
 - [Perf Subsystem Documentation](https://www.kernel.org/doc/html/latest/admin-guide/perf-security.html)

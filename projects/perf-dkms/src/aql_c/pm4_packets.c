@@ -522,6 +522,27 @@ int pm4_set_grbm_index(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg, uint32
 }
 
 /**
+ * @brief Set GRBM index with per-instance addressing for WGP-level blocks
+ *
+ * Matches aqlprofile grbm_inst_se_sh_wgp_index_value():
+ *   instance_index = (wgp_index << 2) | sub_instance
+ */
+int pm4_set_grbm_index_with_instance(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg,
+				     uint32_t wg_index, uint32_t instance_index,
+				     uint32_t sa_index, uint32_t se_index)
+{
+	pm4_grbm_gfx_index_t index = { 0 };
+
+	/* INSTANCE_INDEX = (wgp_index << 2) | instance_index
+	 * This matches aqlprofile's grbm_inst_se_sh_wgp_index_value() */
+	index.bits.instance_index = ((wg_index << 2) | instance_index) & 0x7F;
+	index.bits.sa_index = sa_index & 0x3;
+	index.bits.se_index = se_index & 0xF;
+
+	return pm4_append_set_uconfig_reg(buffer, grbm_gfx_index_reg, index.raw);
+}
+
+/**
  * @brief Enable or disable performance monitoring
  *
  * Writes to CP_PERFMON_CNTL register to control the performance monitoring

@@ -155,7 +155,6 @@ struct counter_descriptor {
 	uint32_t counter_mode;
 	const char *name;
 	const char *description;
-	uint32_t supported_gpus;
 };
 
 /* GFX12 Counter Configuration */
