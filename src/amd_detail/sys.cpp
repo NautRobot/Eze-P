@@ -8,8 +8,10 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/stat.h> // IWYU pragma: keep
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <syslog.h>
 #include <system_error>
@@ -102,6 +104,12 @@ Sys::fcntl(int fd, int op, uintptr_t arg) const
     return throwOn(-1, ::fcntl(fd, op, arg));
 }
 
+void
+Sys::ftruncate(int fd, off_t offset) const
+{
+    throwOn(-1, ::ftruncate(fd, offset));
+}
+
 struct statx
 Sys::statx(int dirfd, const char *pathname, int flags, unsigned int mask) const
 {
@@ -114,6 +122,24 @@ char *
 Sys::getenv(const char *name) const noexcept
 {
     return ::getenv(name);
+}
+
+int
+Sys::memfd_create(const char *name, unsigned int flags) const
+{
+    return throwOn(-1, ::memfd_create(name, flags));
+}
+
+int
+Sys::eventfd(unsigned int initval, int flags) const
+{
+    return throwOn(-1, ::eventfd(initval, flags));
+}
+
+int
+Sys::pidfd_open(pid_t pid, unsigned int flags) const
+{
+    return throwOn(-1, static_cast<int>(::syscall(SYS_pidfd_open, pid, flags)));
 }
 
 }
