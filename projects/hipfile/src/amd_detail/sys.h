@@ -40,9 +40,14 @@ struct Sys {
     virtual struct stat  fstat(int fd) const;
     virtual struct statx statx(int dirfd, const char *pathname, int flags, unsigned int mask) const;
 
-    virtual int fcntl(int fd, int op, uintptr_t arg) const;
+    virtual int  fcntl(int fd, int op, uintptr_t arg) const;
+    virtual void ftruncate(int fd, off_t offset) const;
 
     virtual char *getenv(const char *name) const noexcept;
+
+    virtual int memfd_create(const char *name, unsigned int flags) const;
+    virtual int eventfd(unsigned int initval, int flags) const;
+    virtual int pidfd_open(pid_t pid, unsigned int flags) const;
 };
 
 }
