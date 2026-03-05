@@ -36,31 +36,10 @@ const char *amdgpu_pmu_get_event_description(u64 config)
 	/* Config value is the counter_id */
 	counter = lookup_counter_by_id((counter_id_t)config);
 	if (counter) {
-		/* Generate description from counter name and hardware block */
-		static char description[128];
-		const char *block_name;
-
-		switch (counter->hw_block) {
-		case HW_IP_BLOCK_GL2C:
-			block_name = "GL2C (L2 Cache)";
-			break;
-		case HW_IP_BLOCK_SQ:
-			block_name = "SQ (Shader Queue)";
-			break;
-		case HW_IP_BLOCK_TA:
-			block_name = "TA (Texture Addressing)";
-			break;
-		case HW_IP_BLOCK_GRBM:
-			block_name = "GRBM (Graphics Register Bus Manager)";
-			break;
-		default:
-			block_name = "Unknown";
-			break;
-		}
-
-		snprintf(description, sizeof(description), "%s - %s counter", counter->name,
-			 block_name);
-		return description;
+		/* Return the counter name directly.
+		 * The previous implementation used a static buffer which is
+		 * unsafe for concurrent access from the perf subsystem. */
+		return counter->name;
 	}
 
 	return "Unknown event";

@@ -46,8 +46,15 @@ static void aql_perf_disable_gpu(struct aql_perf_session *session, uint32_t gpu_
 
 	spin_unlock_irqrestore(&session->measurement_lock, flags);
 
-	/* Mark GPU as disabled in error mask */
-	set_bit(gpu_id, &session->recovery.error_mask);
+	/* Mark GPU as disabled in error mask using array index, not hardware ID.
+	 * gpu_id is a hardware device ID (e.g., 7410) which would be wildly out
+	 * of bounds for a single unsigned long bitmap. Find the 0-based index. */
+	for (uint32_t i = 0; i < session->num_gpus; i++) {
+		if (session->gpu_ids[i] == gpu_id) {
+			set_bit(i, &session->recovery.error_mask);
+			break;
+		}
+	}
 }
 
 /**
@@ -182,86 +189,93 @@ void aql_perf_handle_error(struct aql_perf_session *session, struct aql_error_co
 	/* Update error statistics */
 	atomic64_inc(&session->stats.errors_total);
 
-	switch (error->severity) {
-	case AQL_ERROR_RECOVERABLE:
-		/* Simple retry with exponential backoff */
-		if (session->recovery.recovery_attempts < AQL_PERF_MAX_RECOVERY_ATTEMPTS) {
-			unsigned long delay =
-				msecs_to_jiffies(100 << session->recovery.recovery_attempts);
+	/* Handle error with escalation loop instead of recursion to avoid
+	 * deadlocking on session_mutex when severity escalates. */
+	enum aql_error_severity severity = error->severity;
+	bool escalate;
 
-			aql_info("Session %llu: Scheduling recoverable error retry (attempt %d)",
-				 session->session_id, session->recovery.recovery_attempts + 1);
+	do {
+		escalate = false;
 
-			schedule_delayed_work(&session->recovery.recovery_work, delay);
-			session->recovery.recovery_attempts++;
-		} else {
-			aql_err("Session %llu: Max recovery attempts exceeded for recoverable error",
-				session->session_id);
+		switch (severity) {
+		case AQL_ERROR_RECOVERABLE:
+			/* Simple retry with exponential backoff */
+			if (session->recovery.recovery_attempts < AQL_PERF_MAX_RECOVERY_ATTEMPTS) {
+				unsigned long delay =
+					msecs_to_jiffies(100 << session->recovery.recovery_attempts);
 
-			/* Escalate to system fault */
-			error->severity = AQL_ERROR_SYSTEM_FAULT;
-			aql_perf_handle_error(session, error);
-		}
-		break;
+				aql_info("Session %llu: Scheduling recoverable error retry (attempt %d)",
+					 session->session_id, session->recovery.recovery_attempts + 1);
 
-	case AQL_ERROR_GPU_FAULT:
-		/* Isolate the faulty GPU */
-		aql_perf_disable_gpu(session, error->gpu_id);
-		aql_info("Session %llu: GPU %u disabled due to fault: %s", session->session_id,
-			 error->gpu_id, error->error_msg);
+				schedule_delayed_work(&session->recovery.recovery_work, delay);
+				session->recovery.recovery_attempts++;
+			} else {
+				aql_err("Session %llu: Max recovery attempts exceeded for recoverable error",
+					session->session_id);
+				severity = AQL_ERROR_SYSTEM_FAULT;
+				escalate = true;
+			}
+			break;
 
-		/* If all GPUs are disabled, escalate to system fault */
-		if (hweight_long(session->recovery.error_mask) >= session->num_gpus) {
-			aql_err("Session %llu: All GPUs disabled, escalating to system fault",
-				session->session_id);
-			error->severity = AQL_ERROR_SYSTEM_FAULT;
-			aql_perf_handle_error(session, error);
-		}
-		break;
+		case AQL_ERROR_GPU_FAULT:
+			/* Isolate the faulty GPU */
+			aql_perf_disable_gpu(session, error->gpu_id);
+			aql_info("Session %llu: GPU %u disabled due to fault: %s", session->session_id,
+				 error->gpu_id, error->error_msg);
 
-	case AQL_ERROR_SYSTEM_FAULT:
-		/* Reset the entire session */
-		mutex_lock(&session->session_mutex);
+			/* If all GPUs are disabled, escalate to system fault */
+			if (hweight_long(session->recovery.error_mask) >= session->num_gpus) {
+				aql_err("Session %llu: All GPUs disabled, escalating to system fault",
+					session->session_id);
+				severity = AQL_ERROR_SYSTEM_FAULT;
+				escalate = true;
+			}
+			break;
 
-		if (session->state != SESSION_ERROR) {
-			aql_info("Session %llu: System fault detected, stopping all measurements",
-				 session->session_id);
+		case AQL_ERROR_SYSTEM_FAULT:
+			/* Reset the entire session */
+			mutex_lock(&session->session_mutex);
+
+			if (session->state != SESSION_ERROR) {
+				aql_info("Session %llu: System fault detected, stopping all measurements",
+					 session->session_id);
+				session->state = SESSION_ERROR;
+				aql_perf_stop_all_measurements(session);
+			}
+
+			/* Schedule recovery work */
+			if (session->recovery.recovery_attempts < AQL_PERF_MAX_RECOVERY_ATTEMPTS) {
+				schedule_delayed_work(&session->recovery.recovery_work,
+						      msecs_to_jiffies(1000));
+				aql_info("Session %llu: Scheduled system recovery (attempt %d)",
+					 session->session_id, session->recovery.recovery_attempts + 1);
+			} else {
+				aql_err("Session %llu: Max system recovery attempts exceeded",
+					session->session_id);
+				severity = AQL_ERROR_PERMANENT;
+				escalate = true;
+			}
+
+			mutex_unlock(&session->session_mutex);
+			break;
+
+		case AQL_ERROR_PERMANENT:
+			/* Disable AQL feature entirely */
+			mutex_lock(&session->session_mutex);
 			session->state = SESSION_ERROR;
 			aql_perf_stop_all_measurements(session);
-		}
+			mutex_unlock(&session->session_mutex);
 
-		/* Schedule recovery work */
-		if (session->recovery.recovery_attempts < AQL_PERF_MAX_RECOVERY_ATTEMPTS) {
-			schedule_delayed_work(&session->recovery.recovery_work,
-					      msecs_to_jiffies(1000));
-			aql_info("Session %llu: Scheduled system recovery (attempt %d)",
-				 session->session_id, session->recovery.recovery_attempts + 1);
-		} else {
-			aql_err("Session %llu: Max system recovery attempts exceeded",
+			aql_err("Session %llu: Permanent error detected, AQL performance monitoring disabled",
 				session->session_id);
-			error->severity = AQL_ERROR_PERMANENT;
-			aql_perf_handle_error(session, error);
+			break;
+
+		default:
+			aql_err("Session %llu: Unknown error severity %d", session->session_id,
+				severity);
+			break;
 		}
-
-		mutex_unlock(&session->session_mutex);
-		break;
-
-	case AQL_ERROR_PERMANENT:
-		/* Disable AQL feature entirely */
-		mutex_lock(&session->session_mutex);
-		session->state = SESSION_ERROR;
-		aql_perf_stop_all_measurements(session);
-		mutex_unlock(&session->session_mutex);
-
-		aql_err("Session %llu: Permanent error detected, AQL performance monitoring disabled",
-			session->session_id);
-		break;
-
-	default:
-		aql_err("Session %llu: Unknown error severity %d", session->session_id,
-			error->severity);
-		break;
-	}
+	} while (escalate);
 }
 
 /**
@@ -393,6 +407,7 @@ bool aql_perf_is_gpu_disabled(struct aql_perf_session *session, uint32_t gpu_id)
 	}
 
 	/* GPU ID not found in session - treat as disabled */
+	aql_warn("GPU %u not found in session %llu GPU list", gpu_id, session->session_id);
 	return true;
 }
 

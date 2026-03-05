@@ -225,7 +225,9 @@ int aql_perf_create_start_packet(struct aql_measurement *measurement, pm4_buffer
 		return -EINVAL;
 	}
 
-	/* Check if another event already allocated this counter */
+	/* Check if another event already allocated this counter.
+	 * Note: There is a theoretical TOCTOU between find and create below, but
+	 * in practice this is serialized through the single-threaded workqueue. */
 	struct shared_counter_ref *shared_ref =
 		find_and_install_shared_counter(session, measurement->counter_id, measurement);
 	if (shared_ref) {
@@ -938,13 +940,33 @@ static uint64_t aql_aggregate_counter_instances(struct aql_perf_session *session
 	arch_t *arch = session->archs[gpu_idx];
 	const counter_def_t *counter_def =
 		lookup_counter_by_id((counter_id_t)measurement->counter_id);
-	block_info_t *block = arch->block_map.blocks[counter_def->hw_block];
+	block_info_t *block;
 	uint64_t sum = 0;
 	uint32_t num_instances = 1;
+	const uint32_t max_instances = PAGE_SIZE / sizeof(uint64_t);
+
+	if (!counter_def) {
+		aql_err("[PMU] Counter ID %u not found in registry", measurement->counter_id);
+		return 0;
+	}
+
+	block = arch->block_map.blocks[counter_def->hw_block];
+	if (!block) {
+		aql_err("[PMU] Block %u not found for counter %s", counter_def->hw_block,
+			counter_def->name);
+		return 0;
+	}
 
 	/* Determine total number of instances based on block dimensions */
 	for (size_t dim_idx = 0; dim_idx < block->dimension_count; dim_idx++) {
 		num_instances *= block->dimensions[dim_idx].size;
+	}
+
+	/* Bounds check: result_buffer is a single PAGE_SIZE allocation */
+	if (num_instances > max_instances) {
+		aql_err("[PMU] Instance count %u exceeds buffer capacity %u", num_instances,
+			max_instances);
+		num_instances = max_instances;
 	}
 
 	aql_debug("[PMU] Aggregating %u instances (block dimensions: count=%zu)", num_instances,
@@ -1071,7 +1093,8 @@ static uint64_t read_extract_counter_value(struct aql_perf_session *session,
 	uint64_t counter_value;
 
 	if (!result_buffer) {
-		return -1;
+		aql_warn("[PMU] READ_SYNC: GPU %u, NULL result buffer", measurement->gpu_id);
+		return 0;
 	}
 
 	if (measurement->dimension_specific) {
@@ -1085,6 +1108,12 @@ static uint64_t read_extract_counter_value(struct aql_perf_session *session,
 							   measurement->target_dims.sa,
 							   measurement->target_dims.wgp,
 							   arch->num_sa, arch->num_wgp_per_sa);
+
+		if (flat_idx >= PAGE_SIZE / sizeof(uint64_t)) {
+			aql_err("[PMU] READ_SYNC: GPU %u, flat_idx %u exceeds buffer bounds",
+				measurement->gpu_id, flat_idx);
+			return 0;
+		}
 
 		counter_value = result_buffer[flat_idx];
 

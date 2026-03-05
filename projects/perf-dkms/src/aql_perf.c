@@ -241,6 +241,9 @@ static void aql_perf_session_release(struct aql_perf_session *session)
 {
 	aql_debug("Releasing session %llu", session->session_id);
 
+	/* Cancel recovery work FIRST, before freeing any resources it might access */
+	cancel_delayed_work_sync(&session->recovery.recovery_work);
+
 	/* Ensure all measurements are stopped and cleaned up */
 	{
 		struct aql_measurement *measurement, *tmp;
@@ -319,9 +322,6 @@ static void aql_perf_session_release(struct aql_perf_session *session)
 		filp_close(session->kfd_file, NULL);
 		session->kfd_file = NULL;
 	}
-
-	/* Cancel recovery work */
-	cancel_delayed_work_sync(&session->recovery.recovery_work);
 
 	/* Free dynamic allocations */
 	kfree(session->gpu_ids);
@@ -805,14 +805,19 @@ void aql_counter_release(counter_reg_info_t *reg)
 	aql_debug("[PMU] aql_counter_release: counter state %d -> %d, event_id=0x%x, user_id=0x%x",
 		  old_state, COUNTER_STATE_FREE, reg->allocation.event_id, reg->allocation.user_id);
 
-	/* Atomically set state back to FREE */
-	atomic_set(&reg->allocation.state, COUNTER_STATE_FREE);
-
-	/* Clear allocation tracking fields */
+	/* Clear allocation tracking fields BEFORE setting state to FREE.
+	 * If we set FREE first, another CPU could immediately CAS to ALLOCATED
+	 * and start writing these fields, which we'd then overwrite with zeros. */
 	reg->allocation.event_id = 0;
 	reg->allocation.user_id = 0;
 	reg->allocation.description = NULL;
 	reg->allocation.allocation_time = 0;
+
+	/* Ensure metadata writes are visible before the state transition */
+	smp_wmb();
+
+	/* Atomically set state back to FREE */
+	atomic_set(&reg->allocation.state, COUNTER_STATE_FREE);
 
 	/* Keep command_buffer and data_buffer - they are pre-allocated and reused */
 

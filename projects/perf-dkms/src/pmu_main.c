@@ -969,10 +969,11 @@ static int __init amdgpu_pmu_init(void)
 		struct aql_perf_session *session = aql_pmu_get_session();
 		if (!session || session->num_gpus == 0 || !session->archs || !session->archs[0]) {
 			pmu_err("GPU architecture unavailable - cannot validate dimensions\n");
-			perf_pmu_unregister(&pmu->pmu);
-			amdgpu_pmu_cleanup_event_attrs();
 			if (session)
 				aql_pmu_put_session(session);
+			aql_pmu_cleanup();
+			perf_pmu_unregister(&pmu->pmu);
+			amdgpu_pmu_cleanup_event_attrs();
 			kfree(pmu);
 			return -ENODEV;
 		}
