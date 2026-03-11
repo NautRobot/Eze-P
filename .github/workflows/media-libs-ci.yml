@@ -44,6 +44,10 @@ jobs:
     with:
       cmake_options: >
         -DTHEROCK_ENABLE_CORE=ON
+        -DTHEROCK_ENABLE_COMM_LIBS=OFF
+        -DTHEROCK_ENABLE_DEBUG_TOOLS=OFF
+        -DTHEROCK_ENABLE_MATH_LIBS=OFF
+        -DTHEROCK_ENABLE_ML_LIBS=OFF
         -DTHEROCK_ENABLE_PROFILER=ON
         -DTHEROCK_ENABLE_SYSDEPS_AMD_MESA=ON
         -DTHEROCK_ENABLE_ROCDECODE=ON
@@ -89,7 +93,7 @@ jobs:
         uses: './.github/actions/setup_test_environment'
         with:
           ARTIFACT_RUN_ID: ${{ env.ARTIFACT_RUN_ID }}
-          AMDGPU_FAMILIES: ${{ env.AMDGPU_FAMILIES }}
+          AMDGPU_TARGETS: ${{ env.AMDGPU_FAMILIES }}
           ARTIFACT_GROUP: ${{ env.AMDGPU_FAMILIES }}
           OUTPUT_ARTIFACTS_DIR: ${{ env.OUTPUT_ARTIFACTS_DIR }}
           VENV_DIR: ${{ env.VENV_DIR }}

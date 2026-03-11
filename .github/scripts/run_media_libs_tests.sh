@@ -30,7 +30,7 @@ if [ -d "${ROCDECODE_TEST_DIR}" ]; then
     "${ROCDECODE_TEST_DIR}"
 
   echo "=== Building and running rocdecode CTests ==="
-  if ! ctest --test-dir rocdecode-test --output-on-failure --timeout 600; then
+  if ! ctest --test-dir rocdecode-test -VV --output-on-failure --timeout 600; then
     echo "ERROR: rocdecode CTests failed"
     RESULT=1
   fi
@@ -46,7 +46,7 @@ if [ -d "${ROCJPEG_TEST_DIR}" ]; then
     "${ROCJPEG_TEST_DIR}"
 
   echo "=== Building and running rocjpeg CTests ==="
-  if ! ctest --test-dir rocjpeg-test --output-on-failure --timeout 600; then
+  if ! ctest --test-dir rocjpeg-test -VV --output-on-failure --timeout 600; then
     echo "ERROR: rocjpeg CTests failed"
     RESULT=1
   fi
