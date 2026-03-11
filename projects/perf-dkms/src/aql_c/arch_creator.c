@@ -40,20 +40,10 @@ arch_t *arch_create_by_name(const char *arch_name)
 		return create_gfx12_arch();
 	}
 
-	/* Future architectures can be added here with their respective creator functions:
-     *
-     * if (strcmp(arch_name, "gfx11") == 0 || strcmp(arch_name, "GFX11") == 0) {
-     *     return create_gfx11_arch();
-     * }
-     *
-     * if (strcmp(arch_name, "gfx10") == 0 || strcmp(arch_name, "GFX10") == 0) {
-     *     return create_gfx10_arch();
-     * }
-     *
-     * if (strcmp(arch_name, "gfx9") == 0 || strcmp(arch_name, "GFX9") == 0) {
-     *     return create_gfx9_arch();
-     * }
-     */
+	/* GFX9 architecture (Vega/MI100/MI200) */
+	if (strcmp(arch_name, "gfx9") == 0 || strcmp(arch_name, "GFX9") == 0) {
+		return create_gfx9_arch();
+	}
 
 	/* Unknown architecture */
 	return NULL;

@@ -50,8 +50,8 @@ obj-m := amdgpu_pmu.o
 # Include AMD GPU PMU, KFD test, and minimal AQL integration
 amdgpu_pmu-y := pmu_main.o pmu_events.o amdgpu_pmu_trace.o amdgpu_pmu_trace_dev.o \\
               aql_perf.o aql_packet_ops.o aql_error_recovery.o aql_pmu_integration.o \\
-              aql_c/arch_creator.o aql_c/gfx12_creator.o \\
-              aql_c/pm4_packets.o aql_c/counter_registry.o aql_c/gfx12_events.o \\
+              aql_c/arch_creator.o aql_c/gfx12_creator.o aql_c/gfx9_creator.o \\
+              aql_c/pm4_packets.o aql_c/counter_registry.o aql_c/gfx12_events.o aql_c/gfx9_events.o \\
               aql_c/packet_generation.o
 
 # Compiler flags

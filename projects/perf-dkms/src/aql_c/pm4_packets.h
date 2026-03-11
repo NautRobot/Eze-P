@@ -107,6 +107,24 @@ typedef union {
 } pm4_grbm_gfx_index_t;
 
 /**
+ * GFX9 GRBM GFX Index structure
+ * Uses SH_INDEX (8 bits) instead of SA_INDEX (2 bits),
+ * and direct instance indexing (no WGP shift).
+ */
+typedef union {
+	uint32_t raw;
+	struct {
+		uint32_t instance_index : 8;            /* bits 0-7 (direct, no WGP shift) */
+		uint32_t sh_index : 8;                  /* bits 8-15 (same position as sa_index) */
+		uint32_t se_index : 8;                  /* bits 16-23 */
+		uint32_t reserved : 5;                  /* bits 24-28 */
+		uint32_t sh_broadcast_writes : 1;       /* bit 29 (same as sa_broadcast_writes) */
+		uint32_t instance_broadcast_writes : 1; /* bit 30 */
+		uint32_t se_broadcast_writes : 1;       /* bit 31 */
+	} bits;
+} pm4_grbm_gfx_index_gfx9_t;
+
+/**
  * Barrier Event structure
  * Matches Rust BarrierEvent bitfield exactly
  */
@@ -215,6 +233,10 @@ int pm4_append_copy_data(pm4_buffer_t *buffer, pm4_copy_data_flags_t flags, uint
 int pm4_append_acquire_mem(pm4_buffer_t *buffer, uint64_t base_addr, uint64_t size,
 			   uint32_t gcr_cntl);
 
+/* AcquireMem GFX9 variant - 7-DWORD format with CP_COHER_CNTL instead of GCR_CNTL */
+int pm4_append_acquire_mem_gfx9(pm4_buffer_t *buffer, uint64_t base_addr, uint64_t size,
+				uint32_t cp_coher_cntl);
+
 /* Higher-level helper functions that match Rust implementation */
 
 /**
@@ -261,6 +283,22 @@ int pm4_set_grbm_index(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg, uint32
 int pm4_set_grbm_index_with_instance(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg,
 				     uint32_t wg_index, uint32_t instance_index,
 				     uint32_t sa_index, uint32_t se_index);
+
+/**
+ * @brief Set specific GRBM index for GFX9 (direct instance, SH-based)
+ *
+ * Uses direct instance_index (no WGP shift) and SH indexing.
+ */
+int pm4_set_grbm_index_gfx9(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg,
+			     uint32_t instance_index, uint32_t sh_index, uint32_t se_index);
+
+/**
+ * @brief Set GRBM index for GFX9 SE+SH selection with instance broadcast
+ *
+ * For iterating SE/SH combinations in read packets.
+ */
+int pm4_set_grbm_se_sh_index_gfx9(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg,
+				   uint32_t sh_index, uint32_t se_index);
 
 /**
  * @brief Enable or disable performance monitoring
@@ -384,6 +422,17 @@ typedef struct {
 			uint32_t poll_interval;
 			uint32_t gcr_cntl;
 		} flush_cache;
+
+		/* FlushCache GFX9 packet (7 DWORDs) */
+		struct {
+			uint32_t header;
+			uint32_t cp_coher_cntl;
+			uint32_t coher_size;
+			uint32_t coher_size_hi;
+			uint32_t coher_base_lo;
+			uint32_t coher_base_hi;
+			uint32_t poll_interval;
+		} flush_cache_gfx9;
 
 		/* WriteSHRegister packet (3 DWORDs) */
 		struct {

@@ -26,11 +26,7 @@
 
 /* Function declarations for architecture-specific creators */
 arch_t *create_gfx12_arch(void);
-/* Future architecture creators can be declared here:
- * arch_t* create_gfx11_arch(void);
- * arch_t* create_gfx10_arch(void);
- * arch_t* create_gfx9_arch(void);
- */
+arch_t *create_gfx9_arch(void);
 
 /**
  * @brief Structure to hold decoded GPU topology dimension coordinates

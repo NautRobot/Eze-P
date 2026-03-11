@@ -462,6 +462,42 @@ int pm4_append_acquire_mem(pm4_buffer_t *buffer, uint64_t base_addr, uint64_t si
 	return pm4_buffer_append(buffer, packet, 8);
 }
 
+/**
+ * @brief Append a GFX9 ACQUIRE_MEM packet (7 DWORDs, CP_COHER_CNTL format)
+ *
+ * GFX9 uses a 7-DWORD ACQUIRE_MEM with CP_COHER_CNTL in DWord[1] instead of
+ * the GFX10+ 8-DWORD format with GCR_CNTL in DWord[7].
+ *
+ * @param buffer PM4 buffer to append packet to
+ * @param base_addr Base address of memory range to flush
+ * @param size Size of memory range in bytes
+ * @param cp_coher_cntl CP_COHER_CNTL value (e.g., 0x28C40000)
+ * @return 0 on success, -1 on failure
+ */
+int pm4_append_acquire_mem_gfx9(pm4_buffer_t *buffer, uint64_t base_addr, uint64_t size,
+				uint32_t cp_coher_cntl)
+{
+	uint32_t packet[7];
+	uint32_t coher_size_lo, coher_size_hi;
+	uint32_t coher_base_lo, coher_base_hi;
+
+	if (!buffer)
+		return -1;
+
+	pm4_calculate_cache_coher_params(base_addr, size, &coher_size_lo, &coher_size_hi,
+					 &coher_base_lo, &coher_base_hi);
+
+	packet[0] = PM4_TYPE_3_HEADER(PM4_ACQUIRE_MEM_OPCODE, 28); /* 7 DWORDs = 28 bytes */
+	packet[1] = cp_coher_cntl;
+	packet[2] = coher_size_lo;
+	packet[3] = coher_size_hi & 0xFF;
+	packet[4] = coher_base_lo;
+	packet[5] = coher_base_hi & 0xFFFFFF;
+	packet[6] = 0x10 & 0xFFFF; /* poll_interval */
+
+	return pm4_buffer_append(buffer, packet, 7);
+}
+
 /* Higher-level helper functions */
 
 /**
@@ -538,6 +574,56 @@ int pm4_set_grbm_index_with_instance(pm4_buffer_t *buffer, uint32_t grbm_gfx_ind
 	index.bits.instance_index = ((wg_index << 2) | instance_index) & 0x7F;
 	index.bits.sa_index = sa_index & 0x3;
 	index.bits.se_index = se_index & 0xF;
+
+	return pm4_append_set_uconfig_reg(buffer, grbm_gfx_index_reg, index.raw);
+}
+
+/**
+ * @brief Set specific GRBM index for GFX9 (direct instance, SH-based)
+ *
+ * GFX9 uses direct instance_index (no WGP shift) and SH indexing instead
+ * of SA indexing.
+ *
+ * @param buffer PM4 buffer to append packet to
+ * @param grbm_gfx_index_reg GRBM_GFX_INDEX register offset
+ * @param instance_index Direct instance index (no shift)
+ * @param sh_index Shader Half index
+ * @param se_index Shader Engine index
+ * @return 0 on success, negative on error
+ */
+int pm4_set_grbm_index_gfx9(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg,
+			     uint32_t instance_index, uint32_t sh_index, uint32_t se_index)
+{
+	pm4_grbm_gfx_index_gfx9_t index = { 0 };
+
+	index.bits.instance_index = instance_index & 0xFF;
+	index.bits.sh_index = sh_index & 0xFF;
+	index.bits.se_index = se_index & 0xFF;
+
+	return pm4_append_set_uconfig_reg(buffer, grbm_gfx_index_reg, index.raw);
+}
+
+/**
+ * @brief Set GRBM index for GFX9 SE+SH selection with instance broadcast
+ *
+ * Selects a specific SE and SH while broadcasting to all instances.
+ * Used when iterating SE/SH combinations in read packets.
+ *
+ * @param buffer PM4 buffer to append packet to
+ * @param grbm_gfx_index_reg GRBM_GFX_INDEX register offset
+ * @param sh_index Shader Half index
+ * @param se_index Shader Engine index
+ * @return 0 on success, negative on error
+ */
+int pm4_set_grbm_se_sh_index_gfx9(pm4_buffer_t *buffer, uint32_t grbm_gfx_index_reg,
+				   uint32_t sh_index, uint32_t se_index)
+{
+	pm4_grbm_gfx_index_gfx9_t index = { 0 };
+
+	index.bits.instance_index = 0;
+	index.bits.sh_index = sh_index & 0xFF;
+	index.bits.se_index = se_index & 0xFF;
+	index.bits.instance_broadcast_writes = 1;
 
 	return pm4_append_set_uconfig_reg(buffer, grbm_gfx_index_reg, index.raw);
 }
@@ -723,7 +809,7 @@ int pm4_validate_packet(const uint32_t *packet, size_t size_dwords)
 	case PM4_COPY_DATA_OPCODE:
 		return (expected_size == 6) ? 0 : -1;
 	case PM4_ACQUIRE_MEM_OPCODE:
-		return (expected_size == 8) ? 0 : -1;
+		return (expected_size == 7 || expected_size == 8) ? 0 : -1;
 	case PM4_WRITE_SH_REG_OPCODE:
 		return (expected_size == 3) ? 0 : -1;
 	default:

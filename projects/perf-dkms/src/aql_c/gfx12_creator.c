@@ -1623,18 +1623,26 @@ arch_t *create_gfx12_arch(void)
         .cp_perfmon_cntl = mmCP_PERFMON_CNTL,                  /* 55304 */
         .compute_perfcount_enable = mmCOMPUTE_PERFCOUNT_ENABLE, /* 11787 */
         .sq_perfcounter_ctrl2 = mmSQ_PERFCOUNTER_CTRL2,        /* 55778 */
+        .sq_perfcounter_ctrl = 0,
+        .sq_perfcounter_mask = 0,
+        .rlc_perfmon_clk_cntl = 0,
         .uconfig_space_start = UCONFIG_SPACE_START,            /* 0x0000C000 */
         .persistent_space_start = PERSISTENT_SPACE_START,       /* 0x00002C00 */
         .cs_partial_flush_event = VGT_EVENT_TYPE_CS_PARTIAL_FLUSH, /* 0x07 */
         .event_index_flush = 4,                                /* Event flush index */
         .gcr_cntl_default = 0x00018000,                       /* From Rust impl */
+        .cp_coher_cntl_default = 0,
         .poll_interval_default = 0x10,                        /* Poll every 4K */
         .counter_control_bits = {
             .sq_ps_en_bit = 0,                                /* PS enable bit */
             .sq_gs_en_bit = 2,                                /* GS enable bit */
             .sq_hs_en_bit = 4,                                /* HS enable bit */
-            .sq_cs_en_bit = 6                                 /* CS enable bit */
+            .sq_cs_en_bit = 6,                                /* CS enable bit */
+            .sq_vs_en_bit = 0,
+            .sq_es_en_bit = 0,
+            .sq_ls_en_bit = 0
         },
+        .sq_select_masks = { 0 },
         .perfmon_states = {
             .perfmon_state_disable = 0,                       /* Disable state */
             .perfmon_state_enable = 1,                        /* Enable state */

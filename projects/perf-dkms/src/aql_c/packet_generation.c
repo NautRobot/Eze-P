@@ -157,8 +157,22 @@ int generate_counter_config(pm4_buffer_t *buffer, const arch_t *arch, const coun
 	/* Get register info for this counter */
 	counter_reg_info_t *reg_info = &block->counter_reg_info[counter->counter_index];
 
-	/* Write counter select register */
+	/* Write counter select register.
+	 * GFX9 SQ counters require additional mask fields in the select value;
+	 * GFX12 uses a simple 9-bit event ID.
+	 */
 	uint32_t select_value = counter->event_id & 0x1FF; /* 9-bit event ID */
+
+	if (counter->block_id == HW_IP_BLOCK_SQ && arch->control_regs.sq_select_masks.simd_mask) {
+		/* GFX9 SQ select: event_id | SIMD_MASK | SQC_BANK_MASK | SQC_CLIENT_MASK */
+		select_value |= (arch->control_regs.sq_select_masks.simd_mask
+				 << arch->control_regs.sq_select_masks.simd_mask_shift);
+		select_value |= (arch->control_regs.sq_select_masks.sqc_bank_mask
+				 << arch->control_regs.sq_select_masks.sqc_bank_mask_shift);
+		select_value |= (arch->control_regs.sq_select_masks.sqc_client_mask
+				 << arch->control_regs.sq_select_masks.sqc_client_mask_shift);
+	}
+
 	ret = pm4_append_set_uconfig_reg(buffer, reg_info->select_addr, select_value);
 	if (ret < 0) {
 		return ret;
@@ -182,6 +196,21 @@ int generate_counter_config(pm4_buffer_t *buffer, const arch_t *arch, const coun
 			control_value |=
 				(1U
 				 << arch->control_regs.counter_control_bits.sq_cs_en_bit); /* CS */
+
+			/* GFX9: also enable VS, ES, LS stages and VMID_MASK */
+			if (arch->control_regs.counter_control_bits.sq_vs_en_bit) {
+				control_value |=
+					(1U << arch->control_regs.counter_control_bits
+						      .sq_vs_en_bit); /* VS */
+				control_value |=
+					(1U << arch->control_regs.counter_control_bits
+						      .sq_es_en_bit); /* ES */
+				control_value |=
+					(1U << arch->control_regs.counter_control_bits
+						      .sq_ls_en_bit); /* LS */
+				/* VMID_MASK = 0xFFFF in bits 16-31 */
+				control_value |= (0xFFFFU << 16);
+			}
 		}
 
 		ret = pm4_append_set_uconfig_reg(buffer, reg_info->control_addr, control_value);
@@ -219,7 +248,15 @@ int generate_start_packet(pm4_buffer_t *buffer, const arch_t *arch,
 	if (ret < 0)
 		return ret;
 
-	/* 4. Enable SQ_PERFCOUNTER_CTRL2 (force_en=1, vmid_en=0xFFFF)
+	/* 4a. GFX9: Enable RLC_PERFMON_CLK_CNTL = 1 (force perf counter clocks on) */
+	if (arch->control_regs.rlc_perfmon_clk_cntl) {
+		ret = pm4_append_set_uconfig_reg(buffer, arch->control_regs.rlc_perfmon_clk_cntl,
+						  1);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* 4b. Enable SQ_PERFCOUNTER_CTRL2 (force_en=1, vmid_en=0xFFFF)
 	 * Only programmed for SQ-type or TC-type (GL2C/TCC) counter blocks.
 	 * Matches aqlprofile: conditioned on CounterBlockSqAttr | CounterBlockTcAttr.
 	 * Programming this for blocks like GRBM breaks their counter collection.
@@ -245,6 +282,33 @@ int generate_start_packet(pm4_buffer_t *buffer, const arch_t *arch,
 			if (ret < 0)
 				return ret;
 		}
+	}
+
+	/* 4c. GFX9: Set SQ_PERFCOUNTER_MASK = 0xFFFF0000 | 0xFFFF (SH0_MASK | SH1_MASK) */
+	if (arch->control_regs.sq_perfcounter_mask) {
+		ret = pm4_append_set_uconfig_reg(buffer, arch->control_regs.sq_perfcounter_mask,
+						  0xFFFFFFFF);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* 4d. GFX9: Set SQ_PERFCOUNTER_CTRL (simd_mask=0xF, all stages enabled) */
+	if (arch->control_regs.sq_perfcounter_ctrl) {
+		uint32_t sq_ctrl_value = 0;
+		/* Enable all shader stages */
+		sq_ctrl_value |= (1U << arch->control_regs.counter_control_bits.sq_ps_en_bit);
+		sq_ctrl_value |= (1U << arch->control_regs.counter_control_bits.sq_vs_en_bit);
+		sq_ctrl_value |= (1U << arch->control_regs.counter_control_bits.sq_gs_en_bit);
+		sq_ctrl_value |= (1U << arch->control_regs.counter_control_bits.sq_es_en_bit);
+		sq_ctrl_value |= (1U << arch->control_regs.counter_control_bits.sq_hs_en_bit);
+		sq_ctrl_value |= (1U << arch->control_regs.counter_control_bits.sq_ls_en_bit);
+		sq_ctrl_value |= (1U << arch->control_regs.counter_control_bits.sq_cs_en_bit);
+		/* VMID_MASK = 0xFFFF in bits 16-31 */
+		sq_ctrl_value |= (0xFFFFU << 16);
+		ret = pm4_append_set_uconfig_reg(buffer, arch->control_regs.sq_perfcounter_ctrl,
+						  sq_ctrl_value);
+		if (ret < 0)
+			return ret;
 	}
 
 	/* 5. Configure each counter */
@@ -432,8 +496,24 @@ int generate_read_packet(pm4_buffer_t *buffer, const arch_t *arch,
 				for (uint32_t sa = 0; sa < num_sa; sa++) {
 					for (uint32_t wgp = 0; wgp < num_wgp; wgp++) {
 						for (uint32_t inst = 0; inst < num_instances; inst++) {
-							/* Set GRBM index for specific location + instance */
-							if (num_instances > 1) {
+							/* Set GRBM index for specific location + instance.
+							 * GFX9: direct instance index, SH-based addressing.
+							 * GFX12: WGP-shifted index, SA-based addressing.
+							 */
+							if (arch->type == ARCH_TYPE_GFX9) {
+								if (num_instances > 1) {
+									ret = pm4_set_grbm_index_gfx9(
+										buffer,
+										arch->control_regs.grbm_gfx_index,
+										wgp * num_instances + inst,
+										sa, se);
+								} else {
+									ret = pm4_set_grbm_index_gfx9(
+										buffer,
+										arch->control_regs.grbm_gfx_index,
+										wgp, sa, se);
+								}
+							} else if (num_instances > 1) {
 								ret = pm4_set_grbm_index_with_instance(
 									buffer, arch->control_regs.grbm_gfx_index,
 									wgp, inst, sa, se);
@@ -674,9 +754,18 @@ int generate_read_packet(pm4_buffer_t *buffer, const arch_t *arch,
 	if (ret < 0)
 		return ret;
 
-	/* 6. Cache coherency flush */
-	ret = pm4_append_acquire_mem(buffer, collection->gpu_memory_addr, collection->memory_size,
-				     arch->control_regs.gcr_cntl_default);
+	/* 6. Cache coherency flush - architecture-specific */
+	if (arch->control_regs.cp_coher_cntl_default) {
+		/* GFX9: 7-DWORD ACQUIRE_MEM with CP_COHER_CNTL */
+		ret = pm4_append_acquire_mem_gfx9(buffer, collection->gpu_memory_addr,
+						   collection->memory_size,
+						   arch->control_regs.cp_coher_cntl_default);
+	} else {
+		/* GFX10+: 8-DWORD ACQUIRE_MEM with GCR_CNTL */
+		ret = pm4_append_acquire_mem(buffer, collection->gpu_memory_addr,
+					      collection->memory_size,
+					      arch->control_regs.gcr_cntl_default);
+	}
 	if (ret < 0)
 		return ret;
 
@@ -707,6 +796,14 @@ int generate_stop_packet(pm4_buffer_t *buffer, const arch_t *arch)
 	ret = generate_cs_partial_flush(buffer, arch);
 	if (ret < 0)
 		return ret;
+
+	/* 4. GFX9: Disable RLC_PERFMON_CLK_CNTL = 0 (release perf counter clocks) */
+	if (arch->control_regs.rlc_perfmon_clk_cntl) {
+		ret = pm4_append_set_uconfig_reg(buffer, arch->control_regs.rlc_perfmon_clk_cntl,
+						  0);
+		if (ret < 0)
+			return ret;
+	}
 
 	return 0;
 }

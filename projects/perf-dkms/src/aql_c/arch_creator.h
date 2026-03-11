@@ -19,22 +19,25 @@
  * @return Pointer to initialized architecture structure, or NULL if unknown/unsupported
  *
  * @note Caller is responsible for freeing with arch_destroy()
- * @see arch_destroy(), create_gfx12_arch()
+ * @see arch_destroy(), create_gfx12_arch(), create_gfx9_arch()
  */
 arch_t *arch_create_by_name(const char *arch_name);
 
 /**
  * @brief Create a GFX12 architecture structure
  *
- * Directly creates and initializes a GFX12 (RDNA 3) architecture descriptor
- * with all hardware blocks, registers, and event mappings.
- *
  * @return Pointer to initialized GFX12 architecture, or NULL on allocation failure
- *
  * @note Caller must call arch_destroy() to free the returned structure
- * @see arch_create_by_name(), arch_destroy()
  */
 arch_t *arch_create_gfx12(void);
+
+/**
+ * @brief Create a GFX9 architecture structure
+ *
+ * @return Pointer to initialized GFX9 (Vega/MI100/MI200) architecture, or NULL on allocation failure
+ * @note Caller must call arch_destroy() to free the returned structure
+ */
+arch_t *arch_create_gfx9(void);
 
 /**
  * @brief Destroy an architecture structure and free all memory

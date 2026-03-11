@@ -367,6 +367,155 @@ static int test_counter_start_sequence(void)
 	return 0;
 }
 
+/* Test GFX9 ACQUIRE_MEM packet (7-DWORD format with CP_COHER_CNTL) */
+static int test_acquire_mem_gfx9_packet(void)
+{
+	printf("Testing AcquireMem GFX9 packet...\n");
+
+	pm4_buffer_t *buffer = pm4_buffer_create(256);
+
+	uint64_t base_addr = 0x123456000ULL;
+	uint64_t size = 1024;
+	uint32_t cp_coher_cntl = 0x28C40000;
+
+	int result = pm4_append_acquire_mem_gfx9(buffer, base_addr, size, cp_coher_cntl);
+	assert(result == 0);
+
+	uint32_t *data = pm4_buffer_get_data(buffer);
+	size_t packet_size = pm4_buffer_get_size(buffer);
+
+	/* GFX9 ACQUIRE_MEM is 7 DWORDs, not 8 */
+	assert(packet_size == 7);
+
+	/* Verify header */
+	uint32_t expected_header = PM4_TYPE_3_HEADER(PM4_ACQUIRE_MEM_OPCODE, 28);
+	assert(data[0] == expected_header);
+
+	/* DWord[1] is CP_COHER_CNTL (not reserved like GFX12) */
+	assert(data[1] == 0x28C40000);
+
+	/* Verify coherency params */
+	uint32_t coher_size_lo, coher_size_hi, coher_base_lo, coher_base_hi;
+	pm4_calculate_cache_coher_params(base_addr, size, &coher_size_lo, &coher_size_hi,
+					 &coher_base_lo, &coher_base_hi);
+	assert(data[2] == coher_size_lo);
+	assert(data[3] == (coher_size_hi & 0xFF));
+	assert(data[4] == coher_base_lo);
+	assert(data[5] == (coher_base_hi & 0xFFFFFF));
+
+	/* No DWord[7] — packet ends at index 6 */
+	assert(data[6] == (0x10 & 0xFFFF));
+
+	/* Verify validation accepts 7-DWORD ACQUIRE_MEM */
+	assert(pm4_validate_packet(data, 7) == 0);
+
+	pm4_buffer_destroy(buffer);
+	printf("  ✓ AcquireMem GFX9 packet passed\n\n");
+	return 0;
+}
+
+/* Test GFX9 GRBM index (direct instance, no WGP shift) */
+static int test_grbm_index_gfx9(void)
+{
+	printf("Testing GRBM index GFX9...\n");
+
+	pm4_buffer_t *buffer_gfx9 = pm4_buffer_create(256);
+	pm4_buffer_t *buffer_gfx12 = pm4_buffer_create(256);
+
+	/* GFX9: instance=5 stays 5 (direct) */
+	int result = pm4_set_grbm_index_gfx9(buffer_gfx9, TEST_GRBM_GFX_INDEX_REG, 5, 1, 2);
+	assert(result == 0);
+
+	/* GFX12: wg_index=5 becomes 5<<2=20 */
+	result = pm4_set_grbm_index(buffer_gfx12, TEST_GRBM_GFX_INDEX_REG, 5, 1, 2);
+	assert(result == 0);
+
+	uint32_t *data_gfx9 = pm4_buffer_get_data(buffer_gfx9);
+	uint32_t *data_gfx12 = pm4_buffer_get_data(buffer_gfx12);
+
+	/* Extract GRBM values (DWord[2] of SetUConfigReg) */
+	uint32_t grbm_gfx9 = data_gfx9[2];
+	uint32_t grbm_gfx12 = data_gfx12[2];
+
+	/* GFX9: instance_index = 5 (bits 0-7) */
+	assert((grbm_gfx9 & 0xFF) == 5);
+
+	/* GFX12: instance_index = 20 (5<<2, bits 0-6) */
+	assert((grbm_gfx12 & 0x7F) == 20);
+
+	/* They should differ */
+	assert(grbm_gfx9 != grbm_gfx12);
+
+	/* GFX9: sh_index=1 in bits 8-15 */
+	assert(((grbm_gfx9 >> 8) & 0xFF) == 1);
+
+	/* GFX9: se_index=2 in bits 16-23 */
+	assert(((grbm_gfx9 >> 16) & 0xFF) == 2);
+
+	pm4_buffer_destroy(buffer_gfx9);
+	pm4_buffer_destroy(buffer_gfx12);
+	printf("  ✓ GRBM index GFX9 passed\n\n");
+	return 0;
+}
+
+/* Test GFX9 GRBM SE+SH index with instance broadcast */
+static int test_grbm_se_sh_index_gfx9(void)
+{
+	printf("Testing GRBM SE+SH index GFX9...\n");
+
+	pm4_buffer_t *buffer = pm4_buffer_create(256);
+
+	int result = pm4_set_grbm_se_sh_index_gfx9(buffer, TEST_GRBM_GFX_INDEX_REG, 1, 3);
+	assert(result == 0);
+
+	uint32_t *data = pm4_buffer_get_data(buffer);
+	uint32_t grbm_val = data[2];
+
+	/* instance_index = 0 */
+	assert((grbm_val & 0xFF) == 0);
+
+	/* sh_index = 1 */
+	assert(((grbm_val >> 8) & 0xFF) == 1);
+
+	/* se_index = 3 */
+	assert(((grbm_val >> 16) & 0xFF) == 3);
+
+	/* instance_broadcast_writes = 1 (bit 30) */
+	assert((grbm_val & (1u << 30)) != 0);
+
+	/* sh_broadcast_writes = 0 (bit 29) */
+	assert((grbm_val & (1u << 29)) == 0);
+
+	/* se_broadcast_writes = 0 (bit 31) */
+	assert((grbm_val & (1u << 31)) == 0);
+
+	pm4_buffer_destroy(buffer);
+	printf("  ✓ GRBM SE+SH index GFX9 passed\n\n");
+	return 0;
+}
+
+/* Test that existing pm4_grbm_broadcast() produces 0xE0000000 (works for both GFX9 and GFX12) */
+static int test_grbm_broadcast_works_for_gfx9(void)
+{
+	printf("Testing GRBM broadcast works for GFX9...\n");
+
+	pm4_buffer_t *buffer = pm4_buffer_create(256);
+
+	int result = pm4_grbm_broadcast(buffer, TEST_GRBM_GFX_INDEX_REG);
+	assert(result == 0);
+
+	uint32_t *data = pm4_buffer_get_data(buffer);
+	uint32_t grbm_val = data[2];
+
+	/* Broadcast bits 29-31 are at identical positions on GFX9 and GFX12 */
+	/* Expected: sa/sh_broadcast(bit29) | instance_broadcast(bit30) | se_broadcast(bit31) */
+	assert(grbm_val == 0xE0000000);
+
+	pm4_buffer_destroy(buffer);
+	printf("  ✓ GRBM broadcast works for GFX9 passed\n\n");
+	return 0;
+}
+
 /* Main test runner */
 int main(void)
 {
@@ -382,6 +531,12 @@ int main(void)
 	assert(test_grbm_broadcast() == 0);
 	assert(test_pm4_op_conversion() == 0);
 	assert(test_counter_start_sequence() == 0);
+
+	/* GFX9-specific tests */
+	assert(test_acquire_mem_gfx9_packet() == 0);
+	assert(test_grbm_index_gfx9() == 0);
+	assert(test_grbm_se_sh_index_gfx9() == 0);
+	assert(test_grbm_broadcast_works_for_gfx9() == 0);
 
 	printf("=== All tests passed! ===\n");
 	return 0;

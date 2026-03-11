@@ -100,6 +100,9 @@ typedef struct {
 	uint32_t cp_perfmon_cntl; /* CP performance monitor control */
 	uint32_t compute_perfcount_enable; /* Compute performance counter enable */
 	uint32_t sq_perfcounter_ctrl2; /* SQ performance counter control 2 */
+	uint32_t sq_perfcounter_ctrl;      /* GFX9: SQ_PERFCOUNTER_CTRL (0 on GFX10+) */
+	uint32_t sq_perfcounter_mask;      /* GFX9: SQ_PERFCOUNTER_MASK (0 on GFX10+) */
+	uint32_t rlc_perfmon_clk_cntl;     /* GFX9: RLC_PERFMON_CLK_CNTL (0 on GFX10+) */
 
 	/* Register space bases */
 	uint32_t uconfig_space_start; /* Base of UCONFIG register space */
@@ -111,6 +114,7 @@ typedef struct {
 
 	/* Cache coherency parameters */
 	uint32_t gcr_cntl_default; /* Default GCR control value */
+	uint32_t cp_coher_cntl_default;    /* GFX9: CP_COHER_CNTL value for ACQUIRE_MEM (0 on GFX10+) */
 	uint32_t poll_interval_default; /* Default poll interval for cache ops */
 
 	/* Performance counter control bits */
@@ -119,7 +123,20 @@ typedef struct {
 		uint8_t sq_gs_en_bit; /* Bit position for GS enable */
 		uint8_t sq_hs_en_bit; /* Bit position for HS enable */
 		uint8_t sq_cs_en_bit; /* Bit position for CS enable */
+		uint8_t sq_vs_en_bit;   /* GFX9: VS enable (bit 1), 0 on GFX10+ */
+		uint8_t sq_es_en_bit;   /* GFX9: ES enable (bit 3), 0 on GFX10+ */
+		uint8_t sq_ls_en_bit;   /* GFX9: LS enable (bit 5), 0 on GFX10+ */
 	} counter_control_bits;
+
+	/* GFX9 SQ select value masks (for constructing SQ_PERFCOUNTER_SELECT) */
+	struct {
+		uint32_t simd_mask;             /* 0xF on GFX9, 0 on GFX12 */
+		uint32_t sqc_bank_mask;         /* 0xF on GFX9, 0 on GFX12 */
+		uint32_t sqc_client_mask;       /* 0xF on GFX9, 0 on GFX12 */
+		uint8_t simd_mask_shift;        /* 24 on GFX9 */
+		uint8_t sqc_bank_mask_shift;    /* 12 on GFX9 */
+		uint8_t sqc_client_mask_shift;  /* 16 on GFX9 */
+	} sq_select_masks;
 
 	/* Perfmon states */
 	struct {

@@ -54,8 +54,10 @@ add_aql_test(test_counter_registry
     test_counter_registry.c
     ../counter_registry.c
     ../gfx12_events.c
+    ../gfx9_events.c
     ../arch_creator.c
     ../gfx12_creator.c
+    ../gfx9_creator.c
 )
 
 #================================================================================
@@ -68,7 +70,9 @@ add_aql_test(test_packet_generation
     ../pm4_packets.c
     ../arch_creator.c
     ../gfx12_creator.c
+    ../gfx9_creator.c
     ../gfx12_events.c
+    ../gfx9_events.c
     ../counter_registry.c
 )
 
