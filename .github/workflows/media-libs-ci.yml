@@ -1,0 +1,131 @@
+name: Media Libs CI
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'projects/rocdecode/**'
+      - 'projects/rocjpeg/**'
+      - '.github/workflows/media-libs-ci.yml'
+      - '.github/scripts/run_media_libs_tests.sh'
+      - '!**/*.md'
+      - '!**/*.rst'
+      - '!**/*.rtf'
+      - '!**/docs/**'
+      - '!**/.readthedocs.yaml'
+  pull_request:
+    paths:
+      - 'projects/rocdecode/**'
+      - 'projects/rocjpeg/**'
+      - '.github/workflows/media-libs-ci.yml'
+      - '.github/scripts/run_media_libs_tests.sh'
+      - '!**/*.md'
+      - '!**/*.rst'
+      - '!**/*.rtf'
+      - '!**/docs/**'
+      - '!**/.readthedocs.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  therock-ci-linux:
+    name: Build Media Libs
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/therock-ci-linux.yml
+    secrets: inherit
+    with:
+      cmake_options: >
+        -DTHEROCK_ENABLE_CORE=ON
+        -DTHEROCK_ENABLE_PROFILER=ON
+        -DTHEROCK_ENABLE_SYSDEPS_AMD_MESA=ON
+        -DTHEROCK_ENABLE_ROCDECODE=ON
+        -DTHEROCK_ENABLE_ROCJPEG=ON
+      projects_to_test: ""
+
+  test:
+    name: Test Media Libs
+    needs: [therock-ci-linux]
+    runs-on: linux-mi325-1gpu-ossci-rocm
+    container:
+      image: ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98
+      options: --ipc host
+        --group-add video
+        --device /dev/kfd
+        --device /dev/dri
+        --group-add 992
+        --group-add 110
+        --env-file /etc/podinfo/gha-gpu-isolation-settings
+        --user 0:0
+    defaults:
+      run:
+        shell: bash
+    env:
+      VENV_DIR: ${{ github.workspace }}/.venv
+      ARTIFACT_RUN_ID: ${{ github.run_id }}
+      OUTPUT_ARTIFACTS_DIR: "./build"
+      AMDGPU_FAMILIES: "gfx94X-dcgpu"
+    steps:
+      - name: Checkout TheRock repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: "ROCm/TheRock"
+          ref: 37007c3e526156203fa8a4fab38b59415264d4b1 # 2026-03-06 commit
+
+      - name: Checkout test scripts
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          sparse-checkout: .github/scripts
+          path: "rocm-systems"
+
+      - name: Setup test environment
+        uses: './.github/actions/setup_test_environment'
+        with:
+          ARTIFACT_RUN_ID: ${{ env.ARTIFACT_RUN_ID }}
+          AMDGPU_FAMILIES: ${{ env.AMDGPU_FAMILIES }}
+          ARTIFACT_GROUP: ${{ env.AMDGPU_FAMILIES }}
+          OUTPUT_ARTIFACTS_DIR: ${{ env.OUTPUT_ARTIFACTS_DIR }}
+          VENV_DIR: ${{ env.VENV_DIR }}
+          FETCH_ARTIFACT_ARGS: "--rocdecode --rocjpeg"
+          IS_PR_FROM_FORK: ${{ github.event.pull_request.head.repo.fork }}
+
+      - name: Install test dependencies
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends cmake make
+
+      - name: Driver / GPU sanity check
+        timeout-minutes: 3
+        run: |
+          python ./build_tools/print_driver_gpu_info.py
+
+      - name: Run media libs tests
+        timeout-minutes: 30
+        env:
+          ROCM_PATH: ${{ env.OUTPUT_ARTIFACTS_DIR }}
+        run: |
+          bash rocm-systems/.github/scripts/run_media_libs_tests.sh
+
+  summary:
+    name: Media Libs CI Summary
+    if: always()
+    needs: [therock-ci-linux, test]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Output failed jobs
+        run: |
+          echo '${{ toJson(needs) }}'
+          FAILED_JOBS="$(echo '${{ toJson(needs) }}' \
+            | jq --raw-output \
+            'map_values(select(.result!="success" and .result!="skipped")) | keys | join(",")' \
+          )"
+          if [[ "${FAILED_JOBS}" != "" ]]; then
+            echo "The following jobs failed: ${FAILED_JOBS}"
+            exit 1
+          fi
