@@ -22,7 +22,7 @@ echo "=== Library core dependency check ==="
 for lib in librocdecode.so librocjpeg.so; do
   LIB_PATH="${ROCM_PATH}/lib/${lib}"
   if [ -f "${LIB_PATH}" ]; then
-    echo "--- ldd ${lib} ---"
+    echo "--- readelf ${lib} ---"
     readelf -d "${LIB_PATH}"
   else
     echo "ERROR: ${lib} not found at ${LIB_PATH}"
