@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROCM_PATH="${ROCM_PATH:-./build}"
+ROCM_PATH="$(cd "${ROCM_PATH}" && pwd)"
 
 echo "=== Media Libs Test ==="
 echo "ROCM_PATH: ${ROCM_PATH}"
