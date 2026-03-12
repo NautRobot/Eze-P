@@ -2321,6 +2321,7 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
 
     comm->enableRocshmem = rcclParamRocshmemEnabled();
     comm->rocshmemThreshold = rcclParamRocshmemThreshold();
+    if (comm->proxyState) comm->proxyState->rocshmemEnabled = true;
     comm->numSymBuf = NUM_SYM_BUF;
     comm->symId = 0;
     comm->bufThreshold = rocshmemHeapSize/2;
