@@ -96,6 +96,8 @@ jobs:
       ARTIFACT_RUN_ID: ${{ github.run_id }}
       OUTPUT_ARTIFACTS_DIR: "./build"
       AMDGPU_FAMILIES: "gfx94X-dcgpu"
+      PIP_NO_CACHE_DIR: "1"
+      PIP_ROOT_USER_ACTION: "ignore"
     steps:
       - name: Checkout TheRock repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
