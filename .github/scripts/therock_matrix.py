@@ -11,8 +11,9 @@ subtree_to_project_map = {
     "projects/hipother": "core",
     "projects/rdc": "dc_tools",
     "projects/rocdbgapi": "debug_tools",
-    "projects/rocdecode": "media-libs",
-    "projects/rocjpeg": "media-libs",
+    # media libs to be enabled - TBD: Currently blocked by driver upgrade on CI machines
+    #"projects/rocdecode": "media-libs",
+    #"projects/rocjpeg": "media-libs",
     "projects/rocm-core": "core",
     "projects/rocm-smi-lib": "core",
     "projects/rocminfo": "core",
