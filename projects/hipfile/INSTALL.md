@@ -18,18 +18,19 @@ wget https://github.com/ROCm/hipFile/releases/download/nightly/hipfile-dev_0.2.0
 sudo dpkg -i hipfile-dev_0.2.0.70200-nightly.9999.24.04_amd64.deb hipfile_0.2.0.70200-nightly.9999.24.04_amd64.deb
 ```
 
-We can verify that the HIP runtime and the amdgpu kernel module support AIS by running ais-check.
+We can verify that the HIP libraries and kernel support AIS by running ais-check.
 
 ```
 /opt/rocm/bin/ais-check
 ```
 
-Successful output from ais-check will show true for both:
+Successful output from ais-check will show True for several checks:
 
 ```
 AIS support in:
-   HIP Runtime: true
-        amdgpu: true
+        Kernel P2PDMA support   : True
+        HIP runtime             : True
+        amdgpu                  : True
 ```
 
 hipFile currently works on local NVMe disks. To set up a new NVMe device we can partition it, create a filesystem on the partition, and mount it. Below we use the device `/dev/nvme1n1`. Make sure you use the correct device in your system.
