@@ -12,7 +12,38 @@ If components are missing the program exits with a non-zero exit code.
 import argparse
 import ctypes
 import ctypes.util
+import gzip
+import os
 import sys
+
+
+def kernel_supports_p2pdma():
+    """
+    Check for P2P DMA support in the kernel
+    """
+
+    kr = os.uname().release
+    configs_found = False
+
+    for path, opener in [
+        (f"/boot/config-{kr}", open),
+        (f"/lib/modules/{kr}/build/.config", open),
+        ("/proc/config.gz", gzip.open),
+    ]:
+        try:
+            with opener(path, "rt") as f:
+                configs_found = True
+                for line in f:
+                    if line.startswith("CONFIG_PCI_P2PDMA=y") or line.startswith(
+                        "CONFIG_PCI_P2PDMA=m"
+                    ):
+                        return True
+        except OSError:
+            continue
+
+    if not configs_found:
+        print("No kernel config files found!", file=sys.stderr)
+    return False
 
 
 def hip_runtime_supports_ais():
@@ -102,8 +133,8 @@ def amdgpu_supports_ais():
 
 def main():
     """
-    Parse command-line arguments, check AIS support in HIP Runtime and
-    amdgpu, optionally print the results, and return an exit code indicating
+    Parse command-line arguments, check AIS support in kernel/libraries,
+    optionally print the results, and return an exit code indicating
     whether all required components support AIS.
     """
 
@@ -114,14 +145,20 @@ def main():
     args = parser.parse_args()
 
     component_support = [
-        ("HIP Runtime", hip_runtime_supports_ais()),
+        ("Kernel P2PDMA support", kernel_supports_p2pdma()),
+        ("HIP runtime", hip_runtime_supports_ais()),
         ("amdgpu", amdgpu_supports_ais()),
     ]
 
     if not args.quiet:
+        u = os.uname()
+        print()
+        print(u.sysname, u.nodename, u.release, u.version, u.machine)
+        print()
+
         print("AIS support in:")
         for name, supported in component_support:
-            print(f"  {name:>12}: {'true' if supported else 'false'}")
+            print(f"\t{name:<24}: {supported}")
 
     return int(not all(supported for (_, supported) in component_support))
 
