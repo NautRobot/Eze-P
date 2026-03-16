@@ -81,9 +81,11 @@ If CMake can't find hipcc/nvcc, you can set `-DCMAKE_HIP_COMPILER=<path>`
 
 Supported platforms: Linux (Windows may be supported in a future release)
 
-Supported filesystems: Only ext4 is supported at this time
+Supported filesystems: Only ext4 and xfs are supported at this time. ext4 must be mounted with the default data=ordered mount option.
 
 Targeting NVIDIA requires cuFile to be installed
+
+The kernel must have `CONFIG_PCI_P2PDMA` enabled
 
 Multipath NVMe devices are not supported at this time. If you are using a multipath-supporting device, you may need to disable multipath in the nvme\_core kernel driver. On Ubuntu 24.04, this can be done by running the following:
 
@@ -95,8 +97,24 @@ sudo systemctl reboot
 
 ### Prerequisites
 
-> [!NOTE]
-> hipFile relies on the unreleased [ROCm 7.2](https://github.com/ROCm/TheRock) libraries and associated [amdgpu](https://github.com/ROCm/amdgpu) drivers. We will update the install instructions when these are released.
+#### Build Tools
+* CMake >= 3.21
+* C++ >= 17 (tested w/ clang++ & g++, we don't use GNU extensions)
+* The `ais-check` script requires Python 3.x
+
+#### AMD Components
+* ROCm >= 7.2
+    * `hip-dev` (Debian/Ubuntu)
+    * `hip-devel` (RHEL/Fedora/openSUSE)
+* amdgpu-dkms >= 30.20.1
+
+#### Other Packages
+* Boost.Program\_options
+    * `libboost-program-options-dev` (Debian/Ubuntu)
+    * `libboost-program-options-devel` (RHEL/Fedora/openSUSE)
+* libmount
+    * `libmount-dev` (Debian/Ubuntu)
+    * `libmount-devel` (RHEL/Fedora/openSUSE)
 
 ### Configure
 
