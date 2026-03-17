@@ -116,9 +116,9 @@ static bool rcclUseHierarchicalAllGather(struct ncclComm* comm, size_t msgSize) 
 
   size_t threshold = 0;
   if (comm->nNodes >= 16) {
-    threshold = (size_t)128 * 1024 * 1024;
+    threshold = HIERARCHICAL_AG_TEMP_BUFFER_SIZE;
   } else if (comm->nNodes >= 8) {
-    threshold = (size_t)64 * 1024 * 1024;
+    threshold = HIERARCHICAL_AG_TEMP_BUFFER_SIZE / 2;
   }
 
   return threshold > 0 && msgSize <= threshold;
@@ -175,6 +175,7 @@ static ncclResult_t ncclHierarchicalAllGather_Impl(const void* sendbuff, void* r
   int threadsPerBlock = 1024;
   hierarchicalAGShuffle<<<numBlocks, threadsPerBlock, 0, stream>>>(
     (const char*)tempBuffer, (char*)recvbuff, rankOffset, nNodes, localRanks);
+  CUDACHECK(hipGetLastError());
 
   return ncclSuccess;
 }

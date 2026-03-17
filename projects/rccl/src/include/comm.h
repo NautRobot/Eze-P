@@ -556,6 +556,9 @@ struct ncclComm {
   // Hierarchical AG temporary buffers
   void* hierarchicalAGTempBuffer;
 
+  // Force PAT algorithm for this communicator
+  bool forcePatEnable;
+
   // MNNVL: Multi-Node NVLink
   int MNNVL; // true when MNNVL is available
   struct cliqueInfo clique; // Our MNNVL clique information

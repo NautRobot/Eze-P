@@ -738,6 +738,8 @@ static ncclResult_t commAlloc(struct ncclComm* comm, struct ncclComm* parent, in
   comm->hierarchicalInterComm = nullptr;
   comm->hierarchicalCommsInitialized = false;
   comm->hierarchicalAGTempBuffer = nullptr;
+  // Enable PAT for interComm hierarchical AG
+  comm->forcePatEnable = (parent != nullptr) ? parent->forcePatEnable : false;
 
   NCCLCHECK(ncclNetInit(comm));
   INFO(NCCL_INIT, "Using network %s", comm->ncclNet->name);
@@ -2401,8 +2403,11 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
     int node_id = comm->rankToNode[comm->rank];
     int local_rank = comm->rankToLocalRank[comm->rank];
     NCCLCHECKGOTO(ncclCommSplit(comm, node_id, local_rank, &comm->hierarchicalIntraComm, NULL), res, fail);
+    comm->forcePatEnable = true;
     NCCLCHECKGOTO(ncclCommSplit(comm, local_rank, node_id, &comm->hierarchicalInterComm, NULL), res, fail);
-    NCCLCHECKGOTO(ncclCudaMalloc(&(comm->hierarchicalAGTempBuffer), HIERARCHICAL_AG_TEMP_BUFFER_SIZE), res, fail);
+    comm->forcePatEnable = false;
+    size_t tempBufSize = (comm->nNodes >= 16) ? HIERARCHICAL_AG_TEMP_BUFFER_SIZE : HIERARCHICAL_AG_TEMP_BUFFER_SIZE / 2;
+    NCCLCHECKGOTO(ncclCudaMalloc(&(comm->hierarchicalAGTempBuffer), tempBufSize), res, fail);
     comm->hierarchicalCommsInitialized = true;
     INFO(NCCL_INIT, "Hierarchical AllGather: intraComm (nRanks=%d) and interComm (nRanks=%d) Initialized",
       comm->hierarchicalIntraComm->nRanks, comm->hierarchicalInterComm->nRanks);
