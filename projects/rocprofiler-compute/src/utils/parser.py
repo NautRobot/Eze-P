@@ -1415,7 +1415,7 @@ def debug_evaluate_metrics(
         _max_debug_rows = 5
         seen: set[tuple[str, str]] = set()
         # Collect (label, column_data) and compute global width for right-align
-        rows_to_print: list[tuple[str, list[Any] | None]] = []
+        rows_to_print: list[tuple[str, Optional[list[Any]]]] = []
         global_width = 0
         for table_key, col_name in matched_cols:
             if (table_key, col_name) in seen:
