@@ -9,13 +9,13 @@
 #include "test-options.h"
 #include "test-shared-fixtures.h"
 
-#include <errno.h>
+#include <cerrno>
+#include <climits>
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <hip/hip_runtime_api.h>
-#include <limits.h>
-#include <stdint.h>
 #include <thread>
-#include <time.h>
+#include <time.h> // Do NOT convert to <ctime> as that is not guaranteed to have `struct timespec`
 #include <vector>
 
 #ifdef __HIP_PLATFORM_NVIDIA__
