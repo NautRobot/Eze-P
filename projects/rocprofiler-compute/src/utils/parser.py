@@ -1425,9 +1425,7 @@ def debug_evaluate_metrics(
                 if isinstance(raw_pmc_df, dict) and table_key in raw_pmc_df:
                     series = raw_pmc_df[table_key][col_name]
                     column_data = (
-                        series.tolist()
-                        if hasattr(series, "tolist")
-                        else list(series)
+                        series.tolist() if hasattr(series, "tolist") else list(series)
                     )
                 elif isinstance(raw_pmc_df, pd.DataFrame):
                     columns = raw_pmc_df.columns
@@ -1467,9 +1465,7 @@ def debug_evaluate_metrics(
             if column_data is not None:
                 n = len(column_data)
                 display_data = column_data[:_max_debug_rows]
-                formatted = ", ".join(
-                    str(v).rjust(global_width) for v in display_data
-                )
+                formatted = ", ".join(str(v).rjust(global_width) for v in display_data)
                 if n > _max_debug_rows:
                     formatted += ", ..."
                 print(f"  {label}: [{formatted}]")
