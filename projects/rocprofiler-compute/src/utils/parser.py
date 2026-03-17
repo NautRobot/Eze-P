@@ -1379,16 +1379,22 @@ def debug_evaluate_metrics(
     print(f"{expr} = {row_expr}")
     print("Inputs:")
 
-    # Show matched variables
+    # Show global $xxx variables used in the expression (stored as ammolite__xxx)
     matched_vars = re.findall(r"ammolite__\w+", row_expr)
+    seen_vars: set[str] = set()
     if matched_vars:
-        for vars in matched_vars:
-            if vars in metric_evaluator.sys_vars:
-                print(f"Var {vars}: {metric_evaluator.sys_vars[vars]}")
-            elif vars in metric_evaluator.empirical_peaks:
-                print(f"Var {vars}: {metric_evaluator.empirical_peaks[vars]}")
+        for var_key in matched_vars:
+            if var_key in seen_vars:
+                continue
+            seen_vars.add(var_key)
+            # Display as $varname (strip ammolite__ prefix) to match config globals
+            dollar_name = f"${var_key.replace('ammolite__', '', 1)}"
+            if var_key in metric_evaluator.sys_vars:
+                print(f"  {dollar_name}: {metric_evaluator.sys_vars[var_key]}")
+            elif var_key in metric_evaluator.empirical_peaks:
+                print(f"  {dollar_name}: {metric_evaluator.empirical_peaks[var_key]}")
             else:
-                print(f"Var {vars}: [not found]")
+                print(f"  {dollar_name}: [not found]")
 
     # Show matched columns (support both single and double quotes in expression)
     matched_cols = re.findall(
