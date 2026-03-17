@@ -1417,18 +1417,23 @@ def debug_evaluate_metrics(
                     series.tolist() if hasattr(series, "tolist") else list(series)
                 )
             elif isinstance(raw_pmc_df, pd.DataFrame):
-                if table_key in raw_pmc_df.columns.get_level_values(0):
-                    series = raw_pmc_df[table_key][col_name]
-                    column_data = (
-                        series.tolist() if hasattr(series, "tolist") else list(series)
-                    )
-                elif col_name in raw_pmc_df.columns:
+                columns = raw_pmc_df.columns
+                column_data = None
+                # Handle MultiIndex columns by matching on the top-level table key
+                if isinstance(columns, pd.MultiIndex):
+                    if table_key in columns.get_level_values(0):
+                        series = raw_pmc_df[table_key][col_name]
+                        column_data = (
+                            series.tolist()
+                            if hasattr(series, "tolist")
+                            else list(series)
+                        )
+                # Fallback for flat (single-level) columns
+                if column_data is None and col_name in columns:
                     series = raw_pmc_df[col_name]
                     column_data = (
                         series.tolist() if hasattr(series, "tolist") else list(series)
                     )
-                else:
-                    column_data = None
             else:
                 column_data = None
             label = f"raw_pmc_df['{table_key}']['{col_name}']"
