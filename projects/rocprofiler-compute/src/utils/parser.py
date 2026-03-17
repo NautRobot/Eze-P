@@ -1236,7 +1236,7 @@ def eval_metric(
     metric_evaluator = MetricEvaluator(raw_pmc_df, sys_vars, empirical_peaks)
 
     exprs_to_eval = []
-    debugged_rows: set[tuple[int, Any]] = set()  # (df_id, row_id) already printed
+    debugged_rows: set[tuple[Any, Any, str]] = set()  # (df_id, row_id, expr) already printed
 
     # Hmmm... apply + lambda should just work
     # df['Value'] = df['Value'].apply(
@@ -1252,8 +1252,8 @@ def eval_metric(
                         if row[expr]:
                             exprs_to_eval.append((df_id, row_id, expr, row[expr]))
 
-                            if debug and (df_id, row_id) not in debugged_rows:
-                                debugged_rows.add((df_id, row_id))
+                            if debug and (df_id, row_id, expr) not in debugged_rows:
+                                debugged_rows.add((df_id, row_id, expr))
                                 debug_evaluate_metrics(
                                     expr, row[expr], metric_evaluator, raw_pmc_df
                                 )
