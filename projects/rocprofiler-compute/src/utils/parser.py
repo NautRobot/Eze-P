@@ -1236,7 +1236,7 @@ def eval_metric(
     metric_evaluator = MetricEvaluator(raw_pmc_df, sys_vars, empirical_peaks)
 
     exprs_to_eval = []
-    debugged_rows: set[tuple[Any, Any, str]] = set()  # (df_id, row_id, expr) already printed
+    debugged_rows: set[tuple[int, Any]] = set()  # (df_id, row_id) already printed
 
     # Hmmm... apply + lambda should just work
     # df['Value'] = df['Value'].apply(
@@ -1252,10 +1252,16 @@ def eval_metric(
                         if row[expr]:
                             exprs_to_eval.append((df_id, row_id, expr, row[expr]))
 
-                            if debug and (df_id, row_id, expr) not in debugged_rows:
-                                debugged_rows.add((df_id, row_id, expr))
+                            if debug:
+                                show_inputs = (df_id, row_id) not in debugged_rows
+                                if show_inputs:
+                                    debugged_rows.add((df_id, row_id))
                                 debug_evaluate_metrics(
-                                    expr, row[expr], metric_evaluator, raw_pmc_df
+                                    expr,
+                                    row[expr],
+                                    metric_evaluator,
+                                    raw_pmc_df,
+                                    show_inputs=show_inputs,
                                 )
                         else:
                             # If not insert nan, the whole col might be treated
@@ -1373,91 +1379,104 @@ def debug_evaluate_metrics(
     row_expr: str,
     metric_evaluator: MetricEvaluator,
     raw_pmc_df: Union[pd.DataFrame, dict],
+    *,
+    show_inputs: bool = True,
 ) -> None:
     """Debug helper for expression evaluation."""
     print("~" * 40 + "\nExpression:")
     print(f"{expr} = {row_expr}")
+
     print("Inputs:")
+    if show_inputs:
+        # Show global $xxx variables used in the expression (stored as ammolite__xxx)
+        matched_vars = re.findall(r"ammolite__\w+", row_expr)
+        seen_vars: set[str] = set()
+        if matched_vars:
+            for var_key in matched_vars:
+                if var_key in seen_vars:
+                    continue
+                seen_vars.add(var_key)
+                # Display as $varname (strip ammolite__ prefix) to match config globals
+                dollar_name = f"${var_key.replace('ammolite__', '', 1)}"
+                if var_key in metric_evaluator.sys_vars:
+                    print(f"  {dollar_name}: {metric_evaluator.sys_vars[var_key]}")
+                elif var_key in metric_evaluator.empirical_peaks:
+                    print(
+                        f"  {dollar_name}: {metric_evaluator.empirical_peaks[var_key]}"
+                    )
+                else:
+                    print(f"  {dollar_name}: [not found]")
 
-    # Show global $xxx variables used in the expression (stored as ammolite__xxx)
-    matched_vars = re.findall(r"ammolite__\w+", row_expr)
-    seen_vars: set[str] = set()
-    if matched_vars:
-        for var_key in matched_vars:
-            if var_key in seen_vars:
+        # Show matched columns (support both single and double quotes in expression)
+        matched_cols = re.findall(
+            r"raw_pmc_df\[[\"'](\w+)[\"']\]\[[\"'](\w+)[\"']\]", row_expr
+        )
+        # Deduplicate while preserving order (same counter may appear multiple times)
+        _max_debug_rows = 5
+        seen: set[tuple[str, str]] = set()
+        # Collect (label, column_data) and compute global width for right-align
+        rows_to_print: list[tuple[str, list[Any] | None]] = []
+        global_width = 0
+        for table_key, col_name in matched_cols:
+            if (table_key, col_name) in seen:
                 continue
-            seen_vars.add(var_key)
-            # Display as $varname (strip ammolite__ prefix) to match config globals
-            dollar_name = f"${var_key.replace('ammolite__', '', 1)}"
-            if var_key in metric_evaluator.sys_vars:
-                print(f"  {dollar_name}: {metric_evaluator.sys_vars[var_key]}")
-            elif var_key in metric_evaluator.empirical_peaks:
-                print(f"  {dollar_name}: {metric_evaluator.empirical_peaks[var_key]}")
-            else:
-                print(f"  {dollar_name}: [not found]")
-
-    # Show matched columns (support both single and double quotes in expression)
-    matched_cols = re.findall(
-        r"raw_pmc_df\[[\"'](\w+)[\"']\]\[[\"'](\w+)[\"']\]", row_expr
-    )
-    # Deduplicate while preserving order (same counter may appear multiple times)
-    _max_debug_rows = 5
-    seen: set[tuple[str, str]] = set()
-    # Collect (label, column_data) and compute global width for right-align
-    rows_to_print: list[tuple[str, list[Any] | None]] = []
-    global_width = 0
-    for table_key, col_name in matched_cols:
-        if (table_key, col_name) in seen:
-            continue
-        seen.add((table_key, col_name))
-        try:
-            if isinstance(raw_pmc_df, dict) and table_key in raw_pmc_df:
-                series = raw_pmc_df[table_key][col_name]
-                column_data = (
-                    series.tolist() if hasattr(series, "tolist") else list(series)
-                )
-            elif isinstance(raw_pmc_df, pd.DataFrame):
-                columns = raw_pmc_df.columns
-                column_data = None
-                # Handle MultiIndex columns by matching on the top-level table key
-                if isinstance(columns, pd.MultiIndex):
-                    if table_key in columns.get_level_values(0):
-                        series = raw_pmc_df[table_key][col_name]
+            seen.add((table_key, col_name))
+            try:
+                if isinstance(raw_pmc_df, dict) and table_key in raw_pmc_df:
+                    series = raw_pmc_df[table_key][col_name]
+                    column_data = (
+                        series.tolist()
+                        if hasattr(series, "tolist")
+                        else list(series)
+                    )
+                elif isinstance(raw_pmc_df, pd.DataFrame):
+                    columns = raw_pmc_df.columns
+                    column_data = None
+                    # Handle MultiIndex columns by matching on the top-level table key
+                    if isinstance(columns, pd.MultiIndex):
+                        if table_key in columns.get_level_values(0):
+                            series = raw_pmc_df[table_key][col_name]
+                            column_data = (
+                                series.tolist()
+                                if hasattr(series, "tolist")
+                                else list(series)
+                            )
+                    # Fallback for flat (single-level) columns
+                    if column_data is None and col_name in columns:
+                        series = raw_pmc_df[col_name]
                         column_data = (
                             series.tolist()
                             if hasattr(series, "tolist")
                             else list(series)
                         )
-                # Fallback for flat (single-level) columns
-                if column_data is None and col_name in columns:
-                    series = raw_pmc_df[col_name]
-                    column_data = (
-                        series.tolist() if hasattr(series, "tolist") else list(series)
+                else:
+                    column_data = None
+                label = f"raw_pmc_df['{table_key}']['{col_name}']"
+                rows_to_print.append((label, column_data))
+                if column_data is not None:
+                    display = column_data[:_max_debug_rows]
+                    global_width = max(
+                        global_width,
+                        max((len(str(v)) for v in display), default=0),
                     )
-            else:
-                column_data = None
-            label = f"raw_pmc_df['{table_key}']['{col_name}']"
-            rows_to_print.append((label, column_data))
-            if column_data is not None:
-                display = column_data[:_max_debug_rows]
-                global_width = max(
-                    global_width,
-                    max((len(str(v)) for v in display), default=0),
+            except (KeyError, TypeError) as e:
+                console_warning(
+                    f"Skipping entry for '{table_key}'['{col_name}']. Encountered: {e}"
                 )
-        except (KeyError, TypeError) as e:
-            console_warning(
-                f"Skipping entry for '{table_key}'['{col_name}']. Encountered: {e}"
-            )
-    for label, column_data in rows_to_print:
-        if column_data is not None:
-            n = len(column_data)
-            display_data = column_data[:_max_debug_rows]
-            formatted = ", ".join(str(v).rjust(global_width) for v in display_data)
-            if n > _max_debug_rows:
-                formatted += ", ..."
-            print(f"  {label}: [{formatted}]")
-        else:
-            print(f"  {label}: [unknown type]")
+        for label, column_data in rows_to_print:
+            if column_data is not None:
+                n = len(column_data)
+                display_data = column_data[:_max_debug_rows]
+                formatted = ", ".join(
+                    str(v).rjust(global_width) for v in display_data
+                )
+                if n > _max_debug_rows:
+                    formatted += ", ..."
+                print(f"  {label}: [{formatted}]")
+            else:
+                print(f"  {label}: [unknown type]")
+    else:
+        print("  The same as above.")
 
     print("\nOutput:", end=" ")
     try:
