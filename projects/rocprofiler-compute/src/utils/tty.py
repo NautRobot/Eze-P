@@ -614,8 +614,7 @@ def format_table_output(
         and "Value" in df.columns
     ):
         mem_data = (
-            pd
-            .DataFrame([df["Metric"], df["Value"]])
+            pd.DataFrame([df["Metric"], df["Value"]])
             .transpose()
             .set_index("Metric")
             .to_dict()["Value"]
