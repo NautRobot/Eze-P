@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from utils import schema
+from utils.debug_row_tracker import DebugRowTracker
 from utils.logger import console_debug, console_error, console_warning, demarcate
 from utils.pattern_matching import PatternMatcherEngine
 from utils.specs import MachineSpecs
@@ -744,8 +745,7 @@ def gen_counter_list(formula: str) -> tuple[bool, list[str]]:
         return visited, counters
     try:
         tree = ast.parse(
-            formula
-            .replace("$normUnit", "SQ_WAVES")
+            formula.replace("$normUnit", "SQ_WAVES")
             .replace("$denom", "SQ_WAVES")
             .replace(
                 "$numActiveCUs",
@@ -1379,21 +1379,6 @@ def validate_dual_issue_metrics(
 # ------------------------------------------------------------------------------
 
 _MAX_DEBUG_ROWS = 5
-
-
-class DebugRowTracker:
-    """Tracks which (df_id, row_id) pairs have already been debugged."""
-
-    def __init__(self) -> None:
-        self._debugged_rows: set[tuple[int, Any]] = set()
-
-    def should_show_inputs(self, df_id: int, row_id: Any) -> bool:
-        """Check if this row's inputs should be displayed and mark it as seen."""
-        key = (df_id, row_id)
-        if key in self._debugged_rows:
-            return False
-        self._debugged_rows.add(key)
-        return True
 
 
 def _print_debug_global_vars(row_expr: str, metric_evaluator: MetricEvaluator) -> None:
@@ -2066,8 +2051,7 @@ def load_pc_sampling_data(
 
         # Group by Instruction_Comment and aggregate
         grouped_counts = (
-            merged_df
-            .groupby("Instruction_Comment")
+            merged_df.groupby("Instruction_Comment")
             .agg(
                 count=("Instruction_Comment", "count"),
                 instruction=("Instruction", "first"),
