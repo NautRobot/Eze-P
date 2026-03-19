@@ -216,20 +216,20 @@ ncclResult_t ncclAllGather_impl(const void* sendbuff, void* recvbuff, size_t sen
     return ncclHierarchicalAllGather_Impl(sendbuff, recvbuff, sendcount, datatype, comm, stream);
   }
 
-  if (rcclUseAllGatherDirect(comm, msgSize)) {
-    INFO(NCCL_INIT, "RCCL DIRECT ALLGATHER count = %zu, msgSize = %zu, comm = %p, stream = %p, rank = %d, sendbuff = %p, recvbuff = %p",
-		    sendcount, msgSize, comm, stream, rank, sendbuff, recvbuff);
-    // use direct allgather
-    if (sendcount == 0) return ncclSuccess;
-    size_t rankOffset = sendcount * ncclTypeSize(datatype);
-    if (sendbuff == (((char*)recvbuff) + rank * rankOffset)) {
-      srcBuf = ((char*)recvbuff) + rank * rankOffset;
-      dstBuf = recvbuff;
-      in_place = 1;
-    } else {
-      srcBuf = sendbuff;
-      dstBuf = recvbuff;
-    }
+  if (rcclUseAllGatherDirect(comm, msgSize) && ncclGroupDepth == 0) {
+     INFO(NCCL_INIT, "RCCL DIRECT ALLGATHER count = %zu, msgSize = %zu, comm = %p, stream = %p, rank = %d, sendbuff = %p, recvbuff = %p",
+		     sendcount, msgSize, comm, stream, rank, sendbuff, recvbuff);
+     // use direct allgather (only when not in a group; in-group use Ring so ncclGroupSimulateEnd gets estimatedTime)
+     if (sendcount == 0) return ncclSuccess;
+     size_t rankOffset = sendcount * ncclTypeSize(datatype);
+     if (sendbuff == (((char*)recvbuff) + rank * rankOffset)) {
+        srcBuf = ((char*)recvbuff) + rank * rankOffset;
+        dstBuf = recvbuff;
+        in_place = 1;
+     } else {
+        srcBuf = sendbuff;
+        dstBuf = recvbuff;
+     }
 
     NCCLCHECK(rcclDirectAllGather(srcBuf, dstBuf, sendcount, datatype, in_place, comm, stream));
     return ncclSuccess;
