@@ -67,6 +67,9 @@ size_t amd_dbgapi_get_build_id();
 #include <cmath>
 #include <cstdint>
 #include <tuple>
+#include <array>
+#include <utility>
+#include <type_traits>
 #else
 #include <math.h>
 #include <stdint.h>

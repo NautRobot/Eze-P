@@ -10,6 +10,7 @@
 #if defined(__cplusplus)
 #include <tuple>
 #include <type_traits>
+#include <array>
 #endif
 /** @addtogroup Execution Execution Control
  *  @{
