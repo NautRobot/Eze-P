@@ -173,26 +173,10 @@ class GraphKernelArgManager : public amd::ReferenceCountedObject,
 };
 
 class GraphNode : public hipGraphNodeDOTAttribute {
- public:
-  GraphNode(hipGraphNodeType type, const char* style = "", const char* shape = "",
-            const char* label = "")
-      : type_(type),
-        visited_(false),
-        inDegree_(0),
-        outDegree_(0),
-        id_(nextID++),
-        parentGraph_(nullptr),
-        isEnabled_(1),
-        dev_id_(ihipGetDevice()),
-        hipGraphNodeDOTAttribute(style, shape, label) {
-    amd::ScopedLock lock(nodeSetLock_);
-    nodeSet_.insert(this);
-  }
-  /// Copy Constructor
+ protected:
+  /// Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
   GraphNode(const GraphNode& node) : hipGraphNodeDOTAttribute(node) {
     type_ = node.type_;
-    inDegree_ = node.inDegree_;
-    outDegree_ = node.outDegree_;
     visited_ = false;
     id_ = node.id_;
     parentGraph_ = nullptr;
@@ -200,6 +184,20 @@ class GraphNode : public hipGraphNodeDOTAttribute {
     nodeSet_.insert(this);
     isEnabled_ = node.isEnabled_;
     dev_id_ = ihipGetDevice();
+  }
+
+ public:
+  GraphNode(hipGraphNodeType type, const char* style = "", const char* shape = "",
+            const char* label = "")
+      : type_(type),
+        visited_(false),
+        id_(nextID++),
+        parentGraph_(nullptr),
+        isEnabled_(1),
+        dev_id_(ihipGetDevice()),
+        hipGraphNodeDOTAttribute(style, shape, label) {
+    amd::ScopedLock lock(nodeSetLock_);
+    nodeSet_.insert(this);
   }
 
   virtual ~GraphNode() {
@@ -295,13 +293,9 @@ class GraphNode : public hipGraphNodeDOTAttribute {
   /// Clone graph node
   virtual GraphNode* clone() const = 0;
   /// Returns graph node indegree
-  size_t GetInDegree() const { return inDegree_; }
-  /// Updates indegree of the node
-  void SetInDegree(size_t inDegree) { inDegree_ = inDegree; }
+  size_t GetInDegree() const { return dependencies_.size(); }
   /// Returns graph node outdegree
-  size_t GetOutDegree() const { return outDegree_; }
-  ///  Updates outdegree of the node
-  void SetOutDegree(size_t outDegree) { outDegree_ = outDegree; }
+  size_t GetOutDegree() const { return edges_.size(); }
   /// Returns graph node dependencies
   const std::vector<Node>& GetDependencies() const { return dependencies_; }
   /// Update graph node dependecies
@@ -314,21 +308,17 @@ class GraphNode : public hipGraphNodeDOTAttribute {
   /// Add graph node dependency
   void AddDependency(const Node& node) {
     dependencies_.push_back(node);
-    inDegree_++;
   }
   /// Remove graph node dependency
   void RemoveDependency(const Node& node) {
     dependencies_.erase(std::remove(dependencies_.begin(), dependencies_.end(), node),
                         dependencies_.end());
-    inDegree_--;
   }
   void RemoveEdge(const Node& childNode) {
     edges_.erase(std::remove(edges_.begin(), edges_.end(), childNode), edges_.end());
-    outDegree_--;
   }
   void AddEdge(const Node& childNode) {
     edges_.push_back(childNode);
-    outDegree_++;
   }
   /// Add edge, update parent node outdegree, child node indegree and dependency
   void AddEdgeDep(const Node& childNode) {
@@ -345,7 +335,6 @@ class GraphNode : public hipGraphNodeDOTAttribute {
       return false;
     }
     edges_.erase(it, edges_.end());
-    outDegree_--;
     childNode->RemoveDependency(this);
     return true;
   }
@@ -471,8 +460,6 @@ class GraphNode : public hipGraphNodeDOTAttribute {
   std::vector<Node> edges_;
   std::vector<Node> dependencies_;
   bool visited_;
-  size_t inDegree_;         //!< count of in coming edges (@todo: remove, it's dependencies_.size())
-  size_t outDegree_;        //!< count of outgoing edges (@todo: remove, it's edges_.size())
   int32_t stream_id_ = -1;  //! Stream ID on which this node will be executed
   int hw_queue_id_ = -1; //! Hardware queue ID on which this node will be executed
   int32_t segment_id_ = -1;  //! Segment ID on which this node will be executed
@@ -2461,13 +2448,14 @@ class GraphMemsetNode : public GraphNode {
 class GraphEventRecordNode : public GraphNode {
   hipEvent_t event_;
 
+ protected:
+  GraphEventRecordNode(const GraphEventRecordNode& rhs) : GraphNode(rhs) { event_ = rhs.event_; }
+
  public:
   GraphEventRecordNode(hipEvent_t event)
       : GraphNode(hipGraphNodeTypeEventRecord, "solid", "rectangle", "EVENT_RECORD"),
         event_(event) {}
   ~GraphEventRecordNode() {}
-
-  GraphEventRecordNode(const GraphEventRecordNode& rhs) : GraphNode(rhs) { event_ = rhs.event_; }
 
   GraphNode* clone() const override { return new GraphEventRecordNode(*this); }
 
@@ -2513,16 +2501,17 @@ class GraphEventRecordNode : public GraphNode {
 class GraphHostNode : public GraphNode {
   hipHostNodeParams NodeParams_;
 
+ protected:
+  GraphHostNode(const GraphHostNode& hostNode) : GraphNode(hostNode) {
+    NodeParams_ = hostNode.NodeParams_;
+  }
+
  public:
   GraphHostNode(const hipHostNodeParams* NodeParams)
       : GraphNode(hipGraphNodeTypeHost, "solid", "rectangle", "HOST") {
     NodeParams_ = *NodeParams;
   }
   ~GraphHostNode() {}
-
-  GraphHostNode(const GraphHostNode& hostNode) : GraphNode(hostNode) {
-    NodeParams_ = hostNode.NodeParams_;
-  }
 
   GraphNode* clone() const override { return new GraphHostNode(*this); }
 
@@ -2587,6 +2576,9 @@ class GraphHostNode : public GraphNode {
 
 // ================================================================================================
 class GraphEmptyNode : public GraphNode {
+ protected:
+  GraphEmptyNode(const GraphEmptyNode& emptyNode) = default;
+
  public:
   GraphEmptyNode() : GraphNode(hipGraphNodeTypeEmpty, "solid", "rectangle", "EMPTY") {}
   ~GraphEmptyNode() {}
@@ -2672,12 +2664,7 @@ class GraphMemAllocNode final : public GraphNode {
     Graph* graph_;     // Graph which allocates/maps memory
   };
 
- public:
-  GraphMemAllocNode(const hipMemAllocNodeParams* node_params)
-      : GraphNode(hipGraphNodeTypeMemAlloc, "solid", "rectangle", "MEM_ALLOC") {
-    node_params_ = *node_params;
-  }
-
+ protected:
   GraphMemAllocNode(const GraphMemAllocNode& rhs) : GraphNode(rhs) {
     node_params_ = rhs.node_params_;
     if (HIP_MEM_POOL_USE_VM) {
@@ -2685,6 +2672,12 @@ class GraphMemAllocNode final : public GraphNode {
       va_ = rhs.va_;
       va_->retain();
     }
+  }
+
+ public:
+  GraphMemAllocNode(const hipMemAllocNodeParams* node_params)
+      : GraphNode(hipGraphNodeTypeMemAlloc, "solid", "rectangle", "MEM_ALLOC") {
+    node_params_ = *node_params;
   }
 
   virtual ~GraphMemAllocNode() final {
@@ -2812,10 +2805,12 @@ class GraphMemFreeNode : public GraphNode {
     int device_id_;  // Device ID where this command is executed
   };
 
+ protected:
+  GraphMemFreeNode(const GraphMemFreeNode& rhs) : GraphNode(rhs) { device_ptr_ = rhs.device_ptr_; }
+
  public:
   GraphMemFreeNode(void* dptr)
       : GraphNode(hipGraphNodeTypeMemFree, "solid", "rectangle", "MEM_FREE"), device_ptr_(dptr) {}
-  GraphMemFreeNode(const GraphMemFreeNode& rhs) : GraphNode(rhs) { device_ptr_ = rhs.device_ptr_; }
 
   virtual GraphNode* clone() const final { return new GraphMemFreeNode(*this); }
 
@@ -2852,16 +2847,17 @@ class GraphMemFreeNode : public GraphNode {
 class GraphDrvMemcpyNode : public GraphNode {
   HIP_MEMCPY3D copyParams_;
 
+ protected:
+  GraphDrvMemcpyNode(const GraphDrvMemcpyNode& rhs) : GraphNode(rhs) {
+    copyParams_ = rhs.copyParams_;
+  }
+
  public:
   GraphDrvMemcpyNode(const HIP_MEMCPY3D* pCopyParams)
       : GraphNode(hipGraphNodeTypeMemcpy, "solid", "trapezium", "MEMCPY") {
     copyParams_ = *pCopyParams;
   }
   ~GraphDrvMemcpyNode() {}
-
-  GraphDrvMemcpyNode(const GraphDrvMemcpyNode& rhs) : GraphNode(rhs) {
-    copyParams_ = rhs.copyParams_;
-  }
 
   GraphNode* clone() const override { return new GraphDrvMemcpyNode(*this); }
 
@@ -2923,15 +2919,16 @@ class GraphDrvMemcpyNode : public GraphNode {
 class hipGraphExternalSemSignalNode : public GraphNode {
   hipExternalSemaphoreSignalNodeParams externalSemaphorNodeParam_;
 
+ protected:
+  hipGraphExternalSemSignalNode(const hipGraphExternalSemSignalNode& rhs) : GraphNode(rhs) {
+    externalSemaphorNodeParam_ = rhs.externalSemaphorNodeParam_;
+  }
+
  public:
   hipGraphExternalSemSignalNode(const hipExternalSemaphoreSignalNodeParams* pNodeParams)
       : GraphNode(hipGraphNodeTypeExtSemaphoreSignal, "solid", "rectangle",
                   "EXTERNAL_SEMAPHORE_SIGNAL") {
     externalSemaphorNodeParam_ = *pNodeParams;
-  }
-
-  hipGraphExternalSemSignalNode(const hipGraphExternalSemSignalNode& rhs) : GraphNode(rhs) {
-    externalSemaphorNodeParam_ = rhs.externalSemaphorNodeParam_;
   }
 
   ~hipGraphExternalSemSignalNode() {}
@@ -2974,6 +2971,11 @@ class hipGraphExternalSemSignalNode : public GraphNode {
 class hipGraphExternalSemWaitNode : public GraphNode {
   hipExternalSemaphoreWaitNodeParams externalSemaphorNodeParam_;
 
+ protected:
+  hipGraphExternalSemWaitNode(const hipGraphExternalSemWaitNode& rhs) : GraphNode(rhs) {
+    externalSemaphorNodeParam_ = rhs.externalSemaphorNodeParam_;
+  }
+
  public:
   hipGraphExternalSemWaitNode(const hipExternalSemaphoreWaitNodeParams* pNodeParams)
       : GraphNode(hipGraphNodeTypeExtSemaphoreWait, "solid", "rectangle",
@@ -2981,9 +2983,6 @@ class hipGraphExternalSemWaitNode : public GraphNode {
     externalSemaphorNodeParam_ = *pNodeParams;
   }
 
-  hipGraphExternalSemWaitNode(const hipGraphExternalSemWaitNode& rhs) : GraphNode(rhs) {
-    externalSemaphorNodeParam_ = rhs.externalSemaphorNodeParam_;
-  }
   ~hipGraphExternalSemWaitNode() {}
 
   GraphNode* clone() const override { return new hipGraphExternalSemWaitNode(*this); }
@@ -3024,14 +3023,15 @@ class hipGraphExternalSemWaitNode : public GraphNode {
 class hipGraphBatchMemOpNode : public GraphNode {
   hipBatchMemOpNodeParams batchMemOpNodeParam_;
 
+ protected:
+  hipGraphBatchMemOpNode(const hipGraphBatchMemOpNode& rhs) : GraphNode(rhs) {
+    batchMemOpNodeParam_ = rhs.batchMemOpNodeParam_;
+  }
+
  public:
   hipGraphBatchMemOpNode(const hipBatchMemOpNodeParams* pNodeParams)
       : GraphNode(hipGraphNodeTypeBatchMemOp, "solid", "rectangle", "BATCH_MEM_OP_NODE") {
     batchMemOpNodeParam_ = *pNodeParams;
-  }
-
-  hipGraphBatchMemOpNode(const hipGraphBatchMemOpNode& rhs) : GraphNode(rhs) {
-    batchMemOpNodeParam_ = rhs.batchMemOpNodeParam_;
   }
   ~hipGraphBatchMemOpNode() {}
 
