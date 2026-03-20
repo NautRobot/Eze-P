@@ -186,6 +186,9 @@ class GraphNode : public hipGraphNodeDOTAttribute {
     dev_id_ = ihipGetDevice();
   }
 
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphNode& operator=(const GraphNode&) = delete;
+
  public:
   GraphNode(hipGraphNodeType type, const char* style = "", const char* shape = "",
             const char* label = "")
@@ -484,13 +487,18 @@ class GraphNode : public hipGraphNodeDOTAttribute {
 class GraphEventWaitNode : public GraphNode {
   hipEvent_t event_;
 
+ protected:
+  /// Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  GraphEventWaitNode(const GraphEventWaitNode& rhs) : GraphNode(rhs) { event_ = rhs.event_; }
+
  public:
   GraphEventWaitNode(hipEvent_t event)
       : GraphNode(hipGraphNodeTypeWaitEvent, "solid", "rectangle", "EVENT_WAIT"), event_(event) {}
 
   ~GraphEventWaitNode() {}
 
-  GraphEventWaitNode(const GraphEventWaitNode& rhs) : GraphNode(rhs) { event_ = rhs.event_; }
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphEventWaitNode& operator=(const GraphEventWaitNode&) = delete;
 
   GraphNode* clone() const override { return new GraphEventWaitNode(*this); }
 
@@ -1081,16 +1089,21 @@ class GraphExec : public amd::ReferenceCountedObject, public Graph {
 };
 
 class ChildGraphNode : public GraphNode, public GraphExec {
+ protected:
+  // Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  ChildGraphNode(const ChildGraphNode& rhs) : GraphNode(rhs), GraphExec() {
+    rhs.Graph::clone(this);
+    graphCaptureStatus_ = rhs.graphCaptureStatus_;
+  }
+
  public:
   ChildGraphNode(Graph* g) : GraphNode(hipGraphNodeTypeGraph, "solid", "rectangle"), GraphExec() {
     g->clone(this);
     graphCaptureStatus_ = false;
   }
 
-  ChildGraphNode(const ChildGraphNode& rhs) : GraphNode(rhs), GraphExec() {
-    rhs.Graph::clone(this);
-    graphCaptureStatus_ = rhs.graphCaptureStatus_;
-  }
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  ChildGraphNode& operator=(const ChildGraphNode&) = delete;
 
   GraphNode* clone() const override { return new ChildGraphNode(*this); }
 
@@ -1184,6 +1197,27 @@ class GraphKernelNode : public GraphNode {
   int globalWorkSizeX_remainder_;
   int globalWorkSizeY_remainder_;
   int globalWorkSizeZ_remainder_;
+
+ protected:
+  // Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  GraphKernelNode(const GraphKernelNode& rhs) : GraphNode(rhs) {
+    kernelParams_ = rhs.kernelParams_;
+    kernelEvents_ = rhs.kernelEvents_;
+    coopKernel_ = rhs.coopKernel_;
+    globalWorkSizeX_remainder_ = rhs.globalWorkSizeX_remainder_;
+    globalWorkSizeY_remainder_ = rhs.globalWorkSizeY_remainder_;
+    globalWorkSizeZ_remainder_ = rhs.globalWorkSizeZ_remainder_;
+    hipError_t status = copyParams(&rhs.kernelParams_);
+    if (status != hipSuccess) {
+      ClPrint(amd::LOG_ERROR, amd::LOG_CODE, "[hipGraph] Failed to allocate memory to copy params");
+    }
+    memset(&kernelAttr_, 0, sizeof(kernelAttr_));
+    kernelAttrInUse_ = 0;
+    status = CopyAttr(&rhs);
+    if (status != hipSuccess) {
+      ClPrint(amd::LOG_ERROR, amd::LOG_CODE, "[hipGraph] Failed to during copy attrs");
+    }
+  }
 
  public:
   bool HasHiddenHeap() const { return hasHiddenHeap_; }
@@ -1427,24 +1461,8 @@ class GraphKernelNode : public GraphNode {
     }
   }
 
-  GraphKernelNode(const GraphKernelNode& rhs) : GraphNode(rhs) {
-    kernelParams_ = rhs.kernelParams_;
-    kernelEvents_ = rhs.kernelEvents_;
-    coopKernel_ = rhs.coopKernel_;
-    globalWorkSizeX_remainder_ = rhs.globalWorkSizeX_remainder_;
-    globalWorkSizeY_remainder_ = rhs.globalWorkSizeY_remainder_;
-    globalWorkSizeZ_remainder_ = rhs.globalWorkSizeZ_remainder_;
-    hipError_t status = copyParams(&rhs.kernelParams_);
-    if (status != hipSuccess) {
-      ClPrint(amd::LOG_ERROR, amd::LOG_CODE, "[hipGraph] Failed to allocate memory to copy params");
-    }
-    memset(&kernelAttr_, 0, sizeof(kernelAttr_));
-    kernelAttrInUse_ = 0;
-    status = CopyAttr(&rhs);
-    if (status != hipSuccess) {
-      ClPrint(amd::LOG_ERROR, amd::LOG_CODE, "[hipGraph] Failed to during copy attrs");
-    }
-  }
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphKernelNode& operator=(const GraphKernelNode&) = delete;
 
   GraphNode* clone() const override { return new GraphKernelNode(*this); }
 
@@ -1664,6 +1682,9 @@ class GraphMemcpyNode : public GraphNode {
  protected:
   hipMemcpy3DParms copyParams_{0};
 
+  // Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNode(const GraphMemcpyNode& rhs) : GraphNode(rhs) { copyParams_ = rhs.copyParams_; }
+
  public:
   GraphMemcpyNode(const hipMemcpy3DParms* pCopyParams)
       : GraphNode(hipGraphNodeTypeMemcpy, "solid", "trapezium", "MEMCPY") {
@@ -1673,7 +1694,8 @@ class GraphMemcpyNode : public GraphNode {
   }
   ~GraphMemcpyNode() {}
 
-  GraphMemcpyNode(const GraphMemcpyNode& rhs) : GraphNode(rhs) { copyParams_ = rhs.copyParams_; }
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNode& operator=(const GraphMemcpyNode&) = delete;
 
   GraphNode* clone() const override { return new GraphMemcpyNode(*this); }
 
@@ -1831,6 +1853,15 @@ class GraphMemcpyNode1D : public GraphMemcpyNode {
   size_t count_;
   hipMemcpyKind kind_;
 
+  // Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNode1D(const GraphMemcpyNode1D& rhs) : GraphMemcpyNode(rhs) {
+    dst_ = rhs.dst_;
+    src_ = rhs.src_;
+    count_ = rhs.count_;
+    kind_ = rhs.kind_;
+    UpdateDevId();
+  }
+
  public:
   // When device memory is on dev1 and graph node is added from different device update the device
   // id accordingly so that node can be executed on dev1.
@@ -1872,13 +1903,8 @@ class GraphMemcpyNode1D : public GraphMemcpyNode {
 
   ~GraphMemcpyNode1D() {}
 
-  GraphMemcpyNode1D(const GraphMemcpyNode1D& rhs) : GraphMemcpyNode(rhs) {
-    dst_ = rhs.dst_;
-    src_ = rhs.src_;
-    count_ = rhs.count_;
-    kind_ = rhs.kind_;
-    UpdateDevId();
-  }
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNode1D& operator=(const GraphMemcpyNode1D&) = delete;
 
   GraphNode* clone() const override { return new GraphMemcpyNode1D(*this); }
 
@@ -2060,6 +2086,13 @@ class GraphMemcpyNodeFromSymbol : public GraphMemcpyNode1D {
   const void* symbol_;
   size_t offset_;
 
+ protected:
+  // Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNodeFromSymbol(const GraphMemcpyNodeFromSymbol& rhs) : GraphMemcpyNode1D(rhs) {
+    symbol_ = rhs.symbol_;
+    offset_ = rhs.offset_;
+  }
+
  public:
   GraphMemcpyNodeFromSymbol(void* dst, const void* symbol, size_t count, size_t offset,
                             hipMemcpyKind kind)
@@ -2069,10 +2102,8 @@ class GraphMemcpyNodeFromSymbol : public GraphMemcpyNode1D {
 
   ~GraphMemcpyNodeFromSymbol() {}
 
-  GraphMemcpyNodeFromSymbol(const GraphMemcpyNodeFromSymbol& rhs) : GraphMemcpyNode1D(rhs) {
-    symbol_ = rhs.symbol_;
-    offset_ = rhs.offset_;
-  }
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNodeFromSymbol& operator=(const GraphMemcpyNodeFromSymbol&) = delete;
 
   GraphNode* clone() const override { return new GraphMemcpyNodeFromSymbol(*this); }
 
@@ -2155,6 +2186,13 @@ class GraphMemcpyNodeToSymbol : public GraphMemcpyNode1D {
   const void* symbol_;
   size_t offset_;
 
+ protected:
+  // Copy Constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNodeToSymbol(const GraphMemcpyNodeToSymbol& rhs) : GraphMemcpyNode1D(rhs) {
+    symbol_ = rhs.symbol_;
+    offset_ = rhs.offset_;
+  }
+
  public:
   GraphMemcpyNodeToSymbol(const void* symbol, const void* src, size_t count, size_t offset,
                           hipMemcpyKind kind)
@@ -2164,10 +2202,8 @@ class GraphMemcpyNodeToSymbol : public GraphMemcpyNode1D {
 
   ~GraphMemcpyNodeToSymbol() {}
 
-  GraphMemcpyNodeToSymbol(const GraphMemcpyNodeToSymbol& rhs) : GraphMemcpyNode1D(rhs) {
-    symbol_ = rhs.symbol_;
-    offset_ = rhs.offset_;
-  }
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphMemcpyNodeToSymbol& operator=(const GraphMemcpyNodeToSymbol&) = delete;
 
   GraphNode* clone() const override { return new GraphMemcpyNodeToSymbol(*this); }
 
@@ -2255,6 +2291,15 @@ class GraphMemsetNode : public GraphNode {
   size_t arrWidth_ = 1;
   size_t arrHeight_ = 1;
 
+ protected:
+  // Copy constructor. This is protected to prevent accidental copies causing unexpected behaviors.
+  GraphMemsetNode(const GraphMemsetNode& memsetNode) : GraphNode(memsetNode) {
+    memsetParams_ = memsetNode.memsetParams_;
+    depth_ = memsetNode.depth_;
+    arrWidth_ = memsetNode.arrWidth_;
+    arrHeight_ = memsetNode.arrHeight_;
+  }
+
  public:
   GraphMemsetNode(const hipMemsetParams* pMemsetParams, size_t depth = 1, size_t arrWidth = 1,
                   size_t arrHeight = 1)
@@ -2272,13 +2317,9 @@ class GraphMemsetNode : public GraphNode {
   }
 
   ~GraphMemsetNode() {}
-  // Copy constructor
-  GraphMemsetNode(const GraphMemsetNode& memsetNode) : GraphNode(memsetNode) {
-    memsetParams_ = memsetNode.memsetParams_;
-    depth_ = memsetNode.depth_;
-    arrWidth_ = memsetNode.arrWidth_;
-    arrHeight_ = memsetNode.arrHeight_;
-  }
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphMemsetNode& operator=(const GraphMemsetNode&) = delete;
 
   GraphNode* clone() const override { return new GraphMemsetNode(*this); }
 
@@ -2449,6 +2490,7 @@ class GraphEventRecordNode : public GraphNode {
   hipEvent_t event_;
 
  protected:
+  // Copy constructor. This is protected to prevent accidental copies causing unexpected behaviors.
   GraphEventRecordNode(const GraphEventRecordNode& rhs) : GraphNode(rhs) { event_ = rhs.event_; }
 
  public:
@@ -2456,6 +2498,9 @@ class GraphEventRecordNode : public GraphNode {
       : GraphNode(hipGraphNodeTypeEventRecord, "solid", "rectangle", "EVENT_RECORD"),
         event_(event) {}
   ~GraphEventRecordNode() {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphEventRecordNode& operator=(const GraphEventRecordNode&) = delete;
 
   GraphNode* clone() const override { return new GraphEventRecordNode(*this); }
 
@@ -2502,6 +2547,7 @@ class GraphHostNode : public GraphNode {
   hipHostNodeParams NodeParams_;
 
  protected:
+  // Copy constructor. This is protected to prevent accidental copies causing unexpected behaviors.
   GraphHostNode(const GraphHostNode& hostNode) : GraphNode(hostNode) {
     NodeParams_ = hostNode.NodeParams_;
   }
@@ -2512,6 +2558,9 @@ class GraphHostNode : public GraphNode {
     NodeParams_ = *NodeParams;
   }
   ~GraphHostNode() {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphHostNode& operator=(const GraphHostNode&) = delete;
 
   GraphNode* clone() const override { return new GraphHostNode(*this); }
 
@@ -2577,11 +2626,15 @@ class GraphHostNode : public GraphNode {
 // ================================================================================================
 class GraphEmptyNode : public GraphNode {
  protected:
+  // Copy constructor. This is protected to prevent accidental copies causing unexpected behaviors.
   GraphEmptyNode(const GraphEmptyNode& emptyNode) = default;
 
  public:
   GraphEmptyNode() : GraphNode(hipGraphNodeTypeEmpty, "solid", "rectangle", "EMPTY") {}
   ~GraphEmptyNode() {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphEmptyNode& operator=(const GraphEmptyNode&) = delete;
 
   GraphNode* clone() const override { return new GraphEmptyNode(*this); }
 
@@ -2665,6 +2718,7 @@ class GraphMemAllocNode final : public GraphNode {
   };
 
  protected:
+  // Copy constructor. This is protected to prevent accidental copies causing unexpected behaviors.
   GraphMemAllocNode(const GraphMemAllocNode& rhs) : GraphNode(rhs) {
     node_params_ = rhs.node_params_;
     if (HIP_MEM_POOL_USE_VM) {
@@ -2692,6 +2746,9 @@ class GraphMemAllocNode final : public GraphNode {
       va_->release();
     }
   }
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphMemAllocNode& operator=(const GraphMemAllocNode&) = delete;
 
   virtual GraphNode* clone() const final { return new GraphMemAllocNode(*this); }
 
@@ -2806,11 +2863,16 @@ class GraphMemFreeNode : public GraphNode {
   };
 
  protected:
+  // Copy constructor is needed for cloning the node, but it should not be used for any other
+  // purpose. To prevent accidental misuse, the copy-assignment operator is deleted.
   GraphMemFreeNode(const GraphMemFreeNode& rhs) : GraphNode(rhs) { device_ptr_ = rhs.device_ptr_; }
 
  public:
   GraphMemFreeNode(void* dptr)
       : GraphNode(hipGraphNodeTypeMemFree, "solid", "rectangle", "MEM_FREE"), device_ptr_(dptr) {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphMemFreeNode& operator=(const GraphMemFreeNode&) = delete;
 
   virtual GraphNode* clone() const final { return new GraphMemFreeNode(*this); }
 
@@ -2848,6 +2910,8 @@ class GraphDrvMemcpyNode : public GraphNode {
   HIP_MEMCPY3D copyParams_;
 
  protected:
+  // Copy constructor is needed for cloning the node, but it should not be used for any other
+  // purpose. To prevent accidental misuse, the copy-assignment operator is deleted.
   GraphDrvMemcpyNode(const GraphDrvMemcpyNode& rhs) : GraphNode(rhs) {
     copyParams_ = rhs.copyParams_;
   }
@@ -2858,6 +2922,9 @@ class GraphDrvMemcpyNode : public GraphNode {
     copyParams_ = *pCopyParams;
   }
   ~GraphDrvMemcpyNode() {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  GraphDrvMemcpyNode& operator=(const GraphDrvMemcpyNode&) = delete;
 
   GraphNode* clone() const override { return new GraphDrvMemcpyNode(*this); }
 
@@ -2920,6 +2987,8 @@ class hipGraphExternalSemSignalNode : public GraphNode {
   hipExternalSemaphoreSignalNodeParams externalSemaphorNodeParam_;
 
  protected:
+  // Copy constructor is needed for cloning the node, but it should not be used for any other
+  // purpose. To prevent accidental misuse, the copy-assignment operator is deleted.
   hipGraphExternalSemSignalNode(const hipGraphExternalSemSignalNode& rhs) : GraphNode(rhs) {
     externalSemaphorNodeParam_ = rhs.externalSemaphorNodeParam_;
   }
@@ -2932,6 +3001,9 @@ class hipGraphExternalSemSignalNode : public GraphNode {
   }
 
   ~hipGraphExternalSemSignalNode() {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  hipGraphExternalSemSignalNode& operator=(const hipGraphExternalSemSignalNode&) = delete;
 
   GraphNode* clone() const override { return new hipGraphExternalSemSignalNode(*this); }
 
@@ -2972,6 +3044,8 @@ class hipGraphExternalSemWaitNode : public GraphNode {
   hipExternalSemaphoreWaitNodeParams externalSemaphorNodeParam_;
 
  protected:
+  // Copy constructor is needed for cloning the node, but it should not be used for any other
+  // purpose. To prevent accidental misuse, the copy-assignment operator is deleted.
   hipGraphExternalSemWaitNode(const hipGraphExternalSemWaitNode& rhs) : GraphNode(rhs) {
     externalSemaphorNodeParam_ = rhs.externalSemaphorNodeParam_;
   }
@@ -2984,6 +3058,9 @@ class hipGraphExternalSemWaitNode : public GraphNode {
   }
 
   ~hipGraphExternalSemWaitNode() {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  hipGraphExternalSemWaitNode& operator=(const hipGraphExternalSemWaitNode&) = delete;
 
   GraphNode* clone() const override { return new hipGraphExternalSemWaitNode(*this); }
 
@@ -3024,6 +3101,8 @@ class hipGraphBatchMemOpNode : public GraphNode {
   hipBatchMemOpNodeParams batchMemOpNodeParam_;
 
  protected:
+  // Copy constructor is needed for cloning the node, but it should not be used for any other
+  // purpose. To prevent accidental misuse, the copy-assignment operator is deleted.
   hipGraphBatchMemOpNode(const hipGraphBatchMemOpNode& rhs) : GraphNode(rhs) {
     batchMemOpNodeParam_ = rhs.batchMemOpNodeParam_;
   }
@@ -3034,6 +3113,9 @@ class hipGraphBatchMemOpNode : public GraphNode {
     batchMemOpNodeParam_ = *pNodeParams;
   }
   ~hipGraphBatchMemOpNode() {}
+
+  // Delete copy-assignment operator to prevent accidental copies causing unexpected behaviors.
+  hipGraphBatchMemOpNode& operator=(const hipGraphBatchMemOpNode&) = delete;
 
   GraphNode* clone() const override { return new hipGraphBatchMemOpNode(*this); }
 
