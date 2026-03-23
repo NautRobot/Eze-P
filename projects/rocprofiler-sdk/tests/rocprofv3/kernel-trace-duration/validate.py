@@ -146,24 +146,20 @@ def load_kernel_rows_via_rocpd(db_path):
     return rows
 
 
-def _extract_dispatch_id_from_db_row(row):
-    value = _get_first_present(row, "dispatch_id", "correlation_id")
-    return _as_int(value, field="dispatch_id/correlation_id")
+# dispatch_id is NOT NULL in rocpd_kernel_dispatch (DB constraint), so no
+# fallback to correlation_id is needed.
+_DB_ROW_COLUMN_NAMES = ["dispatch_id", "start_timestamp", "end_timestamp", "duration"]
 
 
-def _extract_start_from_db_row(row):
-    value = _get_first_present(row, "start_timestamp")
-    return _as_int(value, field="start_timestamp")
-
-
-def _extract_end_from_db_row(row):
-    value = _get_first_present(row, "end_timestamp")
-    return _as_int(value, field="end_timestamp")
-
-
-def _extract_duration_from_db_row(row):
-    value = _get_first_present(row, "duration")
-    return _as_int(value, field="duration")
+def _extract_values_from_db_row(row):
+    """
+    Extract (dispatch_id, start, end, duration) from a DB row dict.
+    Uses case-insensitive key lookup via _get_first_present.
+    """
+    return [
+        _as_int(_get_first_present(row, name), field=f"{name}")
+        for name in _DB_ROW_COLUMN_NAMES
+    ]
 
 
 def test_rocpd_kernel_trace_duration(json_data, db_path):
@@ -192,10 +188,7 @@ def test_rocpd_kernel_trace_duration(json_data, db_path):
     missing_in_json = []
 
     for row in db_rows:
-        dispatch_id = _extract_dispatch_id_from_db_row(row)
-        start = _extract_start_from_db_row(row)
-        end = _extract_end_from_db_row(row)
-        duration = _extract_duration_from_db_row(row)
+        dispatch_id, start, end, duration = _extract_values_from_db_row(row)
 
         assert (
             start > 0 and end > 0

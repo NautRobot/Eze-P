@@ -1,22 +1,8 @@
-/* Copyright (c) 2015 - 2026 Advanced Micro Devices, Inc.
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in
- all copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE. */
+/*
+ * Copyright (c) Advanced Micro Devices, Inc., or its affiliates.
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <hip/hip_runtime.h>
 #include "device.hpp"
@@ -355,7 +341,7 @@ hipError_t ihipMalloc(void** ptr, size_t sizeBytes, unsigned int flags) {
   if (*ptr == nullptr) {
     if (!useHostDevice) {
       size_t free = 0, total = 0;
-      hipError_t err = hipMemGetInfo(&free, &total);
+      hipError_t err = ihipMemGetInfo(&free, &total);
       if (err == hipSuccess) {
         LogPrintfError("Allocation failed : Device memory : required :%zu | free :%zu | total :%zu",
                        sizeBytes, free, total);
@@ -912,21 +898,19 @@ hipError_t hipMemGetAddressRange(hipDeviceptr_t* pbase, size_t* psize, hipDevice
   HIP_RETURN(hipSuccess);
 }
 
-hipError_t hipMemGetInfo(size_t* free, size_t* total) {
-  HIP_INIT_API(hipMemGetInfo, free, total);
-
+hipError_t ihipMemGetInfo(size_t* free, size_t* total) {
   if (free == nullptr && total == nullptr) {
-    HIP_RETURN(hipSuccess);
+    return hipSuccess;
   }
 
   size_t freeMemory[2];
   amd::Device* device = hip::getCurrentDevice()->devices()[0];
   if (device == nullptr) {
-    HIP_RETURN(hipErrorInvalidDevice);
+    return hipErrorInvalidDevice;
   }
 
   if (!device->globalFreeMemory(freeMemory)) {
-    HIP_RETURN(hipErrorInvalidValue);
+    return hipErrorInvalidValue;
   }
 
   if (free != nullptr) {
@@ -937,7 +921,13 @@ hipError_t hipMemGetInfo(size_t* free, size_t* total) {
     *total = device->info().globalMemSize_;
   }
 
-  HIP_RETURN(hipSuccess);
+  return hipSuccess;
+}
+
+hipError_t hipMemGetInfo(size_t* free, size_t* total) {
+  HIP_INIT_API(hipMemGetInfo, free, total);
+
+  HIP_RETURN(ihipMemGetInfo(free, total));
 }
 
 hipError_t ihipMallocPitch(void** ptr, size_t* pitch, size_t width, size_t height, size_t depth) {
@@ -2617,9 +2607,17 @@ hipError_t ihipMemcpy3D_validate(const hipMemcpy3DParms* p) {
 
   // If the source and destination are both arrays, hipMemcpy3D() will return an error if they do
   // not have the same element size.
-  if (((p->srcArray != nullptr) && (p->dstArray != nullptr)) &&
-      (hip::getElementSize(p->srcArray) != hip::getElementSize(p->dstArray))) {
-    return hipErrorInvalidValue;
+  if ((p->srcArray != nullptr) && (p->dstArray != nullptr)) {
+    if (hip::getElementSize(p->srcArray) != hip::getElementSize(p->dstArray)) {
+         return hipErrorInvalidValue;
+      }
+
+    // If both src and dst are arrays, verify they have the same extents
+    if (p->srcArray->width != p->dstArray->width ||
+        p->srcArray->height != p->dstArray->height ||
+        p->srcArray->depth != p->dstArray->depth) {
+      return hipErrorInvalidValue;
+    }
   }
 
   // Pitch should not be less than width for both src and dst.
@@ -2786,10 +2784,13 @@ static amd::CopyMetadata buildCopyMetadataFromAttrs(hipMemcpyAttributes* attrs, 
   }
 
   // Map flags
-  if (attrs[attrIdx].flags & hipMemcpyFlagPreferOverlapWithCompute) {
-    metadata.preferOverlapCompute_ = 1;
+  unsigned int flags = attrs[attrIdx].flags;
+  if (flags & hipMemcpyFlagExtPreferCE) {
+    metadata.preferCE_ = 1;
   }
-
+  if (flags & hipMemcpyFlagExtOpSwap) {
+    metadata.copyOpType_ = amd::CopyMetadata::kCopyOpSwap;
+  }
   return metadata;
 }
 
@@ -2879,7 +2880,10 @@ hipError_t ihipMemcpyBatch(void** dsts, void** srcs, size_t* sizes, size_t count
     batchCmd->release();
   }
 
-  // Handle write buffer (host to device) copies
+  // Handle write buffer (host to device) copies.
+  // This path handles kSrcAccessOrderDuringApiCall and kSrcAccessOrderAny for host sources
+  // that lack a memory object (e.g. malloc'd or stack pointers). The writeBuffer path
+  // handles kSrcAccessOrderDuringApiCall
   for (size_t idx : writeBufferIndices) {
     status = ihipMemcpy(dsts[idx], srcs[idx], sizes[idx], hipMemcpyDefault, stream, isAsync, true);
     if (status != hipSuccess) {
@@ -2941,7 +2945,7 @@ hipError_t hipMemcpyBatchAsync(void** dsts, void** srcs, size_t* sizes, size_t c
         HIP_RETURN(hipErrorInvalidValue);
       }
     }
-    // Validate srcAccessOrder values
+    // Validate srcAccessOrder values and flags
     for (size_t i = 0; i < numAttrs; ++i) {
       if (attrs[i].srcAccessOrder < hipMemcpySrcAccessOrderStream ||
           attrs[i].srcAccessOrder > hipMemcpySrcAccessOrderAny) {
@@ -3667,8 +3671,7 @@ hipError_t ihipPointerGetAttributes(void* data, hipPointer_attribute attribute,
   switch (attribute) {
     case HIP_POINTER_ATTRIBUTE_CONTEXT: {
       if (memObj) {
-        amd::Context& context = memObj->getContext();
-        int devId = getDeviceID(context);
+        int devId = memObj->getUserData().deviceId;
         if (devId >= 0) {
           *reinterpret_cast<hipCtx_t*>(data) = reinterpret_cast<hipCtx_t>(g_devices[devId]);
         } else {

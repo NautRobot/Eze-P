@@ -112,8 +112,6 @@ IPCBackend::IPCBackend(TcpBootstrap *bootstrap):  Backend(bootstrap) {
 void IPCBackend::init() {
   ROCSHMEM_HOST_CTX_DEFAULT.ctx_opaque = default_host_ctx.get();
 
-  setup_team_world();
-
   setup_wrk_sync_buffers();
 
   rocshmem_collective_init();
@@ -121,6 +119,8 @@ void IPCBackend::init() {
   setup_fence_buffer();
 
   teams_init();
+
+  setup_team_world();
 
   TeamInfo *tinfo = team_tracker.get_team_world()->tinfo_wrt_world;
 
@@ -136,6 +136,10 @@ IPCBackend::~IPCBackend() {
    */
   teams_destroy();
   cleanup_wrk_sync_buffer();
+
+  // Close IPC handles for remote heap bases
+  ipcImpl.ipcHostStop();
+
   auto *team_world{team_tracker.get_team_world()};
   team_world->~Team();
   CHECK_HIP(hipFree(team_world));
@@ -170,7 +174,7 @@ int IPCBackend::backend_can_run(MPI_Comm comm, TcpBootstrap* bootstrap) {
 }
 void IPCBackend::setup_ctxs() {
   CHECK_HIP(hipMalloc(&ctx_array, sizeof(IPCContext) * envvar::max_num_contexts));
-  // 0th context is default context
+  // 0th index is used for default context
   for (size_t i = 0; i < envvar::max_num_contexts; i++) {
     new (&ctx_array[i]) IPCContext(this, i + 1);
     ctx_free_list.get()->push_back(ctx_array + i);
@@ -218,7 +222,8 @@ void IPCBackend::setup_team_world() {
   /**
    * Copy the address to ROCSHMEM_TEAM_WORLD.
    */
-  ROCSHMEM_TEAM_WORLD = reinterpret_cast<rocshmem_team_t>(team_world);
+  host::ROCSHMEM_TEAM_WORLD = reinterpret_cast<rocshmem_team_t>(team_world);
+  set_team_world_device(host::ROCSHMEM_TEAM_WORLD);
 }
 
 void IPCBackend::team_destroy(rocshmem_team_t team) {
@@ -425,9 +430,8 @@ void IPCBackend::setup_wrk_sync_buffers() {
    * Allocate device-side fine grained memory to hold IPC addresses of
    * work/sync buffers
    */
-  psync_allocator_->allocate(
-    reinterpret_cast<void**>(&wrk_sync_pool_bases_),
-    num_pes * sizeof(char*));
+  psync_allocator_->allocate(reinterpret_cast<void**>(&wrk_sync_pool_bases_),
+			     num_pes * sizeof(char*));
   assert(wrk_sync_pool_bases_);
 
   /*

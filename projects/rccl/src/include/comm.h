@@ -18,6 +18,7 @@
 #include "register.h"
 #include "graph.h"
 #include "nvmlwrap.h"
+#include "amdsmi_wrap.h"
 #include "profiler.h"
 #include "allocator.h"
 #include "dev_runtime.h"
@@ -217,6 +218,9 @@ struct ncclTaskColl {
   bool useWarpSpeed;
 #else
   int32_t nMaxChannels:8;
+#endif
+#ifdef ENABLE_ROCSHMEM
+  size_t* sizes;
 #endif
   int32_t nWarps:8;
   int32_t algorithm:8, protocol:8, pipeline:8;
@@ -464,8 +468,12 @@ struct ncclPeerInfo {
   struct ncclComm* comm;
   int cudaCompCap;
   size_t totalGlobalMem;
+#if defined(__HIP_PLATFORM_AMD__) || defined(__HIPCC__)
+  amdsmiFabricDeviceInfo fabricInfo;
+#else
   // MNNVL support
   nvmlGpuFabricInfoV_t fabricInfo;
+#endif
   int cuMemSupport;
   int version;
 };
@@ -734,7 +742,7 @@ struct ncclComm {
   // CE Collective
   struct ncclCeColl ceColl;
   struct ncclIntruQueue<struct ncclCeInitTask, &ncclCeInitTask::next> ceInitTaskQueue;
-  
+
   // buffer registration cache
   struct ncclRegCache regCache;
   int isAllNvlink;
@@ -758,13 +766,15 @@ struct ncclComm {
 
 #ifdef ENABLE_ROCSHMEM
   // circular ring buffer in rocshmem symmetric heap
-  void** sourceRshmem;
-  void** destRshmem;
+  void* sourceRshmem;
+  void* destRshmem;
+
   rocshmem::rocshmem_team_t team_reduce_world_dup;
   int enableRocshmem;
   int rocshmemThreshold;
   int numSymBuf;
   int symId;
+  size_t bufThreshold;
 #endif
 
   // Direct Reduce Scatter [RCCL]
