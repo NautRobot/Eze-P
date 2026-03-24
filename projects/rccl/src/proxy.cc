@@ -834,7 +834,11 @@ static ncclResult_t ncclProxyGetPostedOps(struct ncclProxyState* proxyState, int
       if (proxyState->rocshmemEnabled) {
         while (pool->nextOps == -1 && !state->stop) {
           pthread_mutex_unlock(&pool->mutex);
-          sched_yield();
+#if defined(__x86_64__)
+          __builtin_ia32_pause();
+#elif defined(__aarch64__)
+          __asm__ __volatile__("yield");
+#endif
           pthread_mutex_lock(&pool->mutex);
         }
       } else
