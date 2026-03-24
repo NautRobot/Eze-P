@@ -40,6 +40,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <cassert>
 #include <cstring>
 #include <regex>
 #include <string>
@@ -3769,7 +3770,8 @@ Runtime::MappedHandleAllowedAgent::~MappedHandleAllowedAgent() {
     if (core::Runtime::runtime_singleton_->thunkLoader()->IsDXG()) assert(!"Unimplemented");
 #endif
     /* Remap the CPU mapping back to anonymous, freeing the DRM FD while retaining VA reservation */
-    assert(rocr::os::MapReservedMemory(va, size, rocr::os::MEM_PROT_NONE));
+    bool result = rocr::os::MapReservedMemory(va, size, rocr::os::MEM_PROT_NONE);
+    assert(result && "Failed to remap VA to anonymous");
   }
   else {
     hsa_status_t status = targetAgent->driver().DestroyImportedShareableHandle(&shareable_handle);
