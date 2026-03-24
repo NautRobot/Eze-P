@@ -3770,7 +3770,7 @@ Runtime::MappedHandleAllowedAgent::~MappedHandleAllowedAgent() {
     if (core::Runtime::runtime_singleton_->thunkLoader()->IsDXG()) assert(!"Unimplemented");
 #endif
     /* Remap the CPU mapping back to anonymous, freeing the DRM FD while retaining VA reservation */
-    bool result = rocr::os::MapReservedMemory(va, size, rocr::os::MEM_PROT_NONE);
+    bool result = rocr::os::UncommitMemory(va, size);
     assert(result && "Failed to remap VA to anonymous");
   }
   else {

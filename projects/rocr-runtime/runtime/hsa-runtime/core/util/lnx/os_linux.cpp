@@ -868,12 +868,6 @@ bool MapMemory(void* va, size_t size, MemProt perms, int fd, uint64_t cpu_addr) 
   return true;
 }
 
-bool MapReservedMemory(void* va, size_t size, MemProt perms) {
-  void* mapped_ptr = ::mmap(va, size, MemProtToOsProt(perms), 
-                            MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  return mapped_ptr == va;
-}
-
 void* ReserveMemory(void* start, size_t size, size_t alignment, MemProt prot) {
   size = AlignUp(size, PageSize());
   // check for invalid input size
