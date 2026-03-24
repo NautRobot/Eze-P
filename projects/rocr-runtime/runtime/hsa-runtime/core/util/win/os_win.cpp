@@ -470,6 +470,10 @@ bool MapMemory(void* addr, size_t size, MemProt perms, int fd [[maybe_unused]],
   return VirtualProtect(addr, size, memProtToOsProt(perms), &OldProtect) != 0;
 }
 
+bool MapReservedMemory(void* va, size_t size, MemProt perms) {
+  return MapMemory(va, size, perms, -1, 0);
+}
+
 bool ProtectMemory(void* va, size_t size, MemProt perms) {
   if (perms == MEM_PROT_NONE) {
     return UncommitMemory(va, size);
