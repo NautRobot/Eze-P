@@ -861,8 +861,8 @@ size_t PageSize() {
 bool UnmapMemory(void* va, size_t size) { return ::munmap(va, size) == 0; }
 
 bool MapMemory(void* va, size_t size, MemProt perms, int fd, uint64_t cpu_addr) {
-  void* mapped_ptr =
-        mmap(va, size, MemProtToOsProt(perms), MAP_SHARED | MAP_FIXED, fd, cpu_addr);
+  void* mapped_ptr = ::mmap(va, size, MemProtToOsProt(perms), 
+                            MAP_SHARED | MAP_FIXED, fd, cpu_addr);
   if (mapped_ptr != va)
       return false;
   return true;
@@ -870,7 +870,7 @@ bool MapMemory(void* va, size_t size, MemProt perms, int fd, uint64_t cpu_addr) 
 
 bool MapReservedMemory(void* va, size_t size, MemProt perms) {
   void* mapped_ptr = ::mmap(va, size, MemProtToOsProt(perms), 
-    MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+                            MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   return mapped_ptr == va;
 }
 
