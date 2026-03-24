@@ -4,6 +4,7 @@
  */
 
 #include "buffer.h"
+#include "configuration.h"
 #include "context.h"
 #include "fastpath.h"
 #include "file.h"
@@ -128,6 +129,8 @@ Fastpath::score(shared_ptr<IFile> file, shared_ptr<IBuffer> buffer, size_t size,
 {
     bool accept_io{true};
 
+    accept_io &= Context<Configuration>::get()->fastpath();
+
     accept_io &= file->getUnbufferedFd().has_value();
 
     accept_io &= buffer->getType() == hipMemoryTypeDevice;
@@ -158,6 +161,10 @@ ssize_t
 Fastpath::io(IoType type, shared_ptr<IFile> file, shared_ptr<IBuffer> buffer, size_t size, hoff_t file_offset,
              hoff_t buffer_offset)
 {
+    if (!Context<Configuration>::get()->fastpath()) {
+        throw BackendDisabled();
+    }
+
     void *devptr{reinterpret_cast<void *>(reinterpret_cast<intptr_t>(buffer->getBuffer()) + buffer_offset)};
     hipAmdFileHandle_t handle{};
     size_t             nbytes{};
