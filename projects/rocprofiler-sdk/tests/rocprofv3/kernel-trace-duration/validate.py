@@ -44,7 +44,7 @@ def extract_json_kernel_records(json_root):
         ):
             return buffer_records[key]
 
-    assert False, (
+    raise AssertionError(
         "no kernel dispatch records found in JSON buffer_records keys="
         f"{list(buffer_records.keys())}"
     )
@@ -58,20 +58,6 @@ def _as_int(value, *, field="value"):
         raise AssertionError(
             f"failed to parse int for {field}: {value!r} ({exc})"
         ) from exc
-
-
-def _get_first_present(mapping, *keys):
-    """
-    Look up keys in mapping in a case-insensitive manner.
-    Builds a lowercased lookup table once, then checks each key (lowercased).
-    Returns the first non-None value found, or None if nothing matches.
-    """
-    lowered = {k.lower(): v for k, v in mapping.items()}
-    for key in keys:
-        normalized = key.lower()
-        if normalized in lowered and lowered[normalized] is not None:
-            return lowered[normalized]
-    return None
 
 
 def _extract_dispatch_id_from_json_record(record):
@@ -112,6 +98,9 @@ def build_json_duration_map(records):
         assert start > 0 and end > 0, f"invalid timestamps start={start} end={end}"
         assert end >= start, f"end before start: start={start} end={end}"
 
+        assert (
+            dispatch_id not in result
+        ), f"duplicate dispatch_id {dispatch_id} found in JSON records"
         result[dispatch_id] = (start, end, end - start)
 
     assert len(result) > 0, "no kernel records extracted from JSON"
@@ -146,20 +135,22 @@ def load_kernel_rows_via_rocpd(db_path):
     return rows
 
 
-# dispatch_id is NOT NULL in rocpd_kernel_dispatch (DB constraint), so no
-# fallback to correlation_id is needed.
 _DB_ROW_COLUMN_NAMES = ["dispatch_id", "start_timestamp", "end_timestamp", "duration"]
 
 
 def _extract_values_from_db_row(row):
     """
     Extract (dispatch_id, start, end, duration) from a DB row dict.
-    Uses case-insensitive key lookup via _get_first_present.
+    Builds a single case-insensitive lookup table for the row, then fetches
+    each required column. Column names reflect the output of
+    rocpd_csv.get_kernel_csv_query(), which aliases and extends the raw
+    rocpd_kernel_dispatch schema columns.
     """
-    return [
-        _as_int(_get_first_present(row, name), field=f"{name}")
-        for name in _DB_ROW_COLUMN_NAMES
+    lowered_row = {k.lower(): v for k, v in row.items()}
+    dispatch_id, start, end, duration = [
+        _as_int(lowered_row.get(name), field=name) for name in _DB_ROW_COLUMN_NAMES
     ]
+    return dispatch_id, start, end, duration
 
 
 def test_rocpd_kernel_trace_duration(json_data, db_path):
@@ -196,9 +187,6 @@ def test_rocpd_kernel_trace_duration(json_data, db_path):
         assert (
             end >= start
         ), f"DB end before start: start={start} end={end} dispatch_id={dispatch_id}"
-        assert (
-            duration >= 0
-        ), f"negative DB duration: duration={duration} dispatch_id={dispatch_id}"
         assert duration == (end - start), (
             f"DB duration mismatch: duration={duration} != end-start={end - start} "
             f"dispatch_id={dispatch_id}"
