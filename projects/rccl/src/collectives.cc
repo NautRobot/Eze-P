@@ -98,9 +98,10 @@ static ncclResult_t rcclDirectAllGather(const void* sendbuff, void* recvbuff, si
 
   NCCLCHECK(ncclGroupStart());
   for (int r = 0; r < nRanks; r++) {
-    if (r == rank && in_place) continue;
-    NCCLCHECK(ncclSend(((char*)sendbuff), sendcount, datatype, r, comm, stream));
-    NCCLCHECK(ncclRecv(((char*)recvbuff) + r * rankOffset, sendcount, datatype, r, comm, stream));
+    int peer = (rank + r) % nRanks;
+    if (peer == rank && in_place) continue;
+    NCCLCHECK(ncclSend(((char*)sendbuff), sendcount, datatype, peer, comm, stream));
+    NCCLCHECK(ncclRecv(((char*)recvbuff) + peer * rankOffset, sendcount, datatype, peer, comm, stream));
   }
   NCCLCHECK(ncclGroupEnd());
 

@@ -2423,17 +2423,21 @@ static ncclResult_t ncclCommInitRankFunc(struct ncclAsyncJob* job_) {
 
   // Initialize hierarchical sub-communicators and temp buffer
   if (!job->parent && comm->nNodes >= 8 && rcclParamHierarchicalAllGather() == 1) {
-    int node_id = comm->rankToNode[comm->rank];
-    int local_rank = comm->rankToLocalRank[comm->rank];
-    NCCLCHECKGOTO(ncclCommSplit(comm, node_id, local_rank, &comm->hierarchicalIntraComm, NULL), res, fail);
-    comm->forcePatEnable = true;
-    NCCLCHECKGOTO(ncclCommSplit(comm, local_rank, node_id, &comm->hierarchicalInterComm, NULL), res, fail);
-    comm->forcePatEnable = false;
-    size_t tempBufSize = (comm->nNodes >= 16) ? HIERARCHICAL_AG_TEMP_BUFFER_SIZE : HIERARCHICAL_AG_TEMP_BUFFER_SIZE / 2;
-    NCCLCHECKGOTO(ncclCudaMalloc(&(comm->hierarchicalAGTempBuffer), tempBufSize), res, fail);
-    comm->hierarchicalCommsInitialized = true;
-    INFO(NCCL_INIT, "Hierarchical AllGather: intraComm (nRanks=%d) and interComm (nRanks=%d) Initialized",
-      comm->hierarchicalIntraComm->nRanks, comm->hierarchicalInterComm->nRanks);
+    if (comm->minLocalRanks != comm->maxLocalRanks) {
+      INFO(NCCL_INIT, "Hierarchical AllGather: non-uniform GPU count per node, skipping hierarchical allgather");
+    } else {
+      int node_id = comm->rankToNode[comm->rank];
+      int local_rank = comm->rankToLocalRank[comm->rank];
+      NCCLCHECKGOTO(ncclCommSplit(comm, node_id, local_rank, &comm->hierarchicalIntraComm, NULL), res, fail);
+      comm->forcePatEnable = true;
+      NCCLCHECKGOTO(ncclCommSplit(comm, local_rank, node_id, &comm->hierarchicalInterComm, NULL), res, fail);
+      comm->forcePatEnable = false;
+      size_t tempBufSize = (comm->nNodes >= 16) ? HIERARCHICAL_AG_TEMP_BUFFER_SIZE : HIERARCHICAL_AG_TEMP_BUFFER_SIZE / 2;
+      NCCLCHECKGOTO(ncclCudaMalloc(&(comm->hierarchicalAGTempBuffer), tempBufSize), res, fail);
+      comm->hierarchicalCommsInitialized = true;
+      INFO(NCCL_INIT, "Hierarchical AllGather: intraComm (nRanks=%d) and interComm (nRanks=%d) Initialized",
+        comm->hierarchicalIntraComm->nRanks, comm->hierarchicalInterComm->nRanks);
+    }
   }
 
   timers[TIMER_INIT_TOTAL] = clockNano() - timers[TIMER_INIT_TOTAL];
