@@ -20,19 +20,10 @@
 #include "aql_c/aql_structures.h"
 #include "aql_c/packet_generation.h"
 #include "pmu_dimension.h"
+#include "aql_queue_manager.h"
 
 /* Forward declarations */
 struct file;
-struct kfd_process;
-struct amdgpu_ib;
-
-/* KFD Data Allocation Structure - from KFD module */
-struct kfd_data_alloc {
-	void *cpu_addr;
-	void *gpu_addr;
-	struct amdgpu_ib *ib;
-	size_t size;
-};
 
 /* AQL Performance Counter Constants */
 #define AQL_PERF_MAX_GPUS 16
@@ -237,7 +228,9 @@ struct aql_measurement {
 struct aql_perf_session {
 	/* Core KFD integration */
 	struct file *kfd_file;
-	struct kfd_process *process;
+
+	/* AQL queues (one per GPU, for PM4 submission) */
+	struct aql_gpu_queue *queues; /* Array of queues, indexed by GPU index */
 
 	/* GPU management */
 	uint32_t *gpu_ids;
@@ -292,10 +285,8 @@ void aql_perf_session_put(struct aql_perf_session *session);
 int aql_perf_discover_gpus(struct aql_perf_session *session);
 
 /* Counter Buffer Management */
-int aql_perf_allocate_counter_buffers(arch_t *arch, struct file *kfd_file,
-				      struct kfd_process *process, uint32_t gpu_id);
-void aql_perf_free_counter_buffers(arch_t *arch, struct file *kfd_file, struct kfd_process *process,
-				   uint32_t gpu_id);
+int aql_perf_setup_counter_buffers(arch_t *arch, struct aql_gpu_queue *queue);
+void aql_perf_clear_counter_buffers(arch_t *arch);
 
 /* Counter Allocation Functions */
 counter_reg_info_t *aql_counter_try_allocate(block_info_t *block, uint32_t event_id,
@@ -305,13 +296,16 @@ void release_shared_counter(struct aql_perf_session *session, struct shared_coun
 int aql_build_counter_info(uint32_t counter_id, arch_t *arch, counter_reg_info_t *allocated_counter,
 			   counter_info_t *out_info, block_info_t **out_block);
 
-/* Packet Operations - New PM4-based implementation */
+/* Packet Operations - PM4-based implementation via AQL queue */
 int aql_perf_create_start_packet(struct aql_measurement *measurement,
 				 pm4_buffer_t **out_pm4_buffer);
 int aql_perf_create_read_packet(struct aql_measurement *measurement, pm4_buffer_t **out_pm4_buffer);
 int aql_perf_create_end_packet(struct aql_measurement *measurement, pm4_buffer_t **out_pm4_buffer);
 int aql_perf_submit_pm4_packet(struct aql_perf_session *session, uint32_t gpu_id,
 			       pm4_buffer_t *pm4_buffer);
+
+/* Queue accessor helper */
+struct aql_gpu_queue *aql_perf_get_queue(struct aql_perf_session *session, uint32_t gpu_id);
 
 /* Measurement Management */
 struct aql_measurement *aql_perf_measurement_create(struct aql_perf_session *session,

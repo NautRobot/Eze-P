@@ -27,6 +27,9 @@ static bool aql_feature_available = false;
 /* Global workqueue - shared by all measurements */
 static struct workqueue_struct *aql_global_workqueue = NULL;
 
+/* Shutdown flag - when set, work items bail out immediately */
+static atomic_t aql_shutting_down = ATOMIC_INIT(0);
+
 /**
  * aql_get_global_workqueue - Get the global workqueue for AQL operations
  *
@@ -92,13 +95,26 @@ int aql_pmu_init(void)
 }
 
 /**
+ * aql_pmu_is_shutting_down - Check if module is shutting down
+ *
+ * Work items should check this and bail out immediately to avoid
+ * blocking rmmod with 5s GPU timeouts per queued item.
+ *
+ * Returns: true if shutting down
+ */
+bool aql_pmu_is_shutting_down(void)
+{
+	return atomic_read(&aql_shutting_down) != 0;
+}
+
+/**
  * aql_pmu_flush_all_measurements - Flush global workqueue before cleanup
  *
- * This function ensures all pending work items complete before session cleanup.
- * Must be called AFTER timer is cancelled but BEFORE session is released.
+ * Sets shutdown flag so pending work items bail out immediately,
+ * then flushes the workqueue. This prevents cascading 5s GPU timeouts
+ * when the GPU is not responding.
  *
- * IMPORTANT: This prevents use-after-free by ensuring no work handlers are running
- * or queued when we free session resources.
+ * Must be called AFTER timer is cancelled but BEFORE session is released.
  */
 void aql_pmu_flush_all_measurements(void)
 {
@@ -109,10 +125,13 @@ void aql_pmu_flush_all_measurements(void)
 		return;
 	}
 
-	pmu_info("Flushing global workqueue");
-	flush_workqueue(aql_global_workqueue);
+	/* Signal all work items to bail out immediately */
+	atomic_set(&aql_shutting_down, 1);
 
 	mutex_unlock(&aql_pmu_mutex);
+
+	pmu_info("Flushing global workqueue (shutdown flag set)");
+	flush_workqueue(aql_global_workqueue);
 
 	pmu_info("Global workqueue flushed");
 }
@@ -628,6 +647,7 @@ EXPORT_SYMBOL_GPL(aql_get_global_workqueue);
 EXPORT_SYMBOL_GPL(aql_pmu_init);
 EXPORT_SYMBOL_GPL(aql_pmu_cleanup);
 EXPORT_SYMBOL_GPL(aql_pmu_flush_all_measurements);
+EXPORT_SYMBOL_GPL(aql_pmu_is_shutting_down);
 EXPORT_SYMBOL_GPL(aql_pmu_is_available);
 EXPORT_SYMBOL_GPL(aql_pmu_event_init);
 EXPORT_SYMBOL_GPL(aql_pmu_event_destroy);

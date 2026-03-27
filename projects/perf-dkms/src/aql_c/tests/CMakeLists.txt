@@ -77,12 +77,21 @@ add_aql_test(test_packet_generation
 )
 
 #================================================================================
+# AQL Queue Tests
+#================================================================================
+
+add_aql_test(test_aql_queue
+    test_aql_queue.c
+    ../aql_queue.c
+)
+
+#================================================================================
 # Run all tests target
 #================================================================================
 
 add_custom_target(run-tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_pm4 test_counter_registry test_packet_generation
+    DEPENDS test_pm4 test_counter_registry test_packet_generation test_aql_queue
     COMMENT "Running all AQL tests"
 )
 

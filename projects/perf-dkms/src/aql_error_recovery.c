@@ -97,22 +97,21 @@ static int aql_perf_reinitialize_session(struct aql_perf_session *session)
 	/* Stop all active measurements first */
 	aql_perf_stop_all_measurements(session);
 
-	/* Free existing counter buffers for all GPUs */
-	if (session->archs && session->num_gpus > 0) {
+	/* Destroy existing AQL queues and clear counter buffer pointers */
+	if (session->queues && session->num_gpus > 0) {
 		for (uint32_t i = 0; i < session->num_gpus; i++) {
-			if (session->archs[i]) {
-				aql_perf_free_counter_buffers(session->archs[i], session->kfd_file,
-							      session->process,
-							      session->gpu_ids[i]);
-			}
+			if (session->archs && session->archs[i])
+				aql_perf_clear_counter_buffers(session->archs[i]);
+			aql_queue_destroy(&session->queues[i], session->kfd_file);
 		}
+		kfree(session->queues);
+		session->queues = NULL;
 	}
 
 	/* Close existing KFD file */
 	if (session->kfd_file) {
 		filp_close(session->kfd_file, NULL);
 		session->kfd_file = NULL;
-		session->process = NULL;
 	}
 
 	/* Clear error mask */
@@ -128,15 +127,6 @@ static int aql_perf_reinitialize_session(struct aql_perf_session *session)
 		return ret;
 	}
 
-	/* Extract kfd_process */
-	session->process = session->kfd_file->private_data;
-	if (!session->process) {
-		aql_err("Session %llu: No kfd_process found during recovery", session->session_id);
-		filp_close(session->kfd_file, NULL);
-		session->kfd_file = NULL;
-		return -EINVAL;
-	}
-
 	/* Rediscover GPUs */
 	kfree(session->gpu_ids);
 	session->gpu_ids = NULL;
@@ -149,19 +139,30 @@ static int aql_perf_reinitialize_session(struct aql_perf_session *session)
 		return ret;
 	}
 
-	/* Reallocate counter buffers for all GPU architectures */
-	if (session->archs && session->num_gpus > 0) {
-		for (uint32_t i = 0; i < session->num_gpus; i++) {
-			if (session->archs[i]) {
-				ret = aql_perf_allocate_counter_buffers(session->archs[i],
-									session->kfd_file,
-									session->process,
-									session->gpu_ids[i]);
-				if (ret) {
-					aql_err("Session %llu: Counter buffer reallocation failed for GPU %u during recovery: %d",
-						session->session_id, session->gpu_ids[i], ret);
-					return ret;
-				}
+	/* Recreate AQL queues and set up counter buffers */
+	session->queues = kzalloc(session->num_gpus * sizeof(struct aql_gpu_queue), GFP_KERNEL);
+	if (!session->queues) {
+		aql_err("Session %llu: Failed to allocate queues array during recovery",
+			session->session_id);
+		return -ENOMEM;
+	}
+
+	for (uint32_t i = 0; i < session->num_gpus; i++) {
+		ret = aql_queue_create(&session->queues[i], session->kfd_file,
+				       session->gpu_ids[i]);
+		if (ret) {
+			aql_err("Session %llu: AQL queue creation failed for GPU %u during recovery: %d",
+				session->session_id, session->gpu_ids[i], ret);
+			return ret;
+		}
+
+		if (session->archs && session->archs[i]) {
+			ret = aql_perf_setup_counter_buffers(session->archs[i],
+							     &session->queues[i]);
+			if (ret) {
+				aql_err("Session %llu: Counter buffer setup failed for GPU %u during recovery: %d",
+					session->session_id, session->gpu_ids[i], ret);
+				return ret;
 			}
 		}
 	}
@@ -233,14 +234,24 @@ void aql_perf_handle_error(struct aql_perf_session *session, struct aql_error_co
 			break;
 
 		case AQL_ERROR_SYSTEM_FAULT:
-			/* Reset the entire session */
-			mutex_lock(&session->session_mutex);
-
-			if (session->state != SESSION_ERROR) {
-				aql_info("Session %llu: System fault detected, stopping all measurements",
+			/* Reset the entire session.
+			 * NOTE: Do NOT use mutex_lock — callers like
+			 * aql_perf_measurement_start/stop already hold
+			 * session_mutex, causing a deadlock. Use trylock
+			 * and defer cleanup to recovery_work if needed. */
+			if (mutex_trylock(&session->session_mutex)) {
+				if (session->state != SESSION_ERROR) {
+					aql_info("Session %llu: System fault, stopping measurements",
+						 session->session_id);
+					session->state = SESSION_ERROR;
+					aql_perf_stop_all_measurements(session);
+				}
+				mutex_unlock(&session->session_mutex);
+			} else {
+				/* Caller holds mutex — set state atomically */
+				WRITE_ONCE(session->state, SESSION_ERROR);
+				aql_info("Session %llu: System fault (deferred, mutex held)",
 					 session->session_id);
-				session->state = SESSION_ERROR;
-				aql_perf_stop_all_measurements(session);
 			}
 
 			/* Schedule recovery work */
@@ -256,17 +267,20 @@ void aql_perf_handle_error(struct aql_perf_session *session, struct aql_error_co
 				escalate = true;
 			}
 
-			mutex_unlock(&session->session_mutex);
 			break;
 
 		case AQL_ERROR_PERMANENT:
-			/* Disable AQL feature entirely */
-			mutex_lock(&session->session_mutex);
-			session->state = SESSION_ERROR;
-			aql_perf_stop_all_measurements(session);
-			mutex_unlock(&session->session_mutex);
+			/* Disable AQL feature entirely.
+			 * Same deadlock avoidance as SYSTEM_FAULT. */
+			if (mutex_trylock(&session->session_mutex)) {
+				session->state = SESSION_ERROR;
+				aql_perf_stop_all_measurements(session);
+				mutex_unlock(&session->session_mutex);
+			} else {
+				WRITE_ONCE(session->state, SESSION_ERROR);
+			}
 
-			aql_err("Session %llu: Permanent error detected, AQL performance monitoring disabled",
+			aql_err("Session %llu: Permanent error, AQL monitoring disabled",
 				session->session_id);
 			break;
 

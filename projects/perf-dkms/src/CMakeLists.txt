@@ -24,6 +24,10 @@ set(KERNEL_MODULE_SOURCES
     aql_packet_ops.c
     aql_error_recovery.c
     aql_pmu_integration.c
+    kfd_ioctl_bridge.c
+    kfd_ioctl_bridge.h
+    aql_queue_manager.c
+    aql_queue_manager.h
 )
 
 # Create symbolic links to source files in build directory
@@ -50,9 +54,10 @@ obj-m := amdgpu_pmu.o
 # Include AMD GPU PMU, KFD test, and minimal AQL integration
 amdgpu_pmu-y := pmu_main.o pmu_events.o amdgpu_pmu_trace.o amdgpu_pmu_trace_dev.o \\
               aql_perf.o aql_packet_ops.o aql_error_recovery.o aql_pmu_integration.o \\
+              kfd_ioctl_bridge.o aql_queue_manager.o \\
               aql_c/arch_creator.o aql_c/gfx12_creator.o aql_c/gfx9_creator.o \\
               aql_c/pm4_packets.o aql_c/counter_registry.o aql_c/gfx12_events.o aql_c/gfx9_events.o \\
-              aql_c/packet_generation.o
+              aql_c/packet_generation.o aql_c/aql_queue.o
 
 # Compiler flags
 ccflags-y := -DDEBUG -g -Wall -D__KERNEL__ -I\$(src)/aql_c
@@ -77,12 +82,15 @@ add_custom_command(
         ${KBUILD_SRC_DIR}/aql_packet_ops.c
         ${KBUILD_SRC_DIR}/aql_error_recovery.c
         ${KBUILD_SRC_DIR}/aql_pmu_integration.c
+        ${KBUILD_SRC_DIR}/kfd_ioctl_bridge.c
+        ${KBUILD_SRC_DIR}/aql_queue_manager.c
         ${KBUILD_SRC_DIR}/aql_c/arch_creator.c
         ${KBUILD_SRC_DIR}/aql_c/gfx12_creator.c
         ${KBUILD_SRC_DIR}/aql_c/pm4_packets.c
         ${KBUILD_SRC_DIR}/aql_c/counter_registry.c
         ${KBUILD_SRC_DIR}/aql_c/gfx12_events.c
         ${KBUILD_SRC_DIR}/aql_c/packet_generation.c
+        ${KBUILD_SRC_DIR}/aql_c/aql_queue.c
     COMMENT "Building kernel module ${MODULE_KO}"
     VERBATIM
 )

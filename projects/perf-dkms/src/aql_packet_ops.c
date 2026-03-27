@@ -22,9 +22,18 @@
 #include "aql_c/pm4_packets.h"
 #include "aql_c/arch_creator_common.h"
 
-/* External KFD functions */
-extern int kfd_ioctl_submit_ib_packet(struct file *filep, struct kfd_process *p, uint32_t gpu_id,
-				      const uint32_t *packet, size_t ib_len);
+/* AQL queue timeout for completion polling (ms) */
+#define AQL_SUBMIT_TIMEOUT_MS 5000
+
+/* Global submit mutex: serializes all GPU submissions (submit + wait)
+ * to prevent concurrent ring buffer and rptr/wptr access from
+ * multiple workqueue threads or synchronous callers. */
+static DEFINE_MUTEX(aql_submit_mutex);
+
+/* Debug: skip STOP PM4 submission (still does state transitions + counter release) */
+static int aql_skip_stop;
+module_param(aql_skip_stop, int, 0644);
+MODULE_PARM_DESC(aql_skip_stop, "Skip STOP PM4 submission (debug: isolate stop crash)");
 
 /**
  * aql_perf_find_gpu_index - Find GPU index in session from GPU ID
@@ -281,9 +290,8 @@ int aql_perf_create_start_packet(struct aql_measurement *measurement, pm4_buffer
 	memset(&collection, 0, sizeof(collection));
 	collection.counters = &counter_info;
 	collection.counter_count = 1;
-	collection.gpu_memory_addr =
-		(uint64_t)(uintptr_t)allocated_counter->allocation.data_buffer->gpu_addr;
-	collection.memory_size = PAGE_SIZE;
+	collection.gpu_memory_addr = allocated_counter->allocation.data_gpu_addr;
+	collection.memory_size = allocated_counter->allocation.data_size;
 
 	aql_debug("[PMU] generate_start_packet: counter_index=%u, event_id=0x%x, gpu_addr=0x%llx",
 		 counter_info.counter_index, counter_info.event_id, collection.gpu_memory_addr);
@@ -369,10 +377,10 @@ int aql_perf_create_read_packet(struct aql_measurement *measurement, pm4_buffer_
 		return -EINVAL;
 	}
 
-	/* Check if data_buffer is still valid (may be NULL during cleanup) */
-	if (!counter->allocation.data_buffer) {
+	/* Check if data buffer is still valid (may be NULL during cleanup) */
+	if (!counter->allocation.data_cpu_addr) {
 		aql_debug(
-			"[PMU] aql_perf_create_read_packet: data_buffer freed (measurement being cleaned up)");
+			"[PMU] aql_perf_create_read_packet: data buffer cleared (measurement being cleaned up)");
 		return -ESHUTDOWN;
 	}
 
@@ -401,8 +409,8 @@ int aql_perf_create_read_packet(struct aql_measurement *measurement, pm4_buffer_
 	memset(&collection, 0, sizeof(collection));
 	collection.counters = &counter_info;
 	collection.counter_count = 1;
-	collection.gpu_memory_addr = (uint64_t)(uintptr_t)counter->allocation.data_buffer->gpu_addr;
-	collection.memory_size = PAGE_SIZE;
+	collection.gpu_memory_addr = counter->allocation.data_gpu_addr;
+	collection.memory_size = counter->allocation.data_size;
 
 	aql_debug("[PMU] generate_read_packet: counter_index=%u, gpu_addr=0x%llx",
 		 counter_info.counter_index, collection.gpu_memory_addr);
@@ -485,51 +493,92 @@ int aql_perf_create_end_packet(struct aql_measurement *measurement, pm4_buffer_t
 }
 
 /**
- * aql_perf_submit_pm4_packet - Submit PM4 packet buffer to GPU via KFD
+ * aql_perf_get_queue - Get AQL queue for a given GPU ID
+ * @session: AQL performance session
+ * @gpu_id: GPU ID to find queue for
+ *
+ * Returns: Queue pointer, or NULL if not found
+ */
+struct aql_gpu_queue *aql_perf_get_queue(struct aql_perf_session *session, uint32_t gpu_id)
+{
+	int idx = aql_perf_find_gpu_index(session, gpu_id);
+	if (idx < 0 || !session->queues)
+		return NULL;
+	return &session->queues[idx];
+}
+
+/**
+ * aql_perf_submit_pm4_packet - Submit PM4 packet buffer to GPU via AQL queue
  * @session: AQL performance session
  * @gpu_id: Target GPU ID
  * @pm4_buffer: PM4 buffer to submit
+ *
+ * Submits the PM4 commands via the AQL queue (no KFD exports needed)
+ * and waits for GPU completion by polling the completion signal.
  *
  * Returns: 0 on success, negative error code on failure
  */
 int aql_perf_submit_pm4_packet(struct aql_perf_session *session, uint32_t gpu_id,
 			       pm4_buffer_t *pm4_buffer)
 {
+	struct aql_gpu_queue *queue;
 	int ret;
-	size_t ib_len;
+
+	if (aql_pmu_is_shutting_down())
+		return -ESHUTDOWN;
 
 	if (!session || !pm4_buffer || !pm4_buffer->data) {
 		aql_err("[PMU] aql_perf_submit_pm4_packet: Invalid parameters");
 		return -EINVAL;
 	}
 
-	/* IB length is already in DWORDs from pm4_buffer->size */
-	ib_len = pm4_buffer->size;
-
-	aql_debug(
-		"[PMU] kfd_ioctl_submit_ib_packet: gpu_id=%u, buffer=%p, size=%zu DWORDs (%zu bytes)",
-		gpu_id, pm4_buffer->data, pm4_buffer->size, pm4_buffer->size * 4);
-
-	/* Submit PM4 buffer via KFD (ib_len is in DWORDs) */
-	ret = kfd_ioctl_submit_ib_packet(session->kfd_file, session->process, gpu_id,
-					 pm4_buffer->data, ib_len);
-
-	if (ret) {
-		struct aql_error_context error = { .severity = AQL_ERROR_GPU_FAULT,
-						   .gpu_id = gpu_id,
-						   .error_code = ret,
-						   .timestamp = ktime_get() };
-
-		snprintf(error.error_msg, sizeof(error.error_msg),
-			 "Failed to submit PM4 packet: %d", ret);
-
-		aql_err("[PMU] Session %llu: %s", session->session_id, error.error_msg);
-		aql_perf_handle_error(session, &error);
-		aql_perf_inc_stat(AQL_STAT_ERRORS_TOTAL);
-		return ret;
+	queue = aql_perf_get_queue(session, gpu_id);
+	if (!queue) {
+		aql_err("[PMU] aql_perf_submit_pm4_packet: No queue for GPU %u", gpu_id);
+		return -ENODEV;
 	}
 
-	aql_info("[PMU] kfd_ioctl_submit_ib_packet: SUCCESS");
+	aql_debug("[PMU] aql_queue_submit: gpu_id=%u, size=%zu DWORDs (%zu bytes)",
+		  gpu_id, pm4_buffer->size, pm4_buffer->size * 4);
+
+	/* Serialize all GPU submissions globally. This prevents concurrent
+	 * submit+wait from timer READ workers and synchronous callers (e.g.,
+	 * pmu_del's read_sync or STOP). Without this, two threads could have
+	 * packets in flight on the same ring, leading to rptr/wptr confusion
+	 * and potential GPU firmware (MES) crashes. */
+	mutex_lock(&aql_submit_mutex);
+
+	{
+		uint64_t dispatch_idx = 0;
+
+		/* Submit PM4 commands via AQL queue.
+		 * dispatch_idx is captured under the queue lock so it's safe
+		 * even when multiple threads submit concurrently. */
+		ret = aql_queue_submit(queue, pm4_buffer->data,
+				       (uint32_t)pm4_buffer->size,
+				       &dispatch_idx);
+		if (ret) {
+			aql_err("[PMU] Session %llu: Failed to submit PM4 packet via AQL queue: %d",
+				session->session_id, ret);
+			aql_perf_inc_stat(AQL_STAT_ERRORS_TOTAL);
+			mutex_unlock(&aql_submit_mutex);
+			return ret;
+		}
+
+		/* Wait for GPU completion of this specific submission */
+		ret = aql_queue_wait(queue, dispatch_idx, AQL_SUBMIT_TIMEOUT_MS);
+		if (ret) {
+			aql_err("[PMU] Session %llu: AQL queue wait timeout: %d",
+				session->session_id, ret);
+			aql_perf_inc_stat(AQL_STAT_ERRORS_TOTAL);
+			mutex_unlock(&aql_submit_mutex);
+			return ret;
+		}
+	}
+
+	mutex_unlock(&aql_submit_mutex);
+
+	aql_debug("[PMU] aql_queue_submit+wait: SUCCESS for GPU %u", gpu_id);
 
 	aql_perf_inc_stat(AQL_STAT_PACKETS_SUBMITTED);
 	aql_perf_inc_stat(AQL_STAT_PACKETS_COMPLETED);
@@ -681,7 +730,7 @@ struct aql_measurement *aql_perf_measurement_create(struct aql_perf_session *ses
  *
  * This function:
  * 1. Creates START packet (which atomically allocates a counter)
- * 2. Submits PM4 buffer directly via kfd_ioctl_submit_ib_packet
+ * 2. Submits PM4 buffer via AQL queue
  * 3. Destroys PM4 buffer after submission
  */
 int aql_perf_measurement_start(struct aql_measurement *measurement)
@@ -853,25 +902,30 @@ int aql_perf_measurement_stop(struct aql_measurement *measurement)
 
 	/* Only generate STOP packet if we own the counter */
 	if (measurement->owns_counter) {
-		/* Create END packet */
-		ret = aql_perf_create_end_packet(measurement, &pm4_buffer);
-		if (ret) {
-			aql_err("[PMU] Session %llu: Failed to create END packet for GPU %u: %d",
-				session->session_id, measurement->gpu_id, ret);
-			goto cleanup;
-		}
+		if (aql_skip_stop) {
+			aql_info("[PMU] Session %llu: SKIPPING STOP PM4 submission for GPU %u (aql_skip_stop=1)",
+				 session->session_id, measurement->gpu_id);
+		} else {
+			/* Create END packet */
+			ret = aql_perf_create_end_packet(measurement, &pm4_buffer);
+			if (ret) {
+				aql_err("[PMU] Session %llu: Failed to create END packet for GPU %u: %d",
+					session->session_id, measurement->gpu_id, ret);
+				goto cleanup;
+			}
 
-		/* Submit PM4 buffer */
-		ret = aql_perf_submit_pm4_packet(session, measurement->gpu_id, pm4_buffer);
-		if (ret) {
-			aql_err("[PMU] Session %llu: Failed to submit END packet for GPU %u: %d",
-				session->session_id, measurement->gpu_id, ret);
+			/* Submit PM4 buffer */
+			ret = aql_perf_submit_pm4_packet(session, measurement->gpu_id, pm4_buffer);
+			if (ret) {
+				aql_err("[PMU] Session %llu: Failed to submit END packet for GPU %u: %d",
+					session->session_id, measurement->gpu_id, ret);
+				pm4_buffer_destroy(pm4_buffer);
+				goto cleanup;
+			}
+
+			/* Cleanup PM4 buffer */
 			pm4_buffer_destroy(pm4_buffer);
-			goto cleanup;
 		}
-
-		/* Cleanup PM4 buffer */
-		pm4_buffer_destroy(pm4_buffer);
 
 		/* Release allocated counter (we own it - use local copy to prevent TOCTOU) */
 		counter_reg_info_t *counter = measurement->allocated_counter;
@@ -1001,10 +1055,10 @@ static void read_diagnostic_log_buffer(struct aql_measurement *measurement, cons
 	counter_reg_info_t *counter = measurement->allocated_counter;
 	uint64_t *buffer;
 
-	if (!counter || !counter->allocation.data_buffer)
+	if (!counter || !counter->allocation.data_cpu_addr)
 		return;
 
-	buffer = (uint64_t *)counter->allocation.data_buffer->cpu_addr;
+	buffer = (uint64_t *)counter->allocation.data_cpu_addr;
 
 	if (strcmp(when, "BEFORE READ") == 0) {
 		aql_debug(
@@ -1064,11 +1118,11 @@ static uint64_t *read_get_result_buffer(struct aql_measurement *measurement)
 	counter_reg_info_t *counter = measurement->allocated_counter;
 	uint64_t *result_buffer = NULL;
 
-	if (counter && counter->allocation.data_buffer) {
-		result_buffer = (uint64_t *)counter->allocation.data_buffer->cpu_addr;
+	if (counter && counter->allocation.data_cpu_addr) {
+		result_buffer = (uint64_t *)counter->allocation.data_cpu_addr;
 		aql_debug("[PMU] READ_SYNC: GPU %u, data_buffer CPU addr=%p, GPU addr=0x%llx",
 			 measurement->gpu_id, result_buffer,
-			 (unsigned long long)counter->allocation.data_buffer->gpu_addr);
+			 (unsigned long long)counter->allocation.data_gpu_addr);
 	} else {
 		aql_warn("[PMU] READ_SYNC: GPU %u, no data buffer available (allocated_counter=%p)",
 			 measurement->gpu_id, counter);
@@ -1264,12 +1318,43 @@ void aql_perf_measurement_destroy(struct aql_measurement *measurement)
 		return;
 	}
 
-	/* Non-atomic context: safe to do synchronous cleanup before releasing reference */
-
-	/* Ensure measurement is stopped */
+	/* Non-atomic context: ensure measurement is stopped.
+	 * IMPORTANT: Always use workqueue for STOP to avoid calling
+	 * kthread_use_mm from user process context (measurement_destroy
+	 * is called from perf event_destroy in user process context,
+	 * but GPU submissions require the insmod process's mm). */
 	if (measurement->state == MEASUREMENT_ACTIVE) {
-		aql_debug("[PMU] Stopping active measurement before destroy");
-		aql_perf_measurement_stop(measurement);
+		struct aql_work_item *work_item;
+		struct workqueue_struct *wq;
+		DECLARE_COMPLETION_ONSTACK(stop_done);
+
+		aql_debug("[PMU] Queueing STOP on workqueue and waiting (from destroy)");
+
+		wq = aql_get_global_workqueue();
+		if (wq) {
+			work_item = aql_create_work_item(measurement, AQL_WORK_STOP);
+			if (!IS_ERR(work_item)) {
+				work_item->completion = &stop_done;
+				if (queue_work(wq, &work_item->work)) {
+					/* Wait for STOP to complete on workqueue */
+					wait_for_completion_timeout(&stop_done,
+						msecs_to_jiffies(10000));
+					aql_debug("[PMU] STOP completed on workqueue");
+				} else {
+					/* Already queued */
+					aql_measurement_put(measurement);
+					kfree(work_item);
+				}
+			}
+		}
+
+		/* Fallback: if workqueue not available, try direct stop.
+		 * This may crash if called from user context, but better
+		 * than leaking the counter. */
+		if (measurement->state == MEASUREMENT_ACTIVE) {
+			aql_warn("[PMU] Workqueue STOP failed, trying direct stop");
+			aql_perf_measurement_stop(measurement);
+		}
 	}
 
 	/* Remove from session's active measurements list while we still have the session pointer.
@@ -1324,6 +1409,19 @@ void aql_work_handler(struct work_struct *work)
 	struct aql_measurement *measurement = work_item->measurement;
 	int result = 0;
 	unsigned long flags;
+
+	/* Bail out immediately during module shutdown to avoid blocking rmmod
+	 * with 5s GPU timeouts per queued work item */
+	if (aql_pmu_is_shutting_down()) {
+		aql_debug("Work handler skipped (shutting down), GPU %u, op_type=%d",
+			  measurement->gpu_id, work_item->op_type);
+		work_item->result = -ESHUTDOWN;
+		if (work_item->completion)
+			complete(work_item->completion);
+		aql_measurement_put(measurement);
+		kfree(work_item);
+		return;
+	}
 
 	aql_debug("Starting work handler for GPU %u, op_type=%d", measurement->gpu_id,
 		  work_item->op_type);
@@ -1566,6 +1664,7 @@ EXPORT_SYMBOL_GPL(aql_perf_create_start_packet);
 EXPORT_SYMBOL_GPL(aql_perf_create_read_packet);
 EXPORT_SYMBOL_GPL(aql_perf_create_end_packet);
 EXPORT_SYMBOL_GPL(aql_perf_submit_pm4_packet);
+EXPORT_SYMBOL_GPL(aql_perf_get_queue);
 EXPORT_SYMBOL_GPL(aql_perf_measurement_create);
 EXPORT_SYMBOL_GPL(aql_perf_measurement_start);
 EXPORT_SYMBOL_GPL(aql_perf_measurement_stop);

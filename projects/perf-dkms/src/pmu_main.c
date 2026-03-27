@@ -36,6 +36,11 @@ static int timer_period_ms = 20;
 module_param(timer_period_ms, int, 0644);
 MODULE_PARM_DESC(timer_period_ms, "Timer period in milliseconds (default: 20)");
 
+/* Debug: skip synchronous read in pmu_del */
+static int aql_skip_del_read;
+module_param(aql_skip_del_read, int, 0644);
+MODULE_PARM_DESC(aql_skip_del_read, "Skip sync read in pmu_del (debug)");
+
 /* Forward declarations for PMU callbacks */
 static int amdgpu_pmu_event_init(struct perf_event *event);
 static int amdgpu_pmu_add(struct perf_event *event, int flags);
@@ -658,13 +663,17 @@ static void amdgpu_pmu_del(struct perf_event *event, int flags)
 			return;
 		}
 
-		/* Safe to do synchronous operations - read final count before stopping.
-         * For NO_INTERRUPT PMUs like ours, we must update the count here
-         * because perf stat won't explicitly call read(). */
-		pmu_debug("del: Reading final counter value before stop (synchronous)\n");
-		uint64_t counter_value = aql_pmu_event_read_sync(event);
-		local64_set(&event->count, counter_value);
-		pmu_info("del: Final counter value=%llu\n", counter_value);
+		/* Read final count before stopping.
+		 * IMPORTANT: Do NOT call aql_pmu_event_read_sync from here because
+		 * pmu_del runs in user process context (perf process), but GPU
+		 * submissions use kthread_use_mm which is only safe from kernel
+		 * threads. Instead, use the cached value from background reads.
+		 * The timer has been firing periodic reads, so cached value is fresh. */
+		{
+			uint64_t counter_value = aql_pmu_event_read(event);
+			local64_set(&event->count, counter_value);
+			pmu_info("del: Final cached counter value=%llu\n", counter_value);
+		}
 
 		/* Stop the event but DON'T destroy it - the event may be re-added later.
          * Only event_destroy should free the measurement structure. */
@@ -1008,15 +1017,21 @@ static void __exit amdgpu_pmu_exit(void)
 		/* Step 1: Stop timer to prevent new work from being queued */
 		hrtimer_cancel(&pmu->timer);
 
-		/* Step 2: Flush all measurement workqueues BEFORE session cleanup */
+		/* Step 2: Unregister PMU FIRST — this forces perf subsystem to
+		 * destroy all open events (calling destroy callbacks), which
+		 * releases measurement references. Must happen before session
+		 * cleanup so destroy callbacks can access the session. */
+		perf_pmu_unregister(&pmu->pmu);
+		pmu_info("PMU unregistered\n");
+
+		/* Step 3: Flush workqueues — drain any async work items queued
+		 * by destroy callbacks (e.g., async stop from atomic context) */
 		aql_pmu_flush_all_measurements();
 
-		/* Step 3: Now safe to release session */
+		/* Step 4: Now safe to release session — all events destroyed,
+		 * all work items completed */
 		aql_pmu_cleanup();
 		pmu_info("AQL hardware acceleration disabled\n");
-
-		/* Unregister PMU */
-		perf_pmu_unregister(&pmu->pmu);
 
 		/* Print statistics */
 		pmu_info("Total events created: %lld\n", atomic64_read(&pmu->total_events));

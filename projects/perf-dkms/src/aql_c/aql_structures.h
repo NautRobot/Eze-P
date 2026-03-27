@@ -181,9 +181,6 @@ typedef enum {
 	COUNTER_STATE_ERROR
 } counter_state_t;
 
-/* Forward declaration for KFD allocation type */
-struct kfd_data_alloc;
-
 /* Counter allocation info - tracks what a counter is being used for */
 typedef struct {
 	atomic_t state; /* Atomic state for lock-free allocation */
@@ -193,9 +190,10 @@ typedef struct {
 	const char *description; /* Optional description of what's being measured */
 	uint64_t allocation_time; /* Timestamp when allocated */
 
-	/* GPU device memory buffers (allocated via kfd_alloc_device, 1 page each) */
-	struct kfd_data_alloc *command_buffer; /* PM4 command buffer for counter operations */
-	struct kfd_data_alloc *data_buffer; /* Data buffer for counter readback */
+	/* GPU data buffer pointers (provided by AQL queue manager) */
+	void     *data_cpu_addr;  /* Kernel VA for reading counter results */
+	uint64_t  data_gpu_addr;  /* GPU VA for COPY_DATA destination */
+	uint32_t  data_size;      /* Size of available data buffer */
 } counter_allocation_t;
 
 /* Counter register information with allocation tracking */

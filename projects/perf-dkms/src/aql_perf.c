@@ -24,15 +24,6 @@
 #include "aql_c/counter_registry.h"
 #include "aql_c/packet_generation.h"
 
-/* External KFD functions */
-extern int kfd_alloc_device(struct file *filep, struct kfd_process *p, uint32_t gpu_id,
-			    size_t data_size, struct kfd_data_alloc *data_alloc);
-extern int kfd_destroy_device_mem(struct file *filep, struct kfd_process *p, uint32_t gpu_id,
-				  struct kfd_data_alloc *data_alloc);
-extern int kfd_ioctl_submit_ib_packet(struct file *filep, struct kfd_process *p, uint32_t gpu_id,
-				      const uint32_t *packet, size_t ib_len);
-extern int kfd_process_get_all_gpuids(struct kfd_process *p, uint32_t *gpu_ids, uint32_t *num_gpus);
-
 /* Global session ID counter */
 static atomic64_t session_id_counter = ATOMIC64_INIT(0);
 
@@ -300,15 +291,20 @@ static void aql_perf_session_release(struct aql_perf_session *session)
 		spin_unlock_irqrestore(&session->shared_lock, flags);
 	}
 
-	/* Free counter buffers and architectures for all GPUs */
+	/* Destroy AQL queues for all GPUs */
+	if (session->queues && session->num_gpus > 0) {
+		for (uint32_t i = 0; i < session->num_gpus; i++) {
+			aql_queue_destroy(&session->queues[i], session->kfd_file);
+		}
+		kfree(session->queues);
+		session->queues = NULL;
+	}
+
+	/* Free architectures for all GPUs */
 	if (session->archs && session->num_gpus > 0) {
 		for (uint32_t i = 0; i < session->num_gpus; i++) {
 			if (session->archs[i]) {
-				/* Free counter buffers for this GPU */
-				aql_perf_free_counter_buffers(session->archs[i], session->kfd_file,
-							      session->process,
-							      session->gpu_ids[i]);
-				/* Destroy architecture */
+				aql_perf_clear_counter_buffers(session->archs[i]);
 				arch_destroy(session->archs[i]);
 				session->archs[i] = NULL;
 			}
@@ -447,14 +443,6 @@ int aql_perf_session_initialize(struct aql_perf_session *session)
 		goto error;
 	}
 
-	/* Extract kfd_process from private_data */
-	session->process = session->kfd_file->private_data;
-	if (!session->process) {
-		aql_err("Session %llu: No kfd_process in file private_data", session->session_id);
-		ret = -EINVAL;
-		goto error;
-	}
-
 	aql_debug("Session %llu: KFD device opened successfully", session->session_id);
 
 	/* Discover available GPUs */
@@ -480,7 +468,15 @@ int aql_perf_session_initialize(struct aql_perf_session *session)
 		goto error;
 	}
 
-	/* Create architecture for each GPU */
+	/* Allocate AQL queues array */
+	session->queues = kzalloc(session->num_gpus * sizeof(struct aql_gpu_queue), GFP_KERNEL);
+	if (!session->queues) {
+		aql_err("Session %llu: Failed to allocate queues array", session->session_id);
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	/* Create architecture and AQL queue for each GPU */
 	for (uint32_t i = 0; i < session->num_gpus; i++) {
 		const char *arch_name = get_arch_name_from_gpu_sysfs(session->gpu_ids[i]);
 		if (!arch_name) {
@@ -500,15 +496,25 @@ int aql_perf_session_initialize(struct aql_perf_session *session)
 		aql_info("Session %llu: Created architecture %s for GPU %u (index %u)",
 			 session->session_id, arch_name, session->gpu_ids[i], i);
 
-		/* Allocate counter buffers for this GPU's architecture */
-		ret = aql_perf_allocate_counter_buffers(session->archs[i], session->kfd_file,
-							session->process, session->gpu_ids[i]);
+		/* Create AQL queue for this GPU */
+		ret = aql_queue_create(&session->queues[i], session->kfd_file,
+				       session->gpu_ids[i]);
 		if (ret) {
-			aql_err("Session %llu: Failed to allocate counter buffers for GPU %u: %d",
+			aql_err("Session %llu: Failed to create AQL queue for GPU %u: %d",
 				session->session_id, session->gpu_ids[i], ret);
 			goto error;
 		}
-		aql_info("Session %llu: Allocated counter buffers for GPU %u (index %u)",
+		aql_info("Session %llu: Created AQL queue for GPU %u (index %u)",
+			 session->session_id, session->gpu_ids[i], i);
+
+		/* Set up counter buffer pointers from queue's data buffer */
+		ret = aql_perf_setup_counter_buffers(session->archs[i], &session->queues[i]);
+		if (ret) {
+			aql_err("Session %llu: Failed to setup counter buffers for GPU %u: %d",
+				session->session_id, session->gpu_ids[i], ret);
+			goto error;
+		}
+		aql_info("Session %llu: Setup counter buffers for GPU %u (index %u)",
 			 session->session_id, session->gpu_ids[i], i);
 	}
 
@@ -568,106 +574,110 @@ void aql_perf_session_destroy(struct aql_perf_session *session)
 /* GPU Discovery and Memory Management */
 
 /**
- * aql_perf_discover_gpus - Discover available GPUs
+ * aql_perf_discover_gpus - Discover available GPUs via KFD sysfs topology
  * @session: AQL performance session
+ *
+ * Iterates /sys/class/kfd/kfd/topology/nodes/N/gpu_id to find all GPUs.
+ * No KFD exported functions needed.
  *
  * Returns: 0 on success, negative error code on failure
  */
 int aql_perf_discover_gpus(struct aql_perf_session *session)
 {
-	uint32_t max_gpus = AQL_PERF_MAX_GPUS;
-	int ret;
+	char sysfs_path[128];
+	struct file *fp;
+	char buffer[16];
+	loff_t pos;
+	ssize_t bytes_read;
+	uint32_t gpu_id;
+	int node_id;
 
-	session->gpu_ids = kzalloc(max_gpus * sizeof(uint32_t), GFP_KERNEL);
+	session->gpu_ids = kzalloc(AQL_PERF_MAX_GPUS * sizeof(uint32_t), GFP_KERNEL);
 	if (!session->gpu_ids) {
 		aql_err("Session %llu: Failed to allocate GPU ID array", session->session_id);
 		return -ENOMEM;
 	}
 
-	ret = kfd_process_get_all_gpuids(session->process, session->gpu_ids, &max_gpus);
-	if (ret) {
-		aql_err("Session %llu: Failed to get GPU IDs: %d", session->session_id, ret);
+	session->num_gpus = 0;
+
+	for (node_id = 0; node_id < 32 && session->num_gpus < AQL_PERF_MAX_GPUS; node_id++) {
+		snprintf(sysfs_path, sizeof(sysfs_path),
+			 "/sys/class/kfd/kfd/topology/nodes/%d/gpu_id", node_id);
+
+		fp = filp_open(sysfs_path, O_RDONLY, 0);
+		if (IS_ERR(fp))
+			continue;
+
+		memset(buffer, 0, sizeof(buffer));
+		pos = 0;
+		bytes_read = kernel_read(fp, buffer, sizeof(buffer) - 1, &pos);
+		filp_close(fp, NULL);
+
+		if (bytes_read <= 0)
+			continue;
+
+		buffer[bytes_read] = '\0';
+		gpu_id = simple_strtoul(buffer, NULL, 10);
+
+		/* gpu_id == 0 means CPU node, skip */
+		if (gpu_id == 0)
+			continue;
+
+		session->gpu_ids[session->num_gpus] = gpu_id;
+		aql_debug("Session %llu: GPU[%u] ID = %u (node %d)",
+			  session->session_id, session->num_gpus, gpu_id, node_id);
+		session->num_gpus++;
+	}
+
+	if (session->num_gpus == 0) {
+		aql_err("Session %llu: No GPUs found in KFD topology", session->session_id);
 		kfree(session->gpu_ids);
 		session->gpu_ids = NULL;
-		return ret;
+		return -ENODEV;
 	}
 
-	session->num_gpus = max_gpus;
-	aql_debug("Session %llu: Discovered %u GPUs", session->session_id, session->num_gpus);
-
-	/* Log discovered GPU IDs */
-	for (uint32_t i = 0; i < session->num_gpus; i++) {
-		aql_debug("Session %llu: GPU[%u] ID = %u", session->session_id, i,
-			  session->gpu_ids[i]);
-	}
-
+	aql_info("Session %llu: Discovered %u GPUs via sysfs", session->session_id,
+		 session->num_gpus);
 	return 0;
 }
 
 /**
- * aql_perf_allocate_counter_buffers - Allocate KFD device memory for counter buffers
+ * aql_perf_setup_counter_buffers - Set up counter buffer pointers from AQL queue
  * @arch: Architecture structure containing counter info
- * @kfd_file: KFD file pointer from session
- * @process: KFD process pointer from session
- * @gpu_id: GPU ID to allocate memory on
+ * @queue: Initialized AQL queue whose data buffer provides counter memory
  *
- * Iterates through all blocks and allocates command_buffer and data_buffer
- * (1 page each) for every counter via kfd_alloc_device.
+ * Points all counter allocations at the queue's shared data buffer.
+ * Each counter gets the same buffer (the GPU COPY_DATA writes are serialized
+ * per-counter-read anyway).
  *
  * Returns: 0 on success, negative error code on failure
  */
-int aql_perf_allocate_counter_buffers(arch_t *arch, struct file *kfd_file,
-				      struct kfd_process *process, uint32_t gpu_id)
+int aql_perf_setup_counter_buffers(arch_t *arch, struct aql_gpu_queue *queue)
 {
 	uint32_t block_idx, counter_idx;
-	int ret;
+	void *data_cpu;
+	uint64_t data_gpu;
 
-	if (!arch || !kfd_file || !process)
+	if (!arch || !queue)
 		return -EINVAL;
 
-	/* Iterate through all blocks */
+	data_cpu = queue->data_buf;
+	data_gpu = queue->data_gpu_addr;
+
+	if (!data_cpu)
+		return -EINVAL;
+
+	/* Point all counter allocations at the queue's data buffer */
 	for (block_idx = 0; block_idx < HW_IP_BLOCK_LAST; block_idx++) {
 		block_info_t *block = arch->block_map.blocks[block_idx];
 		if (!block || !block->counter_reg_info)
 			continue;
 
-		/* Allocate buffers for each counter in this block */
 		for (counter_idx = 0; counter_idx < block->counter_count; counter_idx++) {
 			counter_reg_info_t *reg = &block->counter_reg_info[counter_idx];
-
-			/* Allocate command buffer struct and device memory (1 page) */
-			reg->allocation.command_buffer =
-				kzalloc(sizeof(struct kfd_data_alloc), GFP_KERNEL);
-			if (!reg->allocation.command_buffer) {
-				aql_perf_free_counter_buffers(arch, kfd_file, process, gpu_id);
-				return -ENOMEM;
-			}
-
-			ret = kfd_alloc_device(kfd_file, process, gpu_id, PAGE_SIZE,
-					       reg->allocation.command_buffer);
-			if (ret != 0) {
-				kfree(reg->allocation.command_buffer);
-				reg->allocation.command_buffer = NULL;
-				aql_perf_free_counter_buffers(arch, kfd_file, process, gpu_id);
-				return ret;
-			}
-
-			/* Allocate data buffer struct and device memory (1 page) */
-			reg->allocation.data_buffer =
-				kzalloc(sizeof(struct kfd_data_alloc), GFP_KERNEL);
-			if (!reg->allocation.data_buffer) {
-				aql_perf_free_counter_buffers(arch, kfd_file, process, gpu_id);
-				return -ENOMEM;
-			}
-
-			ret = kfd_alloc_device(kfd_file, process, gpu_id, PAGE_SIZE,
-					       reg->allocation.data_buffer);
-			if (ret != 0) {
-				kfree(reg->allocation.data_buffer);
-				reg->allocation.data_buffer = NULL;
-				aql_perf_free_counter_buffers(arch, kfd_file, process, gpu_id);
-				return ret;
-			}
+			reg->allocation.data_cpu_addr = data_cpu;
+			reg->allocation.data_gpu_addr = data_gpu;
+			reg->allocation.data_size = queue->data_size;
 		}
 	}
 
@@ -675,49 +685,29 @@ int aql_perf_allocate_counter_buffers(arch_t *arch, struct file *kfd_file,
 }
 
 /**
- * aql_perf_free_counter_buffers - Free KFD device memory for counter buffers
+ * aql_perf_clear_counter_buffers - Clear counter buffer pointers
  * @arch: Architecture structure containing counter info
- * @kfd_file: KFD file pointer from session
- * @process: KFD process pointer from session
- * @gpu_id: GPU ID where memory was allocated
  *
- * Frees all command_buffer and data_buffer allocations.
+ * Clears all counter buffer pointers. The actual GPU memory is owned
+ * and freed by the AQL queue manager.
  */
-void aql_perf_free_counter_buffers(arch_t *arch, struct file *kfd_file, struct kfd_process *process,
-				   uint32_t gpu_id)
+void aql_perf_clear_counter_buffers(arch_t *arch)
 {
 	uint32_t block_idx, counter_idx;
 
 	if (!arch)
 		return;
 
-	/* Iterate through all blocks */
 	for (block_idx = 0; block_idx < HW_IP_BLOCK_LAST; block_idx++) {
 		block_info_t *block = arch->block_map.blocks[block_idx];
 		if (!block || !block->counter_reg_info)
 			continue;
 
-		/* Free buffers for each counter in this block */
 		for (counter_idx = 0; counter_idx < block->counter_count; counter_idx++) {
 			counter_reg_info_t *reg = &block->counter_reg_info[counter_idx];
-
-			/* Free command buffer */
-			if (reg->allocation.command_buffer) {
-				if (kfd_file && process)
-					kfd_destroy_device_mem(kfd_file, process, gpu_id,
-							       reg->allocation.command_buffer);
-				kfree(reg->allocation.command_buffer);
-				reg->allocation.command_buffer = NULL;
-			}
-
-			/* Free data buffer */
-			if (reg->allocation.data_buffer) {
-				if (kfd_file && process)
-					kfd_destroy_device_mem(kfd_file, process, gpu_id,
-							       reg->allocation.data_buffer);
-				kfree(reg->allocation.data_buffer);
-				reg->allocation.data_buffer = NULL;
-			}
+			reg->allocation.data_cpu_addr = NULL;
+			reg->allocation.data_gpu_addr = 0;
+			reg->allocation.data_size = 0;
 		}
 	}
 }
@@ -819,7 +809,7 @@ void aql_counter_release(counter_reg_info_t *reg)
 	/* Atomically set state back to FREE */
 	atomic_set(&reg->allocation.state, COUNTER_STATE_FREE);
 
-	/* Keep command_buffer and data_buffer - they are pre-allocated and reused */
+	/* data_cpu_addr/data_gpu_addr point to queue's shared buffer - keep them */
 
 	aql_info("[PMU] aql_counter_release: counter released successfully (was state %d)",
 		 old_state);
@@ -919,8 +909,8 @@ EXPORT_SYMBOL_GPL(aql_perf_session_initialize);
 EXPORT_SYMBOL_GPL(aql_perf_session_destroy);
 EXPORT_SYMBOL_GPL(aql_perf_session_get);
 EXPORT_SYMBOL_GPL(aql_perf_session_put);
-EXPORT_SYMBOL_GPL(aql_perf_allocate_counter_buffers);
-EXPORT_SYMBOL_GPL(aql_perf_free_counter_buffers);
+EXPORT_SYMBOL_GPL(aql_perf_setup_counter_buffers);
+EXPORT_SYMBOL_GPL(aql_perf_clear_counter_buffers);
 EXPORT_SYMBOL_GPL(aql_counter_try_allocate);
 EXPORT_SYMBOL_GPL(aql_counter_release);
 EXPORT_SYMBOL_GPL(aql_build_counter_info);

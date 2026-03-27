@@ -169,8 +169,9 @@ static inline void create_counter_reg_info(counter_reg_info_t *reg_info, uint32_
 	reg_info->allocation.user_id = 0;
 	reg_info->allocation.description = NULL;
 	reg_info->allocation.allocation_time = 0;
-	reg_info->allocation.command_buffer = NULL;
-	reg_info->allocation.data_buffer = NULL;
+	reg_info->allocation.data_cpu_addr = NULL;
+	reg_info->allocation.data_gpu_addr = 0;
+	reg_info->allocation.data_size = 0;
 }
 
 #endif /* ARCH_CREATOR_COMMON_H */
