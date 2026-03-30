@@ -22,13 +22,13 @@ sendFd(int sock, int fd) noexcept
 {
     int      data{1};
     iovec    iov{&data, sizeof(data)};
-    msghdr   msgh;
-    cmsghdr *cmsgp;
+    msghdr   msgh{};
+    cmsghdr *cmsgp{};
 
     union {
         char    buff[CMSG_SPACE(sizeof(int))];
         cmsghdr align;
-    } controlMsg;
+    } controlMsg{};
 
     msgh.msg_name       = nullptr;
     msgh.msg_namelen    = 0;
@@ -36,6 +36,7 @@ sendFd(int sock, int fd) noexcept
     msgh.msg_iovlen     = 1;
     msgh.msg_control    = controlMsg.buff;
     msgh.msg_controllen = sizeof(controlMsg.buff);
+    msgh.msg_flags      = 0;
 
     cmsgp             = CMSG_FIRSTHDR(&msgh);
     cmsgp->cmsg_level = SOL_SOCKET;
@@ -54,13 +55,13 @@ recvFd(int sockfd) noexcept
 {
     int      data, fd;
     iovec    iov{&data, sizeof(data)};
-    msghdr   msgh;
-    cmsghdr *cmsgp;
+    msghdr   msgh{};
+    cmsghdr *cmsgp{};
 
     union {
         char    buff[CMSG_SPACE(sizeof(int))];
         cmsghdr align;
-    } controlMsg;
+    } controlMsg{};
 
     msgh.msg_name       = nullptr;
     msgh.msg_namelen    = 0;
@@ -68,6 +69,7 @@ recvFd(int sockfd) noexcept
     msgh.msg_iovlen     = 1;
     msgh.msg_control    = controlMsg.buff;
     msgh.msg_controllen = sizeof(controlMsg.buff);
+    msgh.msg_flags      = 0;
 
     if (recvmsg(sockfd, &msgh, 0) == -1)
         return -1;
@@ -129,25 +131,41 @@ StatsServer::statsDeleter(Stats *s)
 void
 StatsServer::threadFn()
 {
-    int   sock{socket(AF_UNIX, SOCK_STREAM, 0)};
-    pid_t pid{getpid()};
-    if (sock == -1) {
+    FileDescriptor sock{FileDescriptor::make_managed(socket(AF_UNIX, SOCK_STREAM, 0))};
+    pid_t          pid{getpid()};
+    if (sock.get() == -1) {
         return;
     }
     sockaddr_un addr;
     populateSocketAddr(addr, pid);
-    if (bind(sock, reinterpret_cast<const sockaddr *>(&addr), sizeof(addr)) == -1) {
+    if (bind(sock.get(), reinterpret_cast<const sockaddr *>(&addr), sizeof(addr)) == -1) {
         return;
     }
-    if (listen(sock, 64) == -1) {
+    if (listen(sock.get(), 64) == -1) {
         return;
     }
     while (true) {
-        pollfd pfd[2]{{sock, POLLIN, 0}, {m_efd.get(), POLLIN, 0}};
-        poll(&pfd[0], 2, -1);
+        pollfd pfd[2]{{sock.get(), POLLIN, 0}, {m_efd.get(), POLLIN, 0}};
+
+        int ret = poll(&pfd[0], 2, -1);
+
+        if (ret == 0) {
+            continue;
+        }
+        else if (ret < 0) {
+            if (errno == EINTR) {
+                // Signal interrupt
+                continue;
+            }
+            else {
+                // Badness
+                break;
+            }
+        }
+
         if (pfd[0].revents & POLLIN) {
             socklen_t addrlen{sizeof(addr)};
-            int       conn{accept(sock, reinterpret_cast<sockaddr *>(&addr), &addrlen)};
+            int       conn{accept(sock.get(), reinterpret_cast<sockaddr *>(&addr), &addrlen)};
             if (conn == -1) {
                 continue;
             }
@@ -158,7 +176,6 @@ StatsServer::threadFn()
             break;
         }
     }
-    close(sock);
 }
 
 StatsClient::StatsClient(pid_t p)
