@@ -10,12 +10,13 @@ from hipfile._hipfile import (
     hipfile_errstr,
     is_hip_drv_err,
     hip_drv_err,
-    # Buffer registration
-    buf_register,
-    buf_deregister,
     # Synchronous I/O
     read,
     write
+)
+from hipfile.buffer import(
+    buf_deregister,
+    buf_register
 )
 from hipfile.driver import (
     Driver
