@@ -10,8 +10,6 @@ from hipfile._hipfile import (
     hipfile_errstr,
     is_hip_drv_err,
     hip_drv_err,
-    # Version
-    get_version,
     # File handles
     handle_register,
     handle_deregister,
@@ -20,15 +18,17 @@ from hipfile._hipfile import (
     buf_deregister,
     # Synchronous I/O
     read,
-    write,
-    # Driver properties
-    driver_get_properties,
+    write
 )
 from hipfile.driver import (
     Driver
 )
 from hipfile.error import (
     HipFileException
+)
+from hipfile.properties import (
+    driver_get_properties,
+    get_version
 )
 
 __version__ = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
