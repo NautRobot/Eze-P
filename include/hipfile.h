@@ -508,14 +508,13 @@ hipFileError_t hipFileBufDeregister(const void *buffer_base);
  * @brief Synchronously read data from a file into a GPU buffer
  * @ingroup file
  *
- * hipFileRead() will transfer at most 0x7ffff000 (2,147,479,552) bytes,
- * returning the number of bytes actually transferred.
- *
  * @param [in] fh            \hipfile_handle_param
  * @param [in] buffer_base   \buffer_base_param
  * @param [in] size          Number of bytes that should be read
  * @param [in] file_offset   Offset into the file that should be read from
  * @param [in] buffer_offset Offset of the GPU buffer that that the data should be written to
+ *
+ * \max_io_size_note
  *
  * @return if >= 0: Number of bytes read
  * @return if -1:   System error (check `errno` for the specific error)
@@ -529,14 +528,13 @@ ssize_t hipFileRead(hipFileHandle_t fh, void *buffer_base, size_t size, hoff_t f
  * @brief Synchronously write data from a GPU buffer to a file
  * @ingroup file
  *
- * hipFileWrite() will transfer at most 0x7ffff000 (2,147,479,552) bytes,
- * returning the number of bytes actually transferred.
- *
  * @param [in] fh            \hipfile_handle_param
  * @param [in] buffer_base   \buffer_base_param
  * @param [in] size          Number of bytes that should be written
  * @param [in] file_offset   Offset into the file that should be written to
  * @param [in] buffer_offset Offset of the GPU buffer that the data should be read from
+ *
+ * \max_io_size_note
  *
  * @return if >= 0: Number of bytes written
  * @return if -1:   System error (check `errno` for the specific error)
@@ -838,6 +836,8 @@ void hipFileBatchIODestroy(hipFileBatchHandle_t batch_idp);
  * @param [out] bytes_read_p    Number of bytes read
  * @param [in]  stream          \hipstream_param. \hipstream_if_null.
  *
+ * \max_io_size_note
+ *
  * @return \hipfile_error_return
  */
 HIPFILE_API
@@ -855,6 +855,8 @@ hipFileError_t hipFileReadAsync(hipFileHandle_t fh, void *buffer_base, size_t *s
  * @param [in]  buffer_offset_p Offset of the GPU buffer that that the data should be read from
  * @param [out] bytes_written_p Number of bytes written
  * @param [in]  stream          \hipstream_param. \hipstream_if_null.
+ *
+ * \max_io_size_note
  *
  * @return \hipfile_error_return
  */
