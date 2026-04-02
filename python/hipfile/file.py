@@ -4,7 +4,10 @@ import stat
 from hipfile._hipfile import (
     # File handles
     handle_register,
-    handle_deregister
+    handle_deregister,
+    # Synchronous I/O
+    read as _read,
+    write as _write
 )
 from hipfile.error import HipFileException
 
@@ -64,3 +67,27 @@ class FileHandle():
         if (self._fd is not None):
             os.close(self._fd)
             self._fd = None
+    
+    def read(self, buffer, size, file_offset, buffer_offset):
+        if (self._handle is None):
+            raise RuntimeError("The FileHandle is not open.")
+        bytes_read = _read(self._handle, buffer, size, file_offset, buffer_offset)
+        # Note: _read should raise an OSError if a system error occured.
+        if (bytes_read < -1):
+            # hipFile Error
+            # Issue: If bytes_read == -hipFileHipDriverError, how do we get the hipError_t?
+            # Probably like in C and calling hipPeekLastError
+            raise HipFileException(-bytes_read, 0)
+        return bytes_read
+
+    def write(self, buffer, size, file_offset, buffer_offset):
+        if (self._handle is None):
+            raise RuntimeError("The FileHandle is not open.")
+        bytes_written = _write(self._handle, buffer, size, file_offset, buffer_offset)
+        # Note: _write should raise an OSError if a system error occured.
+        if (bytes_written < -1):
+            # hipFile Error
+            # Issue: If bytes_written == -hipFileHipDriverError, how do we get the hipError_t?
+            # Probably like in C and calling hipPeekLastError
+            raise HipFileException(-bytes_written, 0)
+        return bytes_written
