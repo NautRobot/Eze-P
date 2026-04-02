@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <system_error>
 #include <tuple>
+#include <utility>
 
 using namespace hipFile;
 using namespace testing;
@@ -102,7 +103,7 @@ public:
 
     FastpathScoreExpectationsBuilder(StrictMock<MConfiguration> &mcfg, shared_ptr<StrictMock<MFile>> mfile,
                                      shared_ptr<StrictMock<MBuffer>> mbuffer)
-        : m_mcfg(mcfg), m_mfile(mfile), m_mbuffer(mbuffer)
+        : m_mcfg(mcfg), m_mfile(std::move(mfile)), m_mbuffer(std::move(mbuffer))
     {
     }
 
