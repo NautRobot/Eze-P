@@ -1,0 +1,56 @@
+import hashlib
+import os
+import pathlib
+import stat
+
+from hipfile.buffer import buf_deregister, buf_register
+from hipfile.driver import Driver
+from hipfile.file import FileHandle
+from hipfile.properties import driver_get_properties, get_version
+from hipfile.hipMalloc import hipFree, hipMalloc
+
+hipfile_version = get_version()
+
+input_path = pathlib.Path("/mnt/ais/ext4/random_2GiB.bin")
+output_path = pathlib.Path("/mnt/ais/ext4/output.bin")
+
+print(f"hipFile Version: {hipfile_version}")
+print(f"Driver Use Count Before: {Driver.use_count()}")
+
+# Max to a 2GiB Buffer
+# Note: Max IO in a single transaction is 2GiB - 4KiB as set by the Linux Kernel
+#       Larger IOs will be quietly truncated.
+size = min(input_path.stat().st_size, 2 * 1024 * 1024 * 1024)
+buffer = hipMalloc(size)
+buffer_ptr = buffer.value
+print(f"Buffer located at: {buffer_ptr} | {hex(buffer_ptr)}")
+buf_register(buffer.value, size, 0)
+
+with Driver() as hipfile_driver:
+    print(f"Driver Use Count After: {hipfile_driver.use_count()}")
+    with FileHandle(input_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT) as fh_input:
+        with FileHandle(output_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT | os.O_TRUNC) as fh_output:
+            print(f"Transferring {size} bytes...")
+            bytes_read = fh_input.read(buffer_ptr, size, 0, 0)
+            print(f"Bytes Read: {bytes_read}")
+            bytes_written = fh_output.write(buffer_ptr, size, 0, 0)
+            print(f"Bytes Written: {bytes_written}")
+
+buf_deregister(buffer_ptr)
+hipFree(buffer)
+
+with open(input_path, 'br') as file_in:
+    hash_in = hashlib.sha256()
+    chunk = file_in.read(1 * 1024 * 1024) # 1 MiB
+    while (len(chunk) != 0):
+        hash_in.update(chunk)
+        chunk = file_in.read(1 * 1024 * 1024) # 1 MiB
+    print(f"Input File Hash: {hash_in.hexdigest()}")
+
+with open(output_path, 'br') as file_out:
+    hash_out = hashlib.sha256()
+    chunk = file_out.read(1 * 1024 * 1024) # 1 MiB
+    while (len(chunk) != 0):
+        hash_out.update(chunk)
+        chunk = file_out.read(1 * 1024 * 1024) # 1 MiB
+    print(f"Output File Hash: {hash_out.hexdigest()}")
