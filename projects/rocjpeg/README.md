@@ -38,6 +38,8 @@ rocJPEG is built and installed as part of [TheRock](https://github.com/ROCm/TheR
 rocJPEG is built as part of [TheRock](https://github.com/ROCm/TheRock). To build standalone from source:
 
 ```shell
+git clone https://github.com/ROCm/rocm-systems.git
+cd rocm-systems/projects/rocjpeg
 mkdir build && cd build
 cmake ../
 make -j8
@@ -93,3 +95,4 @@ individual folders to build and run the samples.
 
 * Linux
   * Ubuntu - `22.04` / `24.04`
+* [TheRock](https://github.com/ROCm/TheRock) - `7.12` or later
