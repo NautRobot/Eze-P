@@ -9,7 +9,7 @@
   sudo apt install libavcodec-dev libavformat-dev libavutil-dev
   ```
 
-* Python3 and pip packages - `pandas`, & ` tabulate`
+* Python3 and pip packages - `pandas`, & `tabulate`
   
 ```shell
 python3 -m pip install pandas tabulate
