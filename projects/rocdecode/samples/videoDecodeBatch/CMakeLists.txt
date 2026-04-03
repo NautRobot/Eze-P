@@ -66,8 +66,9 @@ find_package(HIP QUIET)
 find_package(rocdecode QUIET)
 find_package(rocprofiler-register QUIET)
 find_package(FFmpeg QUIET)
+find_package(Threads QUIET)
 
-if(HIP_FOUND AND FFMPEG_FOUND AND rocdecode_FOUND AND rocprofiler-register_FOUND)
+if(HIP_FOUND AND FFMPEG_FOUND AND rocdecode_FOUND AND Threads_FOUND AND rocprofiler-register_FOUND)
     # HIP
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} hip::host)
     # FFMPEG
@@ -81,7 +82,6 @@ if(HIP_FOUND AND FFMPEG_FOUND AND rocdecode_FOUND AND rocprofiler-register_FOUND
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} rocdecode::rocdecode)
     #threads
     set(THREADS_PREFER_PTHREAD_FLAG ON)
-    find_package(Threads REQUIRED)
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} Threads::Threads)
     # rocprofiler-register
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} rocprofiler-register::rocprofiler-register)

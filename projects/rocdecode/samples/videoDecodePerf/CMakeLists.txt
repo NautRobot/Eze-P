@@ -81,7 +81,6 @@ if(HIP_FOUND AND FFMPEG_FOUND AND rocdecode_FOUND AND Threads_FOUND AND rocprofi
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} rocdecode::rocdecode)
     # threads
     set(THREADS_PREFER_PTHREAD_FLAG ON)
-    find_package(Threads REQUIRED)
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} Threads::Threads)
     # rocprofiler-register
     set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} rocprofiler-register::rocprofiler-register)

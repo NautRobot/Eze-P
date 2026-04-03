@@ -50,7 +50,7 @@ find_package(rocjpeg QUIET)
 find_package(rocprofiler-register QUIET)
 
 # threads
-find_package(Threads REQUIRED)
+find_package(Threads QUIET)
 
 if(HIP_FOUND AND rocjpeg_FOUND AND Threads_FOUND AND rocprofiler-register_FOUND)
     # HIP
