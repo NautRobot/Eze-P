@@ -4,7 +4,7 @@ The video decode picture files sample illustrates decoding an elementary video s
 
 ## Prerequisites:
 
-* Install [rocDecode](../../README.md#build-and-install-instructions)
+* Install [rocDecode](../../README.md#build-and-install)
 
 ## Build
 

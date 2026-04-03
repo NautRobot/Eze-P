@@ -1,17 +1,13 @@
 # rocDecode Test Scripts
 
 ## Pre-requisites to run python script
-* Install [rocDecode](../../README.md#build-and-install-instructions)
+* Install [rocDecode](../../README.md#build-and-install)
 
 * [FFMPEG](https://ffmpeg.org/about.html)
-
-    * On `Ubuntu`
 
   ```shell
   sudo apt install libavcodec-dev libavformat-dev libavutil-dev
   ```
-  
-    * On `RHEL`/`SLES` - install ffmpeg development packages manually or use [rocDecode-setup.py](../../rocDecode-setup.py) script
 
 * Python3 and pip packages - `pandas`, & ` tabulate`
   

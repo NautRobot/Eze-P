@@ -4,7 +4,7 @@ The video decode raw sample illustrates decoding a single packetized video strea
 
 ## Prerequisites:
 
-* Install [rocDecode](../../README.md#build-and-install-instructions)
+* Install [rocDecode](../../README.md#build-and-install)
 
 ## Build
 
