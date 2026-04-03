@@ -4,7 +4,7 @@ The video decode sample illustrates decoding a single packetized video stream us
 
 ## Prerequisites:
 
-* Install [rocDecode](../../README.md#build-and-install)
+* Install [rocDecode](https://rocm.docs.amd.com/projects/rocDecode/en/latest/install/rocDecode-build-and-install.html)
 
 * [FFMPEG](https://ffmpeg.org/about.html)
 

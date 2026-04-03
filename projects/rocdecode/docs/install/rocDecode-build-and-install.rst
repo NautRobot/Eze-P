@@ -25,7 +25,7 @@ Build and install rocDecode using the following commands:
 
 After installation, the rocDecode libraries will be copied to ``/opt/rocm/lib`` and the rocDecode header files will be copied to ``/opt/rocm/include/rocdecode``.
 
-Build and install the rocDecode test module:
+To run the installed CTest-based verification:
 
 .. code:: shell
 

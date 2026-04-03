@@ -25,7 +25,7 @@ Build and install rocJPEG using the following commands:
 
 After installation, the rocJPEG libraries will be copied to ``/opt/rocm/lib`` and the rocJPEG header files will be copied to ``/opt/rocm/include/rocjpeg``.
 
-Install the CTest module:
+To run the installed CTest-based verification:
 
 .. code:: shell
 

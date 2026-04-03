@@ -6,7 +6,7 @@ The sample provides a user class `FileStreamProvider` derived from the existing 
 
 ## Prerequisites:
 
-* Install [rocDecode](../../README.md#build-and-install)
+* Install [rocDecode](https://rocm.docs.amd.com/projects/rocDecode/en/latest/install/rocDecode-build-and-install.html)
 
 * [FFMPEG](https://ffmpeg.org/about.html)
 

@@ -8,7 +8,7 @@ The rocdec decode sample illustrates decoding of individual frames of video elem
 
 ## Prerequisites:
 
-* Install [rocDecode](../../README.md#build-and-install)
+* Install [rocDecode](https://rocm.docs.amd.com/projects/rocDecode/en/latest/install/rocDecode-build-and-install.html)
 
 * [FFMPEG](https://ffmpeg.org/about.html) for rocDecodeHost
 

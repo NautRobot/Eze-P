@@ -6,7 +6,7 @@ rocDecode is a high-performance video decode SDK for AMD GPUs. Using the rocDeco
 access the video decoding features available on your GPU.
 
 > [!NOTE]
-> The published documentation is available at [rocDecode](https://rocm.docs.amd.com/projects/rocDecode/en/latest/index.html) in an organized, easy-to-read format, with search and a table of contents. The documentation source files reside in the `rocDecode/docs` folder of this repository. As with all ROCm projects, the documentation is open source. For more information on contributing to the documentation, see [Contribute to ROCm documentation](https://rocm.docs.amd.com/en/latest/contribute/contributing.html).
+> The published documentation is available at [rocDecode](https://rocm.docs.amd.com/projects/rocDecode/en/latest/index.html) in an organized, easy-to-read format, with search and a table of contents. The documentation source files reside in `projects/rocdecode/docs` in this repository. As with all ROCm projects, the documentation is open source. For more information on contributing to the documentation, see [Contribute to ROCm documentation](https://rocm.docs.amd.com/en/latest/contribute/contributing.html).
 
 ## Supported codecs
 * H.265 (HEVC) - 8 bit, and 10 bit
@@ -19,7 +19,7 @@ access the video decoding features available on your GPU.
 ### Hardware
 * **GPU**: [AMD Radeon&trade; Graphics](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html) / [AMD Instinct&trade; Accelerators](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html)
 
-> [!IMPORTANT] 
+> [!IMPORTANT]
 > `gfx908` or higher GPU required
 
 ### ROCm via TheRock
@@ -56,10 +56,10 @@ sudo make install
   ```shell
   make test
   ```
-  > [!IMPORTANT] 
+  > [!IMPORTANT]
   > `make test` requires FFmpeg dev libraries to be installed
 
-  >[!NOTE]
+  > [!NOTE]
   > To run tests with verbose option, use `make test ARGS="-VV"`.
 
 ## Verify installation

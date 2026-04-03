@@ -12,7 +12,7 @@ You can find a walkthrough of the ``videodecode.cpp`` sample at :doc:`Understand
 
 rocDecode is delivered as part of `TheRock <https://github.com/ROCm/TheRock>`_. It can also be :doc:`built and installed from source <../install/rocDecode-build-and-install>`.
 
-FFmpeg development libraries must be installed to build and run samples. The test module needs to be built and installed as well:
+FFmpeg development libraries must be installed to build and run samples. To run the installed CTest-based verification:
 
 .. code:: shell
 

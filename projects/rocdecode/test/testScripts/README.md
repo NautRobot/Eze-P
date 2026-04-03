@@ -1,7 +1,7 @@
 # rocDecode Test Scripts
 
 ## Pre-requisites to run python script
-* Install [rocDecode](../../README.md#build-and-install)
+* Install [rocDecode](https://rocm.docs.amd.com/projects/rocDecode/en/latest/install/rocDecode-build-and-install.html)
 
 * [FFMPEG](https://ffmpeg.org/about.html)
 
