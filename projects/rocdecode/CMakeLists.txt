@@ -116,11 +116,11 @@ find_package(Libdrm_amdgpu QUIET)
 
 # Check Libva version compatibility: requires libva >= 1.8
 if(Libva_FOUND)
-  if((${Libva_VERSION_MAJOR} GREATER_EQUAL 1) AND (${Libva_VERSION_MINOR} GREATER_EQUAL 8))
+  if("${Libva_VERSION}" VERSION_GREATER_EQUAL "1.8")
     message("-- ${White}\tLibva Version Supported${ColourReset}")
   else()
     set(Libva_FOUND FALSE)
-    message("-- ${Yellow}\tLibva Version Not Supported${ColourReset}")
+    message("-- ${Yellow}\tLibva Version Not Supported (found ${Libva_VERSION}, need >= 1.8)${ColourReset}")
   endif()
 endif()
 
