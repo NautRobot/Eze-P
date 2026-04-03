@@ -4,7 +4,7 @@ The jpeg decode sample illustrates decoding a JPEG images using rocJPEG library 
 
 ## Prerequisites:
 
-* Install [rocJPEG](../../README.md#build-and-install-instructions)
+* Install [rocJPEG](../../README.md#build-and-install)
 
 ## Build
 

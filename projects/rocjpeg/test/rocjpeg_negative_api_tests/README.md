@@ -5,7 +5,7 @@ by providing invalid inputs, unexpected scenarios, or edge cases to ensure the A
 
 ## Prerequisites:
 
-* Install [rocJPEG](../../README.md#build-and-install-instructions)
+* Install [rocJPEG](../../README.md#build-and-install)
 
 ## Build
 

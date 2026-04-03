@@ -4,7 +4,7 @@ The jpeg decode bacthed sample illustrates decoding JPEG images by batches of sp
 
 ## Prerequisites:
 
-* Install [rocJPEG](../../README.md#build-and-install-instructions)
+* Install [rocJPEG](../../README.md#build-and-install)
 
 ## Build
 
