@@ -12,8 +12,7 @@ from hipfile._hipfile import (
     hip_drv_err,
 )
 from hipfile.buffer import(
-    buf_deregister,
-    buf_register
+    Buffer
 )
 from hipfile.driver import (
     Driver

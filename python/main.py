@@ -3,7 +3,7 @@ import os
 import pathlib
 import stat
 
-from hipfile.buffer import buf_deregister, buf_register
+from hipfile.buffer import Buffer
 from hipfile.driver import Driver
 from hipfile.file import FileHandle
 from hipfile.properties import driver_get_properties, get_version
@@ -11,32 +11,31 @@ from hipfile.hipMalloc import hipFree, hipMalloc
 
 hipfile_version = get_version()
 
-input_path = pathlib.Path("/mnt/ais/ext4/random_2GiB.bin")
+input_path = pathlib.Path("/mnt/ais/ext4/random_2MiB.bin")
 output_path = pathlib.Path("/mnt/ais/ext4/output.bin")
 
 print(f"hipFile Version: {hipfile_version}")
 print(f"Driver Use Count Before: {Driver.use_count()}")
 
-# Max to a 2GiB Buffer
+# Max to a 2GiB - 4KiB Buffer
 # Note: Max IO in a single transaction is 2GiB - 4KiB as set by the Linux Kernel
 #       Larger IOs will be quietly truncated.
-size = min(input_path.stat().st_size, 2 * 1024 * 1024 * 1024)
+size = min(input_path.stat().st_size, 2 * 1024 * 1024 * 1024 - 4 * 1024)
 buffer = hipMalloc(size)
 buffer_ptr = buffer.value
 print(f"Buffer located at: {buffer_ptr} | {hex(buffer_ptr)}")
-buf_register(buffer.value, size, 0)
 
 with Driver() as hipfile_driver:
     print(f"Driver Use Count After: {hipfile_driver.use_count()}")
-    with FileHandle(input_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT) as fh_input:
-        with FileHandle(output_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT | os.O_TRUNC) as fh_output:
-            print(f"Transferring {size} bytes...")
-            bytes_read = fh_input.read(buffer_ptr, size, 0, 0)
-            print(f"Bytes Read: {bytes_read}")
-            bytes_written = fh_output.write(buffer_ptr, size, 0, 0)
-            print(f"Bytes Written: {bytes_written}")
+    with Buffer(buffer_ptr, size, 0) as registered_buffer:
+        with FileHandle(input_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT) as fh_input:
+            with FileHandle(output_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT | os.O_TRUNC) as fh_output:
+                print(f"Transferring {size} bytes...")
+                bytes_read = fh_input.read(registered_buffer._buffer_ptr, size, 0, 0)
+                print(f"Bytes Read: {bytes_read}")
+                bytes_written = fh_output.write(registered_buffer._buffer_ptr, size, 0, 0)
+                print(f"Bytes Written: {bytes_written}")
 
-buf_deregister(buffer_ptr)
 hipFree(buffer)
 
 with open(input_path, 'br') as file_in:
