@@ -1,10 +1,21 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from hipfile._hipfile import (
     buf_deregister,
     buf_register
 )
 from hipfile.error import HipFileException
 
+if TYPE_CHECKING:
+    from ctypes import c_void_p
+
 class Buffer():
+
+    @classmethod
+    def from_ctypes_void_p(cls, ctypes_void_p: c_void_p, length, flags):
+        return cls(ctypes_void_p.value, length, flags)
+
     def __init__(self, buffer_ptr, length, flags) -> None:
         self._buffer_ptr = buffer_ptr
         self._flags = flags

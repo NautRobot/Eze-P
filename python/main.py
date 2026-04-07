@@ -27,7 +27,7 @@ print(f"Buffer located at: {buffer_ptr} | {hex(buffer_ptr)}")
 
 with Driver() as hipfile_driver:
     print(f"Driver Use Count After: {hipfile_driver.use_count()}")
-    with Buffer(buffer_ptr, size, 0) as registered_buffer:
+    with Buffer.from_ctypes_void_p(buffer, size, 0) as registered_buffer:
         with FileHandle(input_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT) as fh_input:
             with FileHandle(output_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT | os.O_TRUNC) as fh_output:
                 print(f"Transferring {size} bytes...")
