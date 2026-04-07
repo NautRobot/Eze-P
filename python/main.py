@@ -3,12 +3,16 @@ import os
 import pathlib
 import stat
 
-from hipfile.buffer import Buffer
-from hipfile.driver import Driver
-from hipfile.enums import FileHandleType
-from hipfile.file import FileHandle
-from hipfile.properties import driver_get_properties, get_version
 from hipfile.hipMalloc import hipFree, hipMalloc
+
+from hipfile import (
+    Driver,
+    FileHandle,
+    Buffer,
+    FileHandleType,
+    driver_get_properties,
+    get_version
+)
 
 hipfile_version = get_version()
 
