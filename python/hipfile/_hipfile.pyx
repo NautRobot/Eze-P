@@ -22,6 +22,59 @@ VERSION_MINOR = HIPFILE_VERSION_MINOR
 VERSION_PATCH = HIPFILE_VERSION_PATCH
 BASE_ERR      = HIPFILE_BASE_ERR
 
+# ---------------------------------------------------------------------------
+#  Enum re-exports (C → Python)
+#
+#  ctypedef enum values from _chipfile.pxd are C-level only after cimport.
+#  These assignments create Python-visible module attributes whose values
+#  are resolved from the C enum at compile time.
+# ---------------------------------------------------------------------------
+
+# hipFileOpError_t
+py_hipFileSuccess                 = <int>hipFileSuccess
+py_hipFileDriverNotInitialized    = <int>hipFileDriverNotInitialized
+py_hipFileDriverInvalidProps      = <int>hipFileDriverInvalidProps
+py_hipFileDriverUnsupportedLimit  = <int>hipFileDriverUnsupportedLimit
+py_hipFileDriverVersionMismatch   = <int>hipFileDriverVersionMismatch
+py_hipFileDriverVersionReadError  = <int>hipFileDriverVersionReadError
+py_hipFileDriverClosing           = <int>hipFileDriverClosing
+py_hipFilePlatformNotSupported    = <int>hipFilePlatformNotSupported
+py_hipFileIONotSupported          = <int>hipFileIONotSupported
+py_hipFileDeviceNotSupported      = <int>hipFileDeviceNotSupported
+py_hipFileDriverError             = <int>hipFileDriverError
+py_hipFileHipDriverError          = <int>hipFileHipDriverError
+py_hipFileHipPointerInvalid       = <int>hipFileHipPointerInvalid
+py_hipFileHipMemoryTypeInvalid    = <int>hipFileHipMemoryTypeInvalid
+py_hipFileHipPointerRangeError    = <int>hipFileHipPointerRangeError
+py_hipFileHipContextMismatch      = <int>hipFileHipContextMismatch
+py_hipFileInvalidMappingSize      = <int>hipFileInvalidMappingSize
+py_hipFileInvalidMappingRange     = <int>hipFileInvalidMappingRange
+py_hipFileInvalidFileType         = <int>hipFileInvalidFileType
+py_hipFileInvalidFileOpenFlag     = <int>hipFileInvalidFileOpenFlag
+py_hipFileDIONotSet               = <int>hipFileDIONotSet
+py_hipFileInvalidValue            = <int>hipFileInvalidValue
+py_hipFileMemoryAlreadyRegistered = <int>hipFileMemoryAlreadyRegistered
+py_hipFileMemoryNotRegistered     = <int>hipFileMemoryNotRegistered
+py_hipFilePermissionDenied        = <int>hipFilePermissionDenied
+py_hipFileDriverAlreadyOpen       = <int>hipFileDriverAlreadyOpen
+py_hipFileHandleNotRegistered     = <int>hipFileHandleNotRegistered
+py_hipFileHandleAlreadyRegistered = <int>hipFileHandleAlreadyRegistered
+py_hipFileDeviceNotFound          = <int>hipFileDeviceNotFound
+py_hipFileInternalError           = <int>hipFileInternalError
+py_hipFileGetNewFDFailed          = <int>hipFileGetNewFDFailed
+py_hipFileDriverSetupError        = <int>hipFileDriverSetupError
+py_hipFileIODisabled              = <int>hipFileIODisabled
+py_hipFileBatchSubmitFailed       = <int>hipFileBatchSubmitFailed
+py_hipFileGPUMemoryPinningFailed  = <int>hipFileGPUMemoryPinningFailed
+py_hipFileBatchFull               = <int>hipFileBatchFull
+py_hipFileAsyncNotSupported       = <int>hipFileAsyncNotSupported
+py_hipFileIOMaxError              = <int>hipFileIOMaxError
+
+# hipFileFileHandleType_t
+py_hipFileHandleTypeOpaqueFD    = <int>hipFileHandleTypeOpaqueFD
+py_hipFileHandleTypeOpaqueWin32 = <int>hipFileHandleTypeOpaqueWin32
+py_hipFileHandleTypeUserspaceFS = <int>hipFileHandleTypeUserspaceFS
+
 
 # ---------------------------------------------------------------------------
 #  Internal helpers
