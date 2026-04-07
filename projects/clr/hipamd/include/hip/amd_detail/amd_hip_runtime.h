@@ -175,7 +175,7 @@ std::tuple<Formals...> validateArgsCountType(void (*kernel)(Formals...),
   return {std::move(actuals)...};
 }
 
-template <typename T> constexpr void validateArgType() {
+template <typename T> constexpr bool validateArgType() {
   static_assert(!std::is_reference<T>{},
                 "A __global__ function cannot have a reference as one of its "
                 "arguments.");
@@ -184,10 +184,11 @@ template <typename T> constexpr void validateArgType() {
                 "Only TriviallyCopyable types can be arguments to a __global__ "
                 "function");
 #endif
+  return !std::is_reference<T>{} && std::is_trivially_copyable<T>{};
 }
 
-template <typename... Ts> constexpr void validateArgs(void (*)(Ts...)) {
-  (validateArgType<Ts>(), ...);
+template <typename... Ts> constexpr bool validateArgs(void (*)(Ts...)) {
+  return (validateArgType<Ts>() && ... && true);
 }
 
 template <typename... Ts, size_t... Is>
