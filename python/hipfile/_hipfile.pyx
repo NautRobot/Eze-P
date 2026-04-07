@@ -10,17 +10,17 @@ Functions that return ``hipFileError_t`` in C return a
 from libc.string cimport memset
 from libc.stdint cimport uintptr_t
 
-from hipfile._chipfile cimport *
+cimport hipfile._chipfile as _c
 
 
 # ---------------------------------------------------------------------------
 #  Module-level constants
 # ---------------------------------------------------------------------------
 
-VERSION_MAJOR = HIPFILE_VERSION_MAJOR
-VERSION_MINOR = HIPFILE_VERSION_MINOR
-VERSION_PATCH = HIPFILE_VERSION_PATCH
-BASE_ERR      = HIPFILE_BASE_ERR
+VERSION_MAJOR = _c.HIPFILE_VERSION_MAJOR
+VERSION_MINOR = _c.HIPFILE_VERSION_MINOR
+VERSION_PATCH = _c.HIPFILE_VERSION_PATCH
+BASE_ERR      = _c.HIPFILE_BASE_ERR
 
 # ---------------------------------------------------------------------------
 #  Enum re-exports (C → Python)
@@ -31,56 +31,56 @@ BASE_ERR      = HIPFILE_BASE_ERR
 # ---------------------------------------------------------------------------
 
 # hipFileOpError_t
-py_hipFileSuccess                 = <int>hipFileSuccess
-py_hipFileDriverNotInitialized    = <int>hipFileDriverNotInitialized
-py_hipFileDriverInvalidProps      = <int>hipFileDriverInvalidProps
-py_hipFileDriverUnsupportedLimit  = <int>hipFileDriverUnsupportedLimit
-py_hipFileDriverVersionMismatch   = <int>hipFileDriverVersionMismatch
-py_hipFileDriverVersionReadError  = <int>hipFileDriverVersionReadError
-py_hipFileDriverClosing           = <int>hipFileDriverClosing
-py_hipFilePlatformNotSupported    = <int>hipFilePlatformNotSupported
-py_hipFileIONotSupported          = <int>hipFileIONotSupported
-py_hipFileDeviceNotSupported      = <int>hipFileDeviceNotSupported
-py_hipFileDriverError             = <int>hipFileDriverError
-py_hipFileHipDriverError          = <int>hipFileHipDriverError
-py_hipFileHipPointerInvalid       = <int>hipFileHipPointerInvalid
-py_hipFileHipMemoryTypeInvalid    = <int>hipFileHipMemoryTypeInvalid
-py_hipFileHipPointerRangeError    = <int>hipFileHipPointerRangeError
-py_hipFileHipContextMismatch      = <int>hipFileHipContextMismatch
-py_hipFileInvalidMappingSize      = <int>hipFileInvalidMappingSize
-py_hipFileInvalidMappingRange     = <int>hipFileInvalidMappingRange
-py_hipFileInvalidFileType         = <int>hipFileInvalidFileType
-py_hipFileInvalidFileOpenFlag     = <int>hipFileInvalidFileOpenFlag
-py_hipFileDIONotSet               = <int>hipFileDIONotSet
-py_hipFileInvalidValue            = <int>hipFileInvalidValue
-py_hipFileMemoryAlreadyRegistered = <int>hipFileMemoryAlreadyRegistered
-py_hipFileMemoryNotRegistered     = <int>hipFileMemoryNotRegistered
-py_hipFilePermissionDenied        = <int>hipFilePermissionDenied
-py_hipFileDriverAlreadyOpen       = <int>hipFileDriverAlreadyOpen
-py_hipFileHandleNotRegistered     = <int>hipFileHandleNotRegistered
-py_hipFileHandleAlreadyRegistered = <int>hipFileHandleAlreadyRegistered
-py_hipFileDeviceNotFound          = <int>hipFileDeviceNotFound
-py_hipFileInternalError           = <int>hipFileInternalError
-py_hipFileGetNewFDFailed          = <int>hipFileGetNewFDFailed
-py_hipFileDriverSetupError        = <int>hipFileDriverSetupError
-py_hipFileIODisabled              = <int>hipFileIODisabled
-py_hipFileBatchSubmitFailed       = <int>hipFileBatchSubmitFailed
-py_hipFileGPUMemoryPinningFailed  = <int>hipFileGPUMemoryPinningFailed
-py_hipFileBatchFull               = <int>hipFileBatchFull
-py_hipFileAsyncNotSupported       = <int>hipFileAsyncNotSupported
-py_hipFileIOMaxError              = <int>hipFileIOMaxError
+hipFileSuccess                 = <int>_c.hipFileSuccess
+hipFileDriverNotInitialized    = <int>_c.hipFileDriverNotInitialized
+hipFileDriverInvalidProps      = <int>_c.hipFileDriverInvalidProps
+hipFileDriverUnsupportedLimit  = <int>_c.hipFileDriverUnsupportedLimit
+hipFileDriverVersionMismatch   = <int>_c.hipFileDriverVersionMismatch
+hipFileDriverVersionReadError  = <int>_c.hipFileDriverVersionReadError
+hipFileDriverClosing           = <int>_c.hipFileDriverClosing
+hipFilePlatformNotSupported    = <int>_c.hipFilePlatformNotSupported
+hipFileIONotSupported          = <int>_c.hipFileIONotSupported
+hipFileDeviceNotSupported      = <int>_c.hipFileDeviceNotSupported
+hipFileDriverError             = <int>_c.hipFileDriverError
+hipFileHipDriverError          = <int>_c.hipFileHipDriverError
+hipFileHipPointerInvalid       = <int>_c.hipFileHipPointerInvalid
+hipFileHipMemoryTypeInvalid    = <int>_c.hipFileHipMemoryTypeInvalid
+hipFileHipPointerRangeError    = <int>_c.hipFileHipPointerRangeError
+hipFileHipContextMismatch      = <int>_c.hipFileHipContextMismatch
+hipFileInvalidMappingSize      = <int>_c.hipFileInvalidMappingSize
+hipFileInvalidMappingRange     = <int>_c.hipFileInvalidMappingRange
+hipFileInvalidFileType         = <int>_c.hipFileInvalidFileType
+hipFileInvalidFileOpenFlag     = <int>_c.hipFileInvalidFileOpenFlag
+hipFileDIONotSet               = <int>_c.hipFileDIONotSet
+hipFileInvalidValue            = <int>_c.hipFileInvalidValue
+hipFileMemoryAlreadyRegistered = <int>_c.hipFileMemoryAlreadyRegistered
+hipFileMemoryNotRegistered     = <int>_c.hipFileMemoryNotRegistered
+hipFilePermissionDenied        = <int>_c.hipFilePermissionDenied
+hipFileDriverAlreadyOpen       = <int>_c.hipFileDriverAlreadyOpen
+hipFileHandleNotRegistered     = <int>_c.hipFileHandleNotRegistered
+hipFileHandleAlreadyRegistered = <int>_c.hipFileHandleAlreadyRegistered
+hipFileDeviceNotFound          = <int>_c.hipFileDeviceNotFound
+hipFileInternalError           = <int>_c.hipFileInternalError
+hipFileGetNewFDFailed          = <int>_c.hipFileGetNewFDFailed
+hipFileDriverSetupError        = <int>_c.hipFileDriverSetupError
+hipFileIODisabled              = <int>_c.hipFileIODisabled
+hipFileBatchSubmitFailed       = <int>_c.hipFileBatchSubmitFailed
+hipFileGPUMemoryPinningFailed  = <int>_c.hipFileGPUMemoryPinningFailed
+hipFileBatchFull               = <int>_c.hipFileBatchFull
+hipFileAsyncNotSupported       = <int>_c.hipFileAsyncNotSupported
+hipFileIOMaxError              = <int>_c.hipFileIOMaxError
 
 # hipFileFileHandleType_t
-py_hipFileHandleTypeOpaqueFD    = <int>hipFileHandleTypeOpaqueFD
-py_hipFileHandleTypeOpaqueWin32 = <int>hipFileHandleTypeOpaqueWin32
-py_hipFileHandleTypeUserspaceFS = <int>hipFileHandleTypeUserspaceFS
+hipFileHandleTypeOpaqueFD    = <int>_c.hipFileHandleTypeOpaqueFD
+hipFileHandleTypeOpaqueWin32 = <int>_c.hipFileHandleTypeOpaqueWin32
+hipFileHandleTypeUserspaceFS = <int>_c.hipFileHandleTypeUserspaceFS
 
 
 # ---------------------------------------------------------------------------
 #  Internal helpers
 # ---------------------------------------------------------------------------
 
-cdef inline tuple _err(hipFileError_t e):
+cdef inline tuple _err(_c.hipFileError_t e):
     return (<int>e.err, <int>e.hip_drv_err)
 
 
@@ -90,12 +90,12 @@ cdef inline tuple _err(hipFileError_t e):
 
 def is_hipfile_err(int err_code):
     """Equivalent of the ``IS_HIPFILE_ERR`` C macro."""
-    return abs(err_code) > HIPFILE_BASE_ERR
+    return abs(err_code) > _c.HIPFILE_BASE_ERR
 
 
 def hipfile_errstr(int err_code):
     """Equivalent of the ``HIPFILE_ERRSTR`` C macro."""
-    cdef const char *s = hipFileGetOpErrorString(<hipFileOpError_t>abs(err_code))
+    cdef const char *s = _c.hipFileGetOpErrorString(<_c.hipFileOpError_t>abs(err_code))
     if s == NULL:
         return ""
     return s.decode("utf-8")
@@ -106,7 +106,7 @@ def is_hip_drv_err(tuple err):
 
     Takes an error tuple as returned by the wrapper functions.
     """
-    return err[0] == <int>hipFileHipDriverError
+    return err[0] == <int>_c.hipFileHipDriverError
 
 
 def hip_drv_err(tuple err):
@@ -119,7 +119,7 @@ def hip_drv_err(tuple err):
 
 def get_op_error_string(int status):
     """Wrapper for ``hipFileGetOpErrorString``."""
-    cdef const char *s = hipFileGetOpErrorString(<hipFileOpError_t>status)
+    cdef const char *s = _c.hipFileGetOpErrorString(<_c.hipFileOpError_t>status)
     if s == NULL:
         return ""
     return s.decode("utf-8")
@@ -131,17 +131,17 @@ def get_op_error_string(int status):
 
 def driver_open():
     """Wrapper for ``hipFileDriverOpen``."""
-    return _err(hipFileDriverOpen())
+    return _err(_c.hipFileDriverOpen())
 
 
 def driver_close():
     """Wrapper for ``hipFileDriverClose``."""
-    return _err(hipFileDriverClose())
+    return _err(_c.hipFileDriverClose())
 
 
 def use_count():
     """Wrapper for ``hipFileUseCount``."""
-    return <int>hipFileUseCount()
+    return <int>_c.hipFileUseCount()
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ def get_version():
     Returns ``((major, minor, patch), error_tuple)``.
     """
     cdef unsigned major = 0, minor = 0, patch = 0
-    cdef hipFileError_t e = hipFileGetVersion(&major, &minor, &patch)
+    cdef _c.hipFileError_t e = _c.hipFileGetVersion(&major, &minor, &patch)
     return ((major, minor, patch), _err(e))
 
 
@@ -175,18 +175,18 @@ def handle_register(int fd, int handle_type):
     Returns ``(handle_int, error_tuple)``.  The handle is an opaque
     integer that must be passed back to other hipFile calls.
     """
-    cdef hipFileHandle_t fh = NULL
-    cdef hipFileDescr_t descr
+    cdef _c.hipFileHandle_t fh = NULL
+    cdef _c.hipFileDescr_t descr
     memset(&descr, 0, sizeof(descr))
-    descr.type = <hipFileFileHandleType_t>handle_type
+    descr.type = <_c.hipFileFileHandleType_t>handle_type
     descr.fd = fd
-    cdef hipFileError_t e = hipFileHandleRegister(&fh, &descr)
+    cdef _c.hipFileError_t e = _c.hipFileHandleRegister(&fh, &descr)
     return (<uintptr_t>fh, _err(e))
 
 
 def handle_deregister(uintptr_t handle):
     """Wrapper for ``hipFileHandleDeregister``."""
-    hipFileHandleDeregister(<hipFileHandle_t>handle)
+    _c.hipFileHandleDeregister(<_c.hipFileHandle_t>handle)
 
 
 # ---------------------------------------------------------------------------
@@ -195,12 +195,12 @@ def handle_deregister(uintptr_t handle):
 
 def buf_register(uintptr_t buffer_base, size_t length, int flags=0):
     """Wrapper for ``hipFileBufRegister``."""
-    return _err(hipFileBufRegister(<const void *>buffer_base, length, flags))
+    return _err(_c.hipFileBufRegister(<const void *>buffer_base, length, flags))
 
 
 def buf_deregister(uintptr_t buffer_base):
     """Wrapper for ``hipFileBufDeregister``."""
-    return _err(hipFileBufDeregister(<const void *>buffer_base))
+    return _err(_c.hipFileBufDeregister(<const void *>buffer_base))
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ def buf_deregister(uintptr_t buffer_base):
 # ---------------------------------------------------------------------------
 
 def read(uintptr_t handle, uintptr_t buffer_base, size_t size,
-         hoff_t file_offset, hoff_t buffer_offset):
+         _c.hoff_t file_offset, _c.hoff_t buffer_offset):
     """Wrapper for ``hipFileRead``.
 
     Returns raw ``ssize_t``:
@@ -216,13 +216,13 @@ def read(uintptr_t handle, uintptr_t buffer_base, size_t size,
       * ``-1``   — system error (check ``errno``)
       * ``< -1`` — negate to get a ``hipFileOpError_t``
     """
-    return hipFileRead(<hipFileHandle_t>handle,
-                       <void *>buffer_base, size,
-                       file_offset, buffer_offset)
+    return _c.hipFileRead(<_c.hipFileHandle_t>handle,
+                          <void *>buffer_base, size,
+                          file_offset, buffer_offset)
 
 
 def write(uintptr_t handle, uintptr_t buffer_base, size_t size,
-          hoff_t file_offset, hoff_t buffer_offset):
+          _c.hoff_t file_offset, _c.hoff_t buffer_offset):
     """Wrapper for ``hipFileWrite``.
 
     Returns raw ``ssize_t``:
@@ -230,9 +230,9 @@ def write(uintptr_t handle, uintptr_t buffer_base, size_t size,
       * ``-1``   — system error (check ``errno``)
       * ``< -1`` — negate to get a ``hipFileOpError_t``
     """
-    return hipFileWrite(<hipFileHandle_t>handle,
-                        <const void *>buffer_base, size,
-                        file_offset, buffer_offset)
+    return _c.hipFileWrite(<_c.hipFileHandle_t>handle,
+                           <const void *>buffer_base, size,
+                           file_offset, buffer_offset)
 
 
 # ---------------------------------------------------------------------------
@@ -244,9 +244,9 @@ def driver_get_properties():
 
     Returns ``(props_dict, error_tuple)``.
     """
-    cdef hipFileDriverProps_t props
+    cdef _c.hipFileDriverProps_t props
     memset(&props, 0, sizeof(props))
-    cdef hipFileError_t e = hipFileDriverGetProperties(&props)
+    cdef _c.hipFileError_t e = _c.hipFileDriverGetProperties(&props)
     d = {
         "nvfs_major_version":        props.nvfs_major_version,
         "nvfs_minor_version":        props.nvfs_minor_version,
