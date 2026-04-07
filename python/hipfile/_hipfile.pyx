@@ -109,8 +109,15 @@ def get_version():
 #  File handles
 # ---------------------------------------------------------------------------
 
-def handle_register(int fd):
-    """Wrapper for ``hipFileHandleRegister`` (POSIX fd path).
+def handle_register(int fd, int handle_type):
+    """Wrapper for ``hipFileHandleRegister``.
+
+    Parameters
+    ----------
+    fd : int
+        POSIX file descriptor.
+    handle_type : int
+        Value from ``hipFileFileHandleType_t``.
 
     Returns ``(handle_int, error_tuple)``.  The handle is an opaque
     integer that must be passed back to other hipFile calls.
@@ -118,7 +125,7 @@ def handle_register(int fd):
     cdef hipFileHandle_t fh = NULL
     cdef hipFileDescr_t descr
     memset(&descr, 0, sizeof(descr))
-    descr.type = hipFileHandleTypeOpaqueFD
+    descr.type = <hipFileFileHandleType_t>handle_type
     descr.fd = fd
     cdef hipFileError_t e = hipFileHandleRegister(&fh, &descr)
     return (<uintptr_t>fh, _err(e))

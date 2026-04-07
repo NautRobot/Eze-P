@@ -17,6 +17,10 @@ from hipfile.buffer import(
 from hipfile.driver import (
     Driver
 )
+from hipfile.enums import (
+    FileHandleType,
+    OpError
+)
 from hipfile.error import (
     HipFileException
 )
