@@ -12,7 +12,7 @@ Documentation for rocJPEG is available at
 * Removed `rocJPEG-setup.py` dependency installer script.
 * Removed Docker files.
 * Removed package install documentation; updated all documentation to reference TheRock for installation.
-* Simplified libva version check (single `>= 1.8` requirement).
+* Simplified libva version check (single `>= 1.22` requirement).
 * Cleaned up CMake error messages.
 
 ## rocJPEG 1.4.0 for ROCm 7.2.1

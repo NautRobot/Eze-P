@@ -11,7 +11,7 @@ Full documentation for rocDecode is available at [https://rocm.docs.amd.com/proj
 * Removed `rocDecode-setup.py` dependency installer script.
 * Removed Docker files.
 * Removed package install documentation; updated all documentation to reference TheRock for installation.
-* Simplified libva version check (single `>= 1.8` requirement).
+* Simplified libva version check (single `>= 1.22` requirement).
 * Cleaned up CMake error messages.
 
 ### Added
