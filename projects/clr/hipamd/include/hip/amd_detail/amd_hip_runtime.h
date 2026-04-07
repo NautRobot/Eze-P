@@ -191,12 +191,13 @@ template <typename... Ts> constexpr void validateArgs(void (*)(Ts...)) {
 }
 
 template <typename... Ts, size_t... Is>
-std::array<void*, sizeof...(Ts)> pArgs(std::tuple<Ts...>& formals, std::index_sequence<Is...>) {
+std::array<void*, sizeof...(Ts)> pArgs(std::tuple<Ts...>& formals,
+                                       __hip_internal::index_sequence<Is...>) {
   return {(static_cast<void*>(&std::get<Is>(formals)))...};
 }
 
 template <typename... Ts> std::array<void*, sizeof...(Ts)> pArgs(std::tuple<Ts...>& formals) {
-  return pArgs(formals, std::make_index_sequence<sizeof...(Ts)>());
+  return pArgs(formals, __hip_internal::make_index_sequence<sizeof...(Ts)>());
 }
 
 #if defined(HIP_TEMPLATE_KERNEL_LAUNCH)
