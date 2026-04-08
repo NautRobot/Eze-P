@@ -1,7 +1,12 @@
+"""
+A quick & rough script for testing the Cython bindings to the
+hipFile C library. Reads a given file and copies it to an
+output file, and then prints the hashes of the files.
+"""
+
 import hashlib
 import os
 import pathlib
-import stat
 
 from hipfile.hipMalloc import hipFree, hipMalloc
 
@@ -10,7 +15,6 @@ from hipfile import (
     FileHandle,
     Buffer,
     FileHandleType,
-    driver_get_properties,
     get_version,
 )
 
@@ -27,7 +31,7 @@ print(f"Driver Use Count Before: {Driver.use_count()}")
 #       Larger IOs will be quietly truncated.
 size = min(input_path.stat().st_size, 2 * 1024 * 1024 * 1024 - 4 * 1024)
 buffer = hipMalloc(size)
-buffer_ptr = buffer.value
+buffer_ptr = buffer.value  # pylint: disable=C0103  # False Positive
 print(f"Buffer located at: {buffer_ptr} | {hex(buffer_ptr)}")
 
 with Driver() as hipfile_driver:
@@ -36,7 +40,7 @@ with Driver() as hipfile_driver:
         with FileHandle(
             input_path,
             os.O_RDWR | os.O_DIRECT | os.O_CREAT,
-            handle_type=FileHandleType.OpaqueFD,
+            handle_type=FileHandleType.OPAQUE_FD,
         ) as fh_input:
             with FileHandle(
                 output_path, os.O_RDWR | os.O_DIRECT | os.O_CREAT | os.O_TRUNC

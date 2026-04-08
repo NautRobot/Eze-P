@@ -1,4 +1,5 @@
-from hipfile._hipfile import driver_open, driver_close, use_count as _use_count
+# pylint: disable=C0114,C0115,C0116
+from hipfile._hipfile import driver_open, driver_close, use_count as _use_count  # pylint: disable=E0401,E0611
 from hipfile.error import HipFileException
 
 

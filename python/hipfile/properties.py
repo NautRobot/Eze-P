@@ -1,4 +1,5 @@
-from hipfile._hipfile import (
+# pylint: disable=C0114,C0116
+from hipfile._hipfile import (  # pylint: disable=E0401,E0611
     # Driver properties
     driver_get_properties as _driver_get_properties,
     # Library version

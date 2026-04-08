@@ -1,7 +1,8 @@
+# pylint: disable=C0114,C0115,C0116
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from hipfile._hipfile import buf_deregister, buf_register
+from hipfile._hipfile import buf_deregister, buf_register  # pylint: disable=E0401,E0611
 from hipfile.error import HipFileException
 
 if TYPE_CHECKING:

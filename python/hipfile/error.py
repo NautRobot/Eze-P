@@ -1,4 +1,5 @@
-from hipfile._hipfile import get_op_error_string
+# pylint: disable=C0114,C0115,C0116
+from hipfile._hipfile import get_op_error_string  # pylint: disable=E0401,E0611
 
 
 class HipFileException(Exception):

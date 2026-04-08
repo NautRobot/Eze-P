@@ -1,7 +1,8 @@
+# pylint: disable=C0114,C0115,C0116
 import os
 import stat
 
-from hipfile._hipfile import (
+from hipfile._hipfile import (  # pylint: disable=E0401,E0611
     # File handles
     handle_register,
     handle_deregister,
@@ -9,20 +10,20 @@ from hipfile._hipfile import (
     read as _read,
     write as _write,
 )
-from hipfile.enums import OpError, FileHandleType
+from hipfile.enums import FileHandleType
 from hipfile.error import HipFileException
 
-DefaultHandleType = None
+default_handle_type = None
 if os.name == "posix":
-    DefaultHandleType = FileHandleType.OpaqueFD
+    default_handle_type = FileHandleType.OPAQUE_FD
 elif os.name == "nt":
-    DefaultHandleType = FileHandleType.OpaqueWin32
+    default_handle_type = FileHandleType.OPAQUE_WIN32
 
 
 class FileHandle:
     DEFAULT_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
 
-    def __init__(self, path, flags, mode=DEFAULT_MODE, handle_type=DefaultHandleType):
+    def __init__(self, path, flags, mode=DEFAULT_MODE, handle_type=default_handle_type):
         self._fd = None
         self._flags = flags
         self._handle = None
@@ -96,9 +97,9 @@ class FileHandle:
         if bytes_read == -1:
             # extra_err is errno
             raise OSError(extra_err, os.strerror(extra_err))
-        elif bytes_read < -1:
+        if bytes_read < -1:
             # hipFile Error
-            # If -bytes_read == OpError.HipDriverError, extra_err is hipError_t.
+            # If -bytes_read == OpError.HIP_DRIVER_ERROR, extra_err is hipError_t.
             # Otherwise, extra_err is 0.
             raise HipFileException(-bytes_read, extra_err)
         return bytes_read
@@ -112,9 +113,9 @@ class FileHandle:
         if bytes_written == -1:
             # extra_err is errno
             raise OSError(extra_err, os.strerror(extra_err))
-        elif bytes_written < -1:
+        if bytes_written < -1:
             # hipFile Error
-            # If -bytes_written == OpError.HipDriverError, extra_err is hipError_t.
+            # If -bytes_written == OpError.HIP_DRIVER_ERROR, extra_err is hipError_t.
             # Otherwise, extra_err is 0.
             raise HipFileException(-bytes_written, extra_err)
         return bytes_written

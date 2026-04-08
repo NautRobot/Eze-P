@@ -1,3 +1,4 @@
+# pylint: disable=all
 """
 This is a hack to have some semblance of GPU memory management
 without introducing a dependency at this early stage of

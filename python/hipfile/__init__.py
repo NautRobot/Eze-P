@@ -1,4 +1,6 @@
-from hipfile._hipfile import (
+# pylint: disable=C0114
+
+from hipfile._hipfile import (  # pylint: disable=E0401,E0611
     # Constants
     VERSION_MAJOR as _VERSION_MAJOR,
     VERSION_MINOR as _VERSION_MINOR,
