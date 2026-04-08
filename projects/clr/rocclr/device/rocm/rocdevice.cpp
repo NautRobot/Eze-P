@@ -1058,6 +1058,12 @@ bool Device::populateOCLDeviceConstants() {
       Hsa::agent_get_info(bkendDevice_, HSA_AGENT_INFO_CACHE_SIZE, cachesize)) {
     return false;
   }
+
+  if ((isa().versionMajor() == 12 && isa().versionMinor() == 5 && isa().versionStepping() == 0)
+       && (info_.globalMemCacheLineSize_ < 256)) {
+    info_.globalMemCacheLineSize_ = 256;
+  }
+
   assert(cachesize[0] > 0);
   info_.globalMemCacheSize_ = cachesize[0];
 
