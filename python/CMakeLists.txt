@@ -51,9 +51,9 @@ add_custom_command(
 )
 
 # ---- Build extension module -----------------------------------------------
-
+# lint_cmake: -readability/wonkycase
 Python_add_library(_hipfile MODULE "${_C_OUT}" WITH_SOABI)
-
+# lint_cmake: +readability/wonkycase
 target_include_directories(_hipfile PRIVATE
     "${HIPFILE_INCLUDE_DIR}"
     "${HIP_INCLUDE_DIR}"
