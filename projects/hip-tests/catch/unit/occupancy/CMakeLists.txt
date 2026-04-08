@@ -1,3 +1,7 @@
+# Copyright (c) Advanced Micro Devices, Inc., or its affiliates.
+#
+# SPDX-License-Identifier: MIT
+
 # Common Tests - Test independent of all platforms
 set(TARGETS_SUPPORTING_CLUSTERS gfx1250 gfx1251)
 set(CLUSTERS_SUPPORTED -1)
@@ -16,9 +20,7 @@ endfunction()  # CheckAcceptedArchs
 
 set(TEST_SRC
   hipOccupancyMaxActiveBlocksPerMultiprocessor.cc
-  hipOccupancyMaxActiveBlocksPerMultiprocessor_old.cc
   hipOccupancyMaxPotentialBlockSize.cc
-  hipOccupancyMaxPotentialBlockSize_old.cc
   hipModuleOccupancyMaxPotentialBlockSize.cc
   hipModuleOccupancyMaxPotentialBlockSizeWithFlags.cc
   hipModuleOccupancyMaxActiveBlocksPerMultiprocessor.cc
@@ -45,15 +47,21 @@ if(HIP_PLATFORM MATCHES "amd")
   else()
     message(STATUS "No cluster support; clusters tests were not added")
   endif()
-endif()
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/simple_kernel.code
-                   COMMAND ${CMAKE_HIP_COMPILER} --cuda-device-only ${OFFLOAD_ARCH_LIST}
-                   -x hip ${CMAKE_CURRENT_SOURCE_DIR}/simple_kernel.cc
-                   -o simple_kernel.code
-                   -I${HIP_INCLUDE_DIR} ${HIP_PATH_OPT}
-                   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/simple_kernel.cc)
-
+                   COMMAND ${CMAKE_HIP_COMPILER} ${HIP_DEVICE_BUILD_FLAGS_NO_ARCH} ${OFFLOAD_ARCH_LIST} --cuda-device-only
+                     -x hip ${CMAKE_CURRENT_SOURCE_DIR}/simple_kernel.cc
+                     -o simple_kernel.code
+                     -I${HIP_INCLUDE_DIR} ${HIP_PATH_OPT}
+                     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/simple_kernel.cc)
+else()
+  add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/simple_kernel.code
+                     COMMAND ${CMAKE_HIP_COMPILER} --fatbin ${OFFLOAD_ARCH_LIST}
+                     -x cu ${CMAKE_CURRENT_SOURCE_DIR}/simple_kernel.cc
+                     -o simple_kernel.code
+                     -I${HIP_INCLUDE_DIR}
+                     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/simple_kernel.cc)
+endif()
 add_custom_target(simple_kernel ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/simple_kernel.code)
 set_property(GLOBAL APPEND PROPERTY G_INSTALL_CUSTOM_TARGETS ${CMAKE_CURRENT_BINARY_DIR}/simple_kernel.code)
 hip_add_exe_to_target(NAME OccupancyTest
