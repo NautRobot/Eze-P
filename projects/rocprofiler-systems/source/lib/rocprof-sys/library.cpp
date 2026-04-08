@@ -40,6 +40,7 @@
 #include "core/gpu.hpp"
 #include "core/locking.hpp"
 #include "core/node_info.hpp"
+#include "core/output_file_registry.hpp"
 #include "core/perfetto_fwd.hpp"
 #include "core/rocpd/data_processor.hpp"
 #include "core/timemory.hpp"
@@ -1138,10 +1139,18 @@ rocprofsys_finalize_hidden(void)
         sampling::post_process();
     }
 
+    auto _output_registry = output_file_registry{};
+
     if(get_use_causal())
     {
         LOG_DEBUG("Finishing the causal experiments...");
         causal::finish_experimenting();
+
+        auto _base = config::get_causal_output_filename();
+        _output_registry.register_file(fmt::format("{}.json", _base),
+                                       output_format::causal_json);
+        _output_registry.register_file(fmt::format("{}.txt", _base),
+                                       output_format::causal_text);
     }
 
     if(get_use_process_sampling())
@@ -1168,13 +1177,13 @@ rocprofsys_finalize_hidden(void)
     {
         LOG_DEBUG("Finalizing perfetto...");
         rocprofsys::perfetto::post_process(_timemory_manager.get(),
-                                           _perfetto_output_error);
+                                           _perfetto_output_error, _output_registry);
     }
 
     {
         auto& _manager = rocprofsys::trace_cache::cache_manager::get_instance();
         _manager.shutdown();
-        _manager.post_process_bulk();
+        _manager.post_process_bulk(_output_registry);
     }
 
     if(_timemory_manager && _timemory_manager != nullptr)
@@ -1200,7 +1209,28 @@ rocprofsys_finalize_hidden(void)
         _cfg.suffix     = settings::default_process_suffix();
         _timemory_manager->write_metadata(settings::get_global_output_prefix(),
                                           "rocprofsys", _cfg);
+
+        if(config::get_use_timemory())
+        {
+            auto _components =
+                config::get_setting_value<std::string>("ROCPROFSYS_TIMEMORY_COMPONENTS")
+                    .value_or("wall_clock");
+
+            for(auto&& _comp_name : tim::delimit(_components, ",; "))
+            {
+                if(_comp_name.empty()) continue;
+
+                _output_registry.register_file(
+                    settings::compose_output_filename(_comp_name, "txt", _cfg),
+                    output_format::text, _comp_name);
+                _output_registry.register_file(
+                    settings::compose_output_filename(_comp_name, "json", _cfg),
+                    output_format::json, _comp_name);
+            }
+        }
     }
+
+    _output_registry.print_summary();
 
     categories::shutdown();
 
