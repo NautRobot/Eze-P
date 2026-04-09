@@ -1,0 +1,5 @@
+outs:
+- md5: d33ea115c08c297bdddb0a4fc1c47074
+  size: 9460
+  hash: md5
+  path: SettingsRpcService2.lib
