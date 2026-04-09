@@ -32,6 +32,12 @@ _MIOPEN_ARCH_PATTERN = re.compile(
     r")"
 )
 
+# MIOpen CK per-arch shared library pattern.
+# Matches libMIOpenCK<name>_<arch>.so (Linux) and MIOpenCK<name>_<arch>.dll (Windows).
+_MIOPEN_CK_SO_PATTERN = re.compile(
+    r"^(?:lib)?MIOpenCK\w+_(" + _GFX_ARCH_PATTERN.pattern + r")\.(?:so|dll)"
+)
+
 
 class DatabaseHandler(ABC):
     """Base class for kernel database handlers."""
@@ -240,19 +246,15 @@ class MIOpenHandler(DatabaseHandler):
 
         Patterns:
         - share/miopen/db/gfx*.{db.txt,fdb.txt,model,kdb}
-        - lib/libMIOpenCK*_gfx*.so (CK per-arch shared libraries)
-        - lib/MIOpenCK*_gfx*.dll (Windows CK per-arch shared libraries)
+        - CK per-arch shared libraries matching _MIOPEN_CK_SO_PATTERN
         """
         path_str = self._relative_path(path, prefix_root)
         filename = Path(path_str).name
 
-        # MIOpen CK per-arch shared libraries:
-        #   Linux: libMIOpenCKGroupedConv_gfx942.so
-        #   Windows: MIOpenCKGroupedConv_gfx942.dll
-        # These are dlopen'd by MIOpen at runtime and must not be kpack-processed.
-        if filename.startswith("libMIOpenCK") or filename.startswith("MIOpenCK"):
-            match = _GFX_ARCH_PATTERN.search(filename)
-            return match.group(0) if match else None
+        # MIOpen CK per-arch shared libraries (dlopen'd at runtime).
+        ck_match = _MIOPEN_CK_SO_PATTERN.match(filename)
+        if ck_match:
+            return ck_match.group(1)
 
         if "miopen/db" not in path_str:
             return None
