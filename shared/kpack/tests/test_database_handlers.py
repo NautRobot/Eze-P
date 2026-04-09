@@ -724,6 +724,33 @@ class TestMIOpenHandler:
         result = handler.detect(file_path, prefix_root)
         assert result is None
 
+    def test_detect_ck_dll_gfx942(self, handler, prefix_root):
+        """Windows CK per-arch DLL (no lib prefix) should be detected."""
+        file_path = prefix_root / "lib/MIOpenCKGroupedConv_gfx942.dll"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result == "gfx942"
+
+    def test_detect_ck_dll_xnack(self, handler, prefix_root):
+        """Windows CK per-arch DLL with xnack variant."""
+        file_path = prefix_root / "lib/MIOpenCKGroupedConv_gfx942-xnack+.dll"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result == "gfx942-xnack+"
+
+    def test_reject_MIOpen_dll(self, handler, prefix_root):
+        """MIOpen.dll (the main library, no lib prefix) should not match the CK pattern."""
+        file_path = prefix_root / "lib/MIOpen.dll"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result is None
+
 
 class TestDatabaseHandlerRegistry:
     """Tests for database handler registry functions."""

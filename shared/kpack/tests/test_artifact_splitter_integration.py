@@ -755,3 +755,33 @@ class TestArtifactSplitterIntegration:
         assert len(visitor.database_files_by_arch["gfx942"]) == 1
         assert visitor.database_files_by_arch["gfx942"][0][0] == ck_so
         assert ck_so in visitor.exclude_from_generic
+
+    def test_ck_dll_classified_as_database_not_fat_binary(self, toolchain, tmp_path):
+        """
+        Test that a Windows CK per-arch .dll (no lib prefix) matched by MIOpenHandler
+        is classified as a database file, not a fat binary.
+        """
+        test_dir = tmp_path / "prefix"
+        lib_dir = test_dir / "lib"
+        lib_dir.mkdir(parents=True)
+
+        ck_dll = lib_dir / "MIOpenCKGroupedConv_gfx942.dll"
+        ck_dll.write_bytes(b"\x7fELF" + b"\x00" * 100)
+
+        visitor = FileClassificationVisitor(
+            toolchain=toolchain,
+            database_handlers=[MIOpenHandler()],
+            verbose=False,
+        )
+
+        with patch("rocm_kpack.artifact_splitter.is_fat_binary", return_value=True):
+            visitor.visit_file(ck_dll, test_dir)
+
+        # Should be in database_files_by_arch, NOT in fat_binaries
+        assert len(visitor.fat_binaries) == 0, (
+            "CK .dll should not be classified as a fat binary"
+        )
+        assert "gfx942" in visitor.database_files_by_arch
+        assert len(visitor.database_files_by_arch["gfx942"]) == 1
+        assert visitor.database_files_by_arch["gfx942"][0][0] == ck_dll
+        assert ck_dll in visitor.exclude_from_generic

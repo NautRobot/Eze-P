@@ -241,13 +241,16 @@ class MIOpenHandler(DatabaseHandler):
         Patterns:
         - share/miopen/db/gfx*.{db.txt,fdb.txt,model,kdb}
         - lib/libMIOpenCK*_gfx*.so (CK per-arch shared libraries)
+        - lib/MIOpenCK*_gfx*.dll (Windows CK per-arch shared libraries)
         """
         path_str = self._relative_path(path, prefix_root)
         filename = Path(path_str).name
 
-        # MIOpen CK per-arch shared libraries: libMIOpenCKGroupedConv_gfx942.so
+        # MIOpen CK per-arch shared libraries:
+        #   Linux: libMIOpenCKGroupedConv_gfx942.so
+        #   Windows: MIOpenCKGroupedConv_gfx942.dll
         # These are dlopen'd by MIOpen at runtime and must not be kpack-processed.
-        if filename.startswith("libMIOpenCK"):
+        if filename.startswith("libMIOpenCK") or filename.startswith("MIOpenCK"):
             match = _GFX_ARCH_PATTERN.search(filename)
             return match.group(0) if match else None
 
