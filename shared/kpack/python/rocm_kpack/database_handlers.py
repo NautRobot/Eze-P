@@ -236,11 +236,20 @@ class MIOpenHandler(DatabaseHandler):
 
     def detect(self, path: Path, prefix_root: Path) -> Optional[str]:
         """
-        Detect MIOpen tuning database files.
+        Detect MIOpen tuning database files and CK per-arch shared libraries.
 
-        Pattern: share/miopen/db/gfx*.{db.txt,fdb.txt,model}
+        Patterns:
+        - share/miopen/db/gfx*.{db.txt,fdb.txt,model,kdb}
+        - lib/libMIOpenCK*_gfx*.so (CK per-arch shared libraries)
         """
         path_str = self._relative_path(path, prefix_root)
+        filename = Path(path_str).name
+
+        # MIOpen CK per-arch shared libraries: libMIOpenCKGroupedConv_gfx942.so
+        # These are dlopen'd by MIOpen at runtime and must not be kpack-processed.
+        if filename.startswith("libMIOpenCK"):
+            match = _GFX_ARCH_PATTERN.search(filename)
+            return match.group(0) if match else None
 
         if "miopen/db" not in path_str:
             return None

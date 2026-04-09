@@ -88,14 +88,9 @@ class FileClassificationVisitor:
         if not file_path.is_file():
             return
 
-        # Check if it's a fat binary
-        if is_fat_binary(file_path, self.toolchain):
-            self.fat_binaries.append(file_path)
-            if self.verbose:
-                print(f"  Found fat binary: {file_path.relative_to(prefix_path)}")
-            return
-
-        # Check database handlers
+        # Check database handlers first — some files (e.g. MIOpen CK per-arch
+        # .so files) are also fat binaries, but compiled per-arch. Matching
+        # them here prevents them from entering the kpack processing path.
         for handler in self.database_handlers:
             arch = handler.detect(file_path, prefix_path)
             if arch:
@@ -105,7 +100,13 @@ class FileClassificationVisitor:
                     print(
                         f"  Found {handler.name()} database file for {arch}: {file_path.relative_to(prefix_path)}"
                     )
-                break  # First matching handler wins
+                return  # First matching handler wins
+
+        # Check if it's a fat binary
+        if is_fat_binary(file_path, self.toolchain):
+            self.fat_binaries.append(file_path)
+            if self.verbose:
+                print(f"  Found fat binary: {file_path.relative_to(prefix_path)}")
 
     def get_statistics(self) -> str:
         """Get a summary of classification results."""

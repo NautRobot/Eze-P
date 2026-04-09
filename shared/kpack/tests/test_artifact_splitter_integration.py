@@ -7,6 +7,7 @@ These tests simulate real artifact splitting scenarios with mock data.
 import shutil
 from argparse import Namespace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +17,7 @@ from rocm_kpack.artifact_splitter import (
     ExtractedKernel,
 )
 from rocm_kpack.artifact_utils import read_artifact_manifest, write_artifact_manifest
-from rocm_kpack.database_handlers import RocBLASHandler
+from rocm_kpack.database_handlers import MIOpenHandler, RocBLASHandler
 from rocm_kpack.tools.split_artifacts import batch_split, parse_artifact_name
 from rocm_kpack.tools.verify_artifacts import ArtifactVerifier
 
@@ -721,3 +722,36 @@ class TestArtifactSplitterIntegration:
         assert (
             len(kpm_files) == 0
         ), f"Should have no .kpm manifest files (patterns replace manifests), got {kpm_files}"
+
+    def test_ck_so_classified_as_database_not_fat_binary(self, toolchain, tmp_path):
+        """
+        Test that a CK per-arch .so matched by MIOpenHandler is classified as a
+        database file, not a fat binary, even when is_fat_binary returns True.
+
+        This verifies that database handlers are checked before the fat binary
+        check in FileClassificationVisitor.visit_file().
+        """
+        test_dir = tmp_path / "prefix"
+        lib_dir = test_dir / "lib"
+        lib_dir.mkdir(parents=True)
+
+        ck_so = lib_dir / "libMIOpenCKGroupedConv_gfx942.so"
+        ck_so.write_bytes(b"\x7fELF" + b"\x00" * 100)
+
+        visitor = FileClassificationVisitor(
+            toolchain=toolchain,
+            database_handlers=[MIOpenHandler()],
+            verbose=False,
+        )
+
+        with patch("rocm_kpack.artifact_splitter.is_fat_binary", return_value=True):
+            visitor.visit_file(ck_so, test_dir)
+
+        # Should be in database_files_by_arch, NOT in fat_binaries
+        assert len(visitor.fat_binaries) == 0, (
+            "CK .so should not be classified as a fat binary"
+        )
+        assert "gfx942" in visitor.database_files_by_arch
+        assert len(visitor.database_files_by_arch["gfx942"]) == 1
+        assert visitor.database_files_by_arch["gfx942"][0][0] == ck_so
+        assert ck_so in visitor.exclude_from_generic
