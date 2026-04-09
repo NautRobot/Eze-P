@@ -494,6 +494,8 @@ hipError_t hipOccupancyAvailableDynamicSMemPerBlock(size_t* dynamicSmemSize, con
 
   HIP_RETURN(hipSuccess);
 }
+}  // namespace hip
+
 namespace hip_impl {
 namespace {
 // based register usage for the device symbol and device capabilities, returns the maximum number
@@ -545,76 +547,6 @@ int maxThreadsPerCU(const amd::device::Info& deviceInfo,
   return alu_occupancy * wrkGrpInfo.wavefrontSize_;
 }
 }  // namespace
-
-hipError_t ihipOccupancyMaxActiveBlocksPerMultiprocessor(
-    int* maxBlocksPerCU, int* numBlocksPerGrid, int* bestBlockSize, const amd::Device& device,
-    hipFunction_t func, int inputBlockSize, size_t dynamicSMemSize, bool bCalcPotentialBlkSz) {
-  hip::DeviceFunc* function = hip::DeviceFunc::asFunction(func);
-  const amd::Kernel& kernel = *function->kernel();
-  hipError_t hip_error;
-  int alu_limited_threads;
-
-  const device::Kernel::WorkGroupInfo* wrkGrpInfo = kernel.getDeviceKernel(device)->workGroupInfo();
-  if (bCalcPotentialBlkSz == false) {
-    if (inputBlockSize <= 0) {
-      return hipErrorInvalidValue;
-    }
-    *bestBlockSize = 0;
-    // Make sure the requested block size is smaller than max supported
-    if (inputBlockSize > int(device.info().maxWorkGroupSize_)) {
-      *maxBlocksPerCU = 0;
-      *numBlocksPerGrid = 0;
-      return hipSuccess;
-    }
-  } else {
-    if (inputBlockSize > int(device.info().maxWorkGroupSize_) || inputBlockSize <= 0) {
-      // The user wrote the kernel to work with a workgroup size
-      // bigger than this hardware can support. Or they do not care
-      // about the size So just assume its maximum size is
-      // constrained by hardware
-      inputBlockSize = device.info().maxWorkGroupSize_;
-    }
-  }
-
-  int lds_occupancy_wgs = INT_MAX;
-  const size_t total_used_lds = wrkGrpInfo->usedLDSSize_ + dynamicSMemSize;
-  if (total_used_lds != 0) {
-    lds_occupancy_wgs = static_cast<int>(device.info().localMemSize_ / total_used_lds);
-  }
-
-  alu_limited_threads = maxThreadsPerCU(device.info(), *wrkGrpInfo, device.isa());
-
-  // Calculate how many blocks of inputBlockSize we can fit per CU
-  // Need to align with hardware wavefront size. If they want 65 threads, but
-  // waves are 64, then we need 128 threads per block.
-  // So this calculates how many blocks we can fit.
-  *maxBlocksPerCU = alu_limited_threads / amd::alignUp(inputBlockSize, wrkGrpInfo->wavefrontSize_);
-  // Unless those blocks are further constrained by LDS size.
-  *maxBlocksPerCU = std::min(*maxBlocksPerCU, lds_occupancy_wgs);
-
-  // Some callers of this function want to return the block size, in threads, that
-  // leads to the maximum occupancy. In that case, inputBlockSize is the maximum
-  // workgroup size the user wants to allow, or that the hardware can allow.
-  // It is either the number of threads that we are limited to due to occupancy, or
-  // the maximum available block size for this kernel, which could have come from the
-  // user. e.g., if the user indicates the maximum block size is 64 threads, but we
-  // calculate that 128 threads can fit in each CU, we have to give up and return 64.
-  *bestBlockSize =
-      std::min(alu_limited_threads, amd::alignUp(inputBlockSize, wrkGrpInfo->wavefrontSize_));
-  // If the best block size is smaller than the block size used to fit the maximum,
-  // then we need to make the grid bigger for full occupancy.
-  const int bestBlocksPerCU = alu_limited_threads / (*bestBlockSize);
-  uint32_t maxCUs = device.info().maxComputeUnits_;
-  if (wrkGrpInfo->isWGPMode_ == false && device.settings().enableWgpMode_ == true) {
-    maxCUs *= 2;
-  } else if ((wrkGrpInfo->isWGPMode_ == true && device.settings().enableWgpMode_ == false)) {
-    maxCUs /= 2;
-  }
-  // Unless those blocks are further constrained by LDS size.
-  *numBlocksPerGrid = (maxCUs * std::min(bestBlocksPerCU, lds_occupancy_wgs));
-
-  return hipSuccess;
-}
 
 // ================================================================================================
 // @launchConfig  a launch configuration that might have the cluster size unconfigured
@@ -751,6 +683,7 @@ extern "C"
 
 }  // namespace hip_impl
 
+namespace hip {
 // ================================================================================================
 hipError_t ihipLaunchKernel(const void* hostFunction, dim3 gridDim, dim3 blockDim, void** args,
                             size_t sharedMemBytes, hipStream_t stream, hipEvent_t startEvent,
@@ -928,7 +861,6 @@ hipError_t hipOccupancyMaxPotentialClusterSize(int* clusterSize, const void* f,
   const amd::Device& device = *hip::getCurrentDevice()->devices()[0];
   hipFunction_t func;
   hipError_t hip_error = PlatformState::Instance().StatCO().GetFunc(&func, f, ihipGetDevice());
-  hip::DeviceFunc* deviceFunc;
   const amd::device::Info& deviceInfo = device.info();
 
   *clusterSize = 0;
@@ -937,10 +869,8 @@ hipError_t hipOccupancyMaxPotentialClusterSize(int* clusterSize, const void* f,
     HIP_RETURN(hipErrorInvalidDeviceFunction);
   }
 
-  deviceFunc = hip::DeviceFunc::asFunction(func);
-
-  const amd::Kernel& kernel = *deviceFunc->kernel();
-  const device::Kernel::WorkGroupInfo* wrkGrpInfo = kernel.getDeviceKernel(device)->workGroupInfo();
+  const amd::Kernel* kernel = hip::asKernel(func);
+  const device::Kernel::WorkGroupInfo* wrkGrpInfo = kernel->getDeviceKernel(device)->workGroupInfo();
 
   const size_t total_used_lds = wrkGrpInfo->usedLDSSize_ + config->dynamicSmemBytes;
 
@@ -1029,16 +959,13 @@ hipError_t hipOccupancyMaxActiveClusters(int* numClusters, const void* f,
   hipFunction_t func;
   hipError_t hip_error = PlatformState::Instance().StatCO().GetFunc(&func, f, ihipGetDevice());
   const amd::device::Info& deviceInfo = device.info();
-  hip::DeviceFunc* deviceFunc;
 
   if ((hip_error != hipSuccess) || (func == nullptr)) {
     HIP_RETURN(hipErrorInvalidDeviceFunction);
   }
 
-  deviceFunc = hip::DeviceFunc::asFunction(func);
-
-  const amd::Kernel& kernel = *deviceFunc->kernel();
-  const device::Kernel::WorkGroupInfo* wrkGrpInfo = kernel.getDeviceKernel(device)->workGroupInfo();
+  const amd::Kernel* kernel = hip::asKernel(func);
+  const device::Kernel::WorkGroupInfo* wrkGrpInfo = kernel->getDeviceKernel(device)->workGroupInfo();
 
   hip_error = hip_impl::clusterDimensions(clusterDim, *config, *wrkGrpInfo, deviceInfo);
 
