@@ -9,11 +9,11 @@ on:
     branches: [develop]
     paths:
       - 'projects/hipfile/**'
-      - '.github/workflows/hipfile-codespell.yml'
+      - '.github/workflows/hipfile-*.yml'
   pull_request:
     paths:
       - 'projects/hipfile/**'
-      - '.github/workflows/hipfile-codespell.yml'
+      - '.github/workflows/hipfile-*.yml'
 
 permissions:
   contents: read
