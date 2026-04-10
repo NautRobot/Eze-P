@@ -22,6 +22,14 @@
 /* Base counter definitions - architecture agnostic */
 static const counter_def_t base_counters[] = {
 	/*
+	 * Registry invariants:
+	 * - counter names/ids are the stable perf-facing ABI in this module
+	 * - each entry maps to one hardware block and declares supported
+	 *   dimensional selectors
+	 * - architecture-specific numeric event ids are resolved later through
+	 *   arch->event_map (lookup_event_id), not hardcoded here
+	 */
+	/*
      * GL2C Block Counters - DIM_SE_SA (L2 Cache per Shader Array)
      *
      * Dimension rationale: The GL2C (Graphics L2 Cache) is a hardware block that
@@ -278,6 +286,12 @@ int pmu_validate_counter_dimensions(const counter_def_t *counter,
 {
 	uint32_t requested_dims = 0;
 
+	/*
+	 * Validation is intentionally conservative and happens before measurement
+	 * creation so unsupported dimension requests fail fast at event_init time.
+	 * This prevents constructing PM4/read paths that cannot represent the
+	 * requested selector semantics for a given counter block.
+	 */
 	if (!counter || !dims)
 		return -EINVAL;
 

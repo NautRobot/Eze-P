@@ -81,6 +81,15 @@ find_and_install_shared_counter(struct aql_perf_session *session, uint32_t count
 	struct shared_counter_ref *ref;
 	unsigned long flags;
 
+	/*
+	 * Shared-counter fast path:
+	 * - key lookup in session->shared_counters list
+	 * - increment refcount while still holding shared_lock
+	 * - install measurement fields before unlock
+	 *
+	 * This guarantees the referenced allocation cannot disappear between
+	 * lookup and installation in the measurement object.
+	 */
 	spin_lock_irqsave(&session->shared_lock, flags);
 	list_for_each_entry(ref, &session->shared_counters, list)
 	{
@@ -115,6 +124,11 @@ static struct shared_counter_ref *create_shared_counter(struct aql_perf_session 
 	struct shared_counter_ref *ref;
 	unsigned long flags;
 
+	/*
+	 * The first measurement that allocates a physical counter creates the
+	 * shared reference object with ref_count=1. Later measurements for the
+	 * same logical counter_id join by incrementing this refcount.
+	 */
 	ref = kzalloc(sizeof(*ref), GFP_KERNEL);
 	if (!ref) {
 		aql_err("[PMU] Failed to allocate shared counter reference");
@@ -146,6 +160,14 @@ void release_shared_counter(struct aql_perf_session *session, struct shared_coun
 	unsigned long flags;
 	int old_count;
 
+	/*
+	 * Refcount transition rules:
+	 * - n -> n-1: still shared, keep list entry alive
+	 * - 1 -> 0 : last user, remove from list and free ref object
+	 *
+	 * Physical counter release is handled by measurement ownership flags,
+	 * not by freeing this metadata node directly.
+	 */
 	if (!ref)
 		return;
 
@@ -524,6 +546,15 @@ int aql_perf_submit_pm4_packet(struct aql_perf_session *session, uint32_t gpu_id
 	struct aql_gpu_queue *queue;
 	int ret;
 
+	/*
+	 * Submission contract:
+	 * - submit one PM4 command stream to the target GPU queue
+	 * - synchronously wait for dispatch completion before returning
+	 * - serialize globally to avoid concurrent ring pointer races
+	 *
+	 * This path is intentionally synchronous so higher layers can treat
+	 * START/READ/STOP as completed state transitions.
+	 */
 	if (aql_pmu_is_shutting_down())
 		return -ESHUTDOWN;
 
@@ -674,6 +705,13 @@ struct aql_measurement *aql_perf_measurement_create(struct aql_perf_session *ses
 	struct aql_measurement *measurement;
 	int gpu_idx;
 
+	/*
+	 * Measurement objects are per-perf-event state containers:
+	 * - immutable identity: session, gpu_id, counter_id, event
+	 * - mutable runtime: state machine, shared/owned counter pointers,
+	 *   cached read values, start baseline
+	 * - lifetime: kref managed because workqueue jobs can outlive callbacks
+	 */
 	if (!session || !event) {
 		aql_err("Invalid parameters for measurement creation");
 		return ERR_PTR(-EINVAL);
@@ -740,6 +778,14 @@ int aql_perf_measurement_start(struct aql_measurement *measurement)
 	unsigned long flags;
 	int ret;
 
+	/*
+	 * START state machine:
+	 * IDLE -> STARTING -> ACTIVE
+	 *
+	 * The measurement enters active list before packet generation so timer
+	 * and teardown logic can see in-flight starts. Errors unwind by removing
+	 * list membership and releasing any acquired shared/owned resources.
+	 */
 	if (!measurement || !measurement->session) {
 		aql_err("[PMU] Invalid measurement for start");
 		return -EINVAL;
@@ -872,6 +918,13 @@ int aql_perf_measurement_stop(struct aql_measurement *measurement)
 	unsigned long flags;
 	int ret;
 
+	/*
+	 * STOP semantics:
+	 * - shared users only drop shared_ref
+	 * - owner submits STOP packet (unless debug-suppressed) and releases
+	 *   physical counter allocation
+	 * - measurement leaves active list and returns to IDLE
+	 */
 	if (!measurement || !measurement->session) {
 		aql_err("[PMU] Invalid measurement for stop");
 		return -EINVAL;
@@ -1229,6 +1282,15 @@ uint64_t aql_perf_measurement_read(struct aql_measurement *measurement)
 	int gpu_idx;
 	int ret;
 
+	/*
+	 * Read model:
+	 * 1) submit READ PM4 packet to refresh queue-backed result buffer
+	 * 2) decode absolute hardware value (aggregate or dimension-specific)
+	 * 3) cache absolute value and return delta from START baseline
+	 *
+	 * Returning delta keeps perf-visible semantics monotonic for a single
+	 * measurement interval even though hardware counters are cumulative.
+	 */
 	aql_debug("[PMU] READ_SYNC: Entry for GPU %u", measurement ? measurement->gpu_id : 0);
 
 	if (!measurement || !measurement->session) {
@@ -1295,6 +1357,19 @@ void aql_perf_measurement_destroy(struct aql_measurement *measurement)
 	bool is_atomic_ctx;
 	unsigned long flags;
 
+	/*
+	 * Destroy must tolerate both process and atomic contexts.
+	 *
+	 * Atomic context:
+	 * - queue async STOP if needed
+	 * - drop creator reference immediately
+	 *
+	 * Process context:
+	 * - prefer STOP on workqueue (safe mm context for GPU submission path)
+	 * - perform best-effort direct cleanup fallback
+	 *
+	 * Final free always happens via kref release callback.
+	 */
 	if (!measurement)
 		return;
 

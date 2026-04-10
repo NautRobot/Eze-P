@@ -26,6 +26,108 @@
 #include "kfd_ioctl_bridge.h"
 #include "aql_perf.h"
 
+/* ========================================================================
+ * AMDKFD_IOC_PROFILER ioctl definitions (DKMS-only, not in upstream UAPI)
+ *
+ * The profiler ioctl enables compute_perfcount_enable in the MQD for all
+ * queues on a GPU, allowing performance counter access from compute queues.
+ * On upstream kernels this ioctl doesn't exist, so we fall back to the
+ * kernel patch that sets compute_perfcount_enable in init_mqd().
+ * ======================================================================== */
+
+#ifndef AMDKFD_IOC_PROFILER
+
+enum kfd_profiler_ops {
+	KFD_IOC_PROFILER_PMC = 0,
+};
+
+struct kfd_ioctl_pmc_settings {
+	__u32 gpu_id;
+	__u32 lock;
+	__u32 perfcount_enable;
+};
+
+struct kfd_ioctl_profiler_args {
+	__u32 op;
+	union {
+		struct kfd_ioctl_pmc_settings pmc;
+		__u32 version;
+		/* pc_sample and ptl_control omitted — not needed */
+		__u8 _pad[68]; /* ensure struct is large enough */
+	};
+};
+
+#define AMDKFD_IOC_PROFILER	\
+	_IOWR('K', 0x86, struct kfd_ioctl_profiler_args)
+
+#endif /* AMDKFD_IOC_PROFILER */
+
+/**
+ * profiler_lock_and_enable - Lock GPU for profiling and enable perfcount
+ * @kfd_filp: Open /dev/kfd file pointer
+ * @gpu_id: KFD GPU ID
+ *
+ * Calls AMDKFD_IOC_PROFILER with KFD_IOC_PROFILER_PMC to:
+ *   1. Lock the GPU for profiling (prevents concurrent profiling)
+ *   2. Enable compute_perfcount_enable on all existing queues
+ *
+ * This replaces the kernel patch that sets compute_perfcount_enable
+ * in init_mqd() for all MQD manager versions.
+ *
+ * Returns: 0 on success, -ENOTTY if ioctl not supported (upstream kernel),
+ *          other negative error codes on failure
+ */
+static int profiler_lock_and_enable(struct file *kfd_filp, uint32_t gpu_id)
+{
+	struct kfd_ioctl_profiler_args args = {};
+	int ret;
+
+	args.op = KFD_IOC_PROFILER_PMC;
+	args.pmc.gpu_id = gpu_id;
+	args.pmc.lock = 1;
+	args.pmc.perfcount_enable = 1;
+
+	ret = kfd_bridge_ioctl(kfd_filp, AMDKFD_IOC_PROFILER,
+			       &args, sizeof(args));
+	if (ret == -ENOTTY || ret == -EINVAL) {
+		aql_info("profiler_lock: AMDKFD_IOC_PROFILER not supported "
+			 "(upstream kernel?), relying on kernel patch");
+		return ret;
+	}
+	if (ret) {
+		aql_err("profiler_lock: AMDKFD_IOC_PROFILER failed: %d", ret);
+		return ret;
+	}
+
+	aql_info("profiler_lock: GPU %u locked for profiling, perfcount enabled",
+		 gpu_id);
+	return 0;
+}
+
+/**
+ * profiler_unlock_and_disable - Unlock GPU profiling and disable perfcount
+ * @kfd_filp: Open /dev/kfd file pointer
+ * @gpu_id: KFD GPU ID
+ */
+static void profiler_unlock_and_disable(struct file *kfd_filp, uint32_t gpu_id)
+{
+	struct kfd_ioctl_profiler_args args = {};
+	int ret;
+
+	args.op = KFD_IOC_PROFILER_PMC;
+	args.pmc.gpu_id = gpu_id;
+	args.pmc.lock = 0;
+	args.pmc.perfcount_enable = 0;
+
+	ret = kfd_bridge_ioctl(kfd_filp, AMDKFD_IOC_PROFILER,
+			       &args, sizeof(args));
+	if (ret && ret != -ENOTTY && ret != -EINVAL)
+		aql_debug("profiler_unlock: AMDKFD_IOC_PROFILER failed: %d", ret);
+	else if (!ret)
+		aql_info("profiler_unlock: GPU %u unlocked, perfcount disabled",
+			 gpu_id);
+}
+
 /* Parse a u32 value from "key value\n" format in a buffer.
  * Returns 0 on success, <0 on failure. */
 static int parse_sysfs_u32(const char *buf, const char *key, u32 *out)
@@ -913,6 +1015,20 @@ int aql_queue_create(struct aql_gpu_queue *queue,
 		put_user(zero, (uint64_t __user *)(queue->bufs[AQL_BUF_WPTR].user_addr + 64));
 	}
 
+	/* Step 4b: Enable compute_perfcount_enable via profiler ioctl.
+	 * This must happen BEFORE CREATE_QUEUE so the MQD is initialized
+	 * with compute_perfcount_enable=1 (via profiler_process check in
+	 * init_mqd). On upstream kernels without the profiler ioctl, we
+	 * fall back to the kernel patch. Failure here is non-fatal. */
+	{
+		int pret = profiler_lock_and_enable(kfd_filp, gpu_id);
+		if (!pret)
+			aql_debug("queue_create: perfcount enabled via profiler ioctl");
+		else
+			aql_debug("queue_create: profiler ioctl returned %d, "
+				 "using kernel patch fallback", pret);
+	}
+
 	/* Step 5: Create AQL compute queue via KFD */
 	cq_args.gpu_id = gpu_id;
 	cq_args.queue_type = KFD_IOC_QUEUE_TYPE_COMPUTE_AQL;
@@ -1085,6 +1201,7 @@ err_destroy_queue:
 		kfd_bridge_ioctl(kfd_filp, AMDKFD_IOC_DESTROY_QUEUE,
 				 &dq_args, sizeof(dq_args));
 	}
+	profiler_unlock_and_disable(kfd_filp, gpu_id);
 err_unpin:
 	unmap_gpu_buffers(kfd_filp, gpu_id, queue->bufs, AQL_QUEUE_NUM_BUFFERS);
 err_free_bufs:
@@ -1160,6 +1277,9 @@ void aql_queue_destroy(struct aql_gpu_queue *queue,
 					 &args, sizeof(args));
 		}
 
+		/* Step 1b: Unlock profiler (release perfcount_enable) */
+		profiler_unlock_and_disable(kfd_filp, queue->gpu_id);
+
 		/* Step 2: Unmap doorbell */
 		if (queue->doorbell_kaddr) {
 			iounmap((void __iomem *)((unsigned long)queue->doorbell_kaddr
@@ -1216,6 +1336,15 @@ int aql_queue_submit(struct aql_gpu_queue *queue,
 	bool need_mm;
 	int ret;
 
+	/*
+	 * Queue submit is the low-level transport boundary:
+	 * - allocates IB space in queue-owned GTT pool
+	 * - writes PM4 stream plus trailing completion WRITE_DATA
+	 * - enqueues one vendor AQL packet into ring
+	 * - updates wptr + doorbell using ROCr-compatible ordering
+	 *
+	 * Caller receives expected dispatch index for wait().
+	 */
 	if (!queue || !queue->initialized || !pm4_data || !pm4_size_dw)
 		return -EINVAL;
 
@@ -1395,6 +1524,12 @@ int aql_queue_wait(struct aql_gpu_queue *queue,
 	uint64_t rptr_val = 0;
 	bool need_mm;
 
+	/*
+	 * Completion detection is rptr-based:
+	 * - MES increments queue rptr after consuming packets
+	 * - wait succeeds once rptr >= expected dispatch index
+	 * - on timeout, log slot/rptr diagnostics for ring triage
+	 */
 	if (!queue || !queue->initialized)
 		return -EINVAL;
 

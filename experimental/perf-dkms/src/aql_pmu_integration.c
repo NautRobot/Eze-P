@@ -49,6 +49,14 @@ int aql_pmu_init(void)
 {
 	int ret;
 
+	/*
+	 * Global ownership model:
+	 * - one module-wide workqueue for all deferred START/STOP/READ operations
+	 * - one module-wide AQL session published through RCU
+	 *
+	 * Readers use aql_pmu_get_session() (RCU + refcount) and do not take
+	 * aql_pmu_mutex. Writers (init/cleanup) serialize under aql_pmu_mutex.
+	 */
 	mutex_init(&aql_pmu_mutex);
 
 	aql_info("Initializing AQL PMU integration");
@@ -316,6 +324,16 @@ int aql_pmu_event_init(struct perf_event *event, const struct pmu_dimension_coor
 	struct aql_measurement *measurement;
 	uint32_t gpu_id;
 
+	/*
+	 * This is the bridge between perf objects and AQL measurement objects.
+	 * It runs under aql_pmu_mutex so GPU selection and session lookups are
+	 * stable while measurement is created and attached to event->hw.
+	 *
+	 * Ownership after success:
+	 * - perf event owns one measurement reference via hw.config_base pointer
+	 * - lifecycle transitions happen via start/stop callbacks
+	 * - final release happens in aql_pmu_event_destroy()
+	 */
 	aql_debug("ENTRY: aql_pmu_event_init");
 
 	if (!aql_pmu_should_use_hardware(event)) {
@@ -590,6 +608,14 @@ struct aql_perf_session *aql_pmu_get_session(void)
 {
 	struct aql_perf_session *session;
 
+	/*
+	 * Reader-side acquisition protocol:
+	 * 1) RCU dereference the global pointer (atomic-safe)
+	 * 2) acquire refcount with inc_not_zero (fails if destruction started)
+	 * 3) return stable pointer usable outside RCU read section
+	 *
+	 * Callers must pair with aql_pmu_put_session().
+	 */
 	rcu_read_lock();
 	session = rcu_dereference(global_aql_session);
 	if (session && !aql_perf_session_get(session))

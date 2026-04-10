@@ -122,6 +122,16 @@ struct pmu_dimension_limits {
  */
 static inline void pmu_extract_dimensions(u64 config1, struct pmu_dimension_coords *dims)
 {
+	/*
+	 * perf encodes dimension selectors in attr.config1. This helper is the
+	 * single decode point used by event_init before any hardware resource
+	 * allocation occurs.
+	 *
+	 * Encoding contract:
+	 * - each field is an index, not a count
+	 * - config1 == 0 means "no explicit dimensions" (aggregate/broadcast)
+	 * - aggregate flag requests summation across all hardware instances
+	 */
 	dims->xcc = (config1 >> PMU_DIM_XCC_SHIFT) & PMU_DIM_XCC_MASK;
 	dims->se = (config1 >> PMU_DIM_SE_SHIFT) & PMU_DIM_SE_MASK;
 	dims->sa = (config1 >> PMU_DIM_SA_SHIFT) & PMU_DIM_SA_MASK;

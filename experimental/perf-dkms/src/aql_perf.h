@@ -27,23 +27,7 @@ struct file;
 
 /* AQL Performance Counter Constants */
 #define AQL_PERF_MAX_GPUS 16
-#define AQL_PERF_RESULT_BUFFER_SIZE (PAGE_SIZE)
-#define AQL_PERF_PACKET_BUFFER_SIZE (PAGE_SIZE)
 #define AQL_PERF_MAX_RECOVERY_ATTEMPTS 3
-
-/* GFX12 Counter Constants */
-#define GFX12_PERF_SEL_SQ_WAVES 0x00000001
-#define GFX12_PERF_SEL_SQ_INSTS 0x00000002
-#define GFX12_PERF_SEL_TA_BUSY 0x00000003
-#define GFX12_GPU_TYPE 12
-
-/* Error Codes */
-#define AQL_PERF_SUCCESS 0
-#define AQL_PERF_ERR_NO_DEVICE -ENODEV
-#define AQL_PERF_ERR_NO_MEMORY -ENOMEM
-#define AQL_PERF_ERR_INVALID -EINVAL
-#define AQL_PERF_ERR_TIMEOUT -ETIMEDOUT
-#define AQL_PERF_ERR_GPU_FAULT -EIO
 
 /* Forward declaration for module parameter */
 extern bool debug_enable;
@@ -65,7 +49,6 @@ enum session_state {
 	SESSION_UNINITIALIZED = 0,
 	SESSION_INITIALIZING,
 	SESSION_ACTIVE,
-	SESSION_MEASURING,
 	SESSION_ERROR,
 	SESSION_DESTROYING
 };
@@ -75,7 +58,6 @@ enum measurement_state {
 	MEASUREMENT_IDLE = 0,
 	MEASUREMENT_STARTING,
 	MEASUREMENT_ACTIVE,
-	MEASUREMENT_READING,
 	MEASUREMENT_STOPPING,
 	MEASUREMENT_ERROR
 };
@@ -90,13 +72,6 @@ struct aql_work_item {
 	enum aql_work_op_type op_type;
 	struct completion *completion; /* For synchronous operations */
 	int result; /* Operation result */
-};
-
-/* AQL Packet Types */
-enum aql_perf_packet_type {
-	AQL_PERF_PACKET_START = 0x01,
-	AQL_PERF_PACKET_READ = 0x02,
-	AQL_PERF_PACKET_END = 0x03
 };
 
 /* Error Severity Levels */
@@ -137,41 +112,6 @@ struct aql_error_recovery {
 	unsigned long error_mask; /* Bitmap of GPU errors */
 	struct delayed_work recovery_work; /* Delayed work for recovery */
 	int recovery_attempts; /* Track recovery attempts */
-};
-
-/* Counter Descriptor */
-struct counter_descriptor {
-	uint32_t counter_id;
-	uint32_t counter_select;
-	uint32_t counter_mode;
-	const char *name;
-	const char *description;
-};
-
-/* GFX12 Counter Configuration */
-struct gfx12_counter_desc {
-	uint32_t counter_select;
-	uint32_t counter_mode;
-	uint64_t *result_buffer;
-	size_t result_size;
-};
-
-/* Counter Configuration */
-struct counter_config {
-	uint32_t num_counters;
-	uint32_t max_counters;
-	struct gfx12_counter_desc *descriptors;
-	uint64_t *counter_masks;
-};
-
-/* AQL Packet Structure */
-struct aql_perf_packet {
-	uint32_t packet_type;
-	uint32_t gpu_id;
-	uint64_t counter_select;
-	uint64_t result_address;
-	uint32_t packet_data[16];
-	size_t packet_size;
 };
 
 /* Forward declarations */
@@ -258,9 +198,6 @@ struct aql_perf_session {
 
 	/* Performance monitoring */
 	struct aql_perf_stats stats;
-
-	/* Counter configuration */
-	struct counter_config counters;
 
 	/* GPU Architecture - one per GPU */
 	arch_t **archs; /* Array of architecture pointers, indexed by GPU index */

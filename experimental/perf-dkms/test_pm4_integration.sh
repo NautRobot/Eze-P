@@ -9,9 +9,9 @@
 
 set -e
 
-export PATH=/home/ben/linux/tools/perf:$PATH
 MODULE_PATH="build/src/amdgpu_pmu.ko"
 MODULE_NAME="amdgpu_pmu"
+PERF_BIN="${PERF_BIN:-$(command -v perf 2>/dev/null || true)}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -35,6 +35,11 @@ echo_warn() {
 echo_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
+
+if [ -z "$PERF_BIN" ]; then
+    echo_error "perf not found. Set PERF_BIN=/path/to/perf or install perf tools."
+    exit 1
+fi
 
 # Check if module exists
 if [ ! -f "$MODULE_PATH" ]; then
@@ -81,13 +86,13 @@ dmesg | grep -E "\[PMU\]|AQL_PERF" | tail -20
 
 echo ""
 echo_info "===== Test 1: Single Counter Allocation ====="
-echo_info "Running: perf stat -e pmu_stub/sq_waves/ sleep 1"
+echo_info "Running: $PERF_BIN stat -e pmu_stub/sq_waves/ sleep 1"
 
 # Clear dmesg before test
 dmesg -C
 
 # Run perf command
-if perf stat -e pmu_stub/sq_waves/ sleep 1 2>&1; then
+if "$PERF_BIN" stat -e pmu_stub/sq_waves/ sleep 1 2>&1; then
     echo_success "Perf command completed"
 else
     echo_warn "Perf command failed (this may be expected if PMU not fully initialized)"
@@ -137,7 +142,7 @@ dmesg -C
 # Start multiple perf processes in background
 for i in {1..4}; do
     echo_info "Starting perf process $i..."
-    (perf stat -e pmu_stub/sq_busy_cycles/ sleep 5 2>&1) &
+    ("$PERF_BIN" stat -e pmu_stub/sq_busy_cycles/ sleep 5 2>&1) &
     sleep 0.5
 done
 

@@ -48,32 +48,64 @@ target_compile_options(pm4_decoder PRIVATE ${TOOLS_COMPILE_OPTIONS})
 # AQLProfile GFX9 Capture Tool (requires libhsa-amd-aqlprofile64)
 #================================================================================
 
+# Optional roots for dependency discovery.
+# - AQLPROFILE_ROOT: local aqlprofile checkout root (source + build dirs)
+# - ROCM_PATH: ROCm installation root used for library/header fallback
+set(AQLPROFILE_ROOT "$ENV{AQLPROFILE_ROOT}" CACHE PATH
+    "Optional root path to local aqlprofile source tree")
+set(ROCM_PATH "$ENV{ROCM_PATH}" CACHE PATH
+    "ROCm installation root used for dependency discovery")
+if(NOT ROCM_PATH)
+    set(ROCM_PATH "/opt/rocm")
+endif()
+
+set(AQLPROFILE_LIB_HINTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/build_fresh
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/build
+    ${ROCM_PATH}/lib
+)
+if(AQLPROFILE_ROOT)
+    list(PREPEND AQLPROFILE_LIB_HINTS
+        ${AQLPROFILE_ROOT}/build_fresh
+        ${AQLPROFILE_ROOT}/build
+    )
+endif()
+
+set(AQLPROFILE_V2_INCLUDE_HINTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/src/core/include
+    ${ROCM_PATH}/include
+)
+if(AQLPROFILE_ROOT)
+    list(PREPEND AQLPROFILE_V2_INCLUDE_HINTS
+        ${AQLPROFILE_ROOT}/src/core/include
+    )
+endif()
+
+set(AQLPROFILE_VERSION_INCLUDE_HINTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/build/src/core/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/build_fresh/src/core/include
+    ${ROCM_PATH}/include
+)
+if(AQLPROFILE_ROOT)
+    list(PREPEND AQLPROFILE_VERSION_INCLUDE_HINTS
+        ${AQLPROFILE_ROOT}/build/src/core/include
+        ${AQLPROFILE_ROOT}/build_fresh/src/core/include
+    )
+endif()
+
 # Only build if AQLProfile headers and library are available
 find_library(AQLPROFILE_LIB hsa-amd-aqlprofile64
-    HINTS
-        # Prefer local builds over system install
-        /home/bewelton/rocm-systems/projects/aqlprofile/build_fresh
-        /home/bewelton/rocm-systems/projects/aqlprofile/build
-        /opt/rocm/lib
-        /opt/rocm-6.4.2/lib
+    HINTS ${AQLPROFILE_LIB_HINTS}
 )
 find_path(AQLPROFILE_V2_INCLUDE_DIR aqlprofile-sdk/aql_profile_v2.h
-    HINTS
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/src/core/include
-        /opt/rocm/include
+    HINTS ${AQLPROFILE_V2_INCLUDE_HINTS}
 )
 # version.h is generated during aqlprofile build
 find_path(AQLPROFILE_VERSION_INCLUDE_DIR aqlprofile-sdk/version.h
-    HINTS
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/build/src/core/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../aqlprofile/build_fresh/src/core/include
-        # Fall back to main repo if building from a worktree
-        /home/bewelton/rocm-systems/projects/aqlprofile/build/src/core/include
-        /home/bewelton/rocm-systems/projects/aqlprofile/build_fresh/src/core/include
-        /opt/rocm/include
+    HINTS ${AQLPROFILE_VERSION_INCLUDE_HINTS}
 )
 find_path(HSA_INCLUDE_DIR hsa/hsa.h
-    HINTS /opt/rocm/include /opt/rocm-6.4.2/include
+    HINTS ${ROCM_PATH}/include
 )
 
 if(AQLPROFILE_LIB AND AQLPROFILE_V2_INCLUDE_DIR AND AQLPROFILE_VERSION_INCLUDE_DIR AND HSA_INCLUDE_DIR)

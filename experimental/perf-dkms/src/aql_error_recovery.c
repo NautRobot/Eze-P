@@ -178,6 +178,15 @@ static int aql_perf_reinitialize_session(struct aql_perf_session *session)
  */
 void aql_perf_handle_error(struct aql_perf_session *session, struct aql_error_context *error)
 {
+	/*
+	 * Error policy is severity-driven with bounded escalation:
+	 * - recoverable: delayed retry with exponential backoff
+	 * - gpu fault  : isolate faulty gpu and continue on healthy devices
+	 * - system fault: force session into ERROR and schedule global recovery
+	 *
+	 * The escalation loop avoids recursive re-entry while lock ownership may
+	 * already include session_mutex.
+	 */
 	if (!session || !error) {
 		aql_err("Invalid parameters for error handling");
 		return;

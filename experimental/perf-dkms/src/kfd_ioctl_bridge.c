@@ -23,6 +23,16 @@ int kfd_bridge_ioctl(struct file *kfd_filp, unsigned int cmd,
 	unsigned long upage;
 	int ret;
 
+	/*
+	 * KFD ioctl bridge pattern:
+	 * KFD uAPI handlers expect user pointers and internally perform
+	 * copy_from_user/copy_to_user. Kernel callers therefore marshal args
+	 * through a temporary user mapping and invoke unlocked_ioctl directly.
+	 *
+	 * Preconditions:
+	 * - current task must have an mm (process context)
+	 * - argument blob must fit in one temporary page
+	 */
 	if (!kfd_filp || !kernel_args || !args_size)
 		return -EINVAL;
 

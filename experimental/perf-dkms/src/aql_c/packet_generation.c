@@ -228,6 +228,15 @@ int generate_start_packet(pm4_buffer_t *buffer, const arch_t *arch,
 {
 	int ret;
 
+	/*
+	 * START packet programming sequence intentionally mirrors aqlprofile:
+	 * - force known perfmon baseline (flush + broadcast + disable)
+	 * - program architecture-specific control registers
+	 * - configure each selected counter block
+	 * - enable counting and flush again
+	 *
+	 * The order is important to avoid stale state across prior queue users.
+	 */
 	if (!buffer || !arch || !collection || !collection->counters) {
 		return -EINVAL;
 	}
@@ -391,6 +400,15 @@ int generate_read_packet(pm4_buffer_t *buffer, const arch_t *arch,
 	int ret;
 	uint64_t current_addr;
 
+	/*
+	 * READ packet strategy:
+	 * - enable sampling mode and flush
+	 * - walk each counter across all relevant topology instances
+	 * - copy register values into GPU memory buffer in a deterministic layout
+	 * - issue acquire_mem so CPU-side reads observe completed writes
+	 *
+	 * Dimension filtering is deferred to software in read path.
+	 */
 	if (!buffer || !arch || !collection || !collection->counters) {
 		return -EINVAL;
 	}
@@ -777,6 +795,13 @@ int generate_stop_packet(pm4_buffer_t *buffer, const arch_t *arch)
 {
 	int ret;
 
+	/*
+	 * STOP packet intentionally stays minimal:
+	 * - restore broadcast indexing
+	 * - transition perfmon FSM to stop
+	 * - flush outstanding writes
+	 * - optionally gate perf clocks back off (gfx9 paths)
+	 */
 	if (!buffer || !arch) {
 		return -EINVAL;
 	}

@@ -21,6 +21,12 @@ static long amdgpu_pmu_trace_ioctl(struct file *file, unsigned int cmd,
 {
 	void __user *argp = (void __user *)arg;
 
+	/*
+	 * Optional trace ingress path:
+	 * userspace profiler tools push pre-correlated events into kernel
+	 * tracepoints so counter data and timeline events can be consumed in a
+	 * single tracing pipeline. This path is independent from PMU counting.
+	 */
 	switch (cmd) {
 	case AMDGPU_PMU_IOCTL_EMIT_KERNEL_DISPATCH: {
 		struct amdgpu_pmu_kernel_dispatch ev;
@@ -176,6 +182,7 @@ static struct miscdevice amdgpu_pmu_trace_dev = {
 
 int amdgpu_pmu_trace_dev_init(void)
 {
+	/* Best-effort auxiliary interface: PMU remains functional if this fails. */
 	return misc_register(&amdgpu_pmu_trace_dev);
 }
 

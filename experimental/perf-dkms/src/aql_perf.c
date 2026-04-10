@@ -321,8 +321,6 @@ static void aql_perf_session_release(struct aql_perf_session *session)
 
 	/* Free dynamic allocations */
 	kfree(session->gpu_ids);
-	kfree(session->counters.descriptors);
-	kfree(session->counters.counter_masks);
 
 	aql_debug("Session %llu fully released", session->session_id);
 	kfree(session);
@@ -337,6 +335,11 @@ struct aql_perf_session *aql_perf_session_create(void)
 {
 	struct aql_perf_session *session;
 
+	/*
+	 * Create only allocates/initializes host-side bookkeeping.
+	 * No KFD handles, GPU queues, or architecture objects are touched here;
+	 * those are created in aql_perf_session_initialize().
+	 */
 	session = kzalloc(sizeof(*session), GFP_KERNEL);
 	if (!session) {
 		aql_err("Failed to allocate session structure");
@@ -418,6 +421,15 @@ int aql_perf_session_initialize(struct aql_perf_session *session)
 {
 	int ret;
 
+	/*
+	 * Bootstrap order (must remain ordered for clean unwind on failure):
+	 * 1) open /dev/kfd
+	 * 2) discover gpu_ids from KFD topology sysfs
+	 * 3) create per-GPU arch descriptors
+	 * 4) create per-GPU AQL queues
+	 * 5) bind arch counter buffers to queue data buffers
+	 * 6) publish ACTIVE state
+	 */
 	if (!session) {
 		aql_err("Invalid session pointer");
 		return -EINVAL;
@@ -518,22 +530,6 @@ int aql_perf_session_initialize(struct aql_perf_session *session)
 			 session->session_id, session->gpu_ids[i], i);
 	}
 
-	/* Initialize counter configuration with default GFX12 counter */
-	session->counters.num_counters = 1;
-	session->counters.max_counters = 4;
-
-	session->counters.descriptors = kzalloc(
-		session->counters.max_counters * sizeof(struct gfx12_counter_desc), GFP_KERNEL);
-	if (!session->counters.descriptors) {
-		ret = -ENOMEM;
-		goto error;
-	}
-
-	/* Configure default counter (SQ_WAVES) */
-	session->counters.descriptors[0].counter_select = GFX12_PERF_SEL_SQ_WAVES;
-	session->counters.descriptors[0].counter_mode = 0x1;
-	session->counters.descriptors[0].result_size = sizeof(uint64_t);
-
 	session->state = SESSION_ACTIVE;
 	aql_info("Session %llu initialized successfully with %u GPUs", session->session_id,
 		 session->num_gpus);
@@ -592,6 +588,11 @@ int aql_perf_discover_gpus(struct aql_perf_session *session)
 	uint32_t gpu_id;
 	int node_id;
 
+	/*
+	 * Discovery intentionally uses sysfs topology files instead of internal
+	 * KFD symbols so perf-dkms can stay decoupled from non-exported kernel
+	 * interfaces. Non-zero gpu_id values are treated as usable GPU nodes.
+	 */
 	session->gpu_ids = kzalloc(AQL_PERF_MAX_GPUS * sizeof(uint32_t), GFP_KERNEL);
 	if (!session->gpu_ids) {
 		aql_err("Session %llu: Failed to allocate GPU ID array", session->session_id);

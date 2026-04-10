@@ -295,6 +295,14 @@ enum hrtimer_restart amdgpu_pmu_timer_handler(struct hrtimer *timer)
 	struct workqueue_struct *wq;
 	int count;
 
+	/*
+	 * This timer is the central "software clock" for perf-dkms:
+	 * - counting events: periodically refresh cached counter values
+	 * - sampling events: synthesize perf samples from the latest reads
+	 *
+	 * The callback runs in hrtimer context, so it must not sleep or touch
+	 * paths that can block. It only schedules work on the global workqueue.
+	 */
 	pmu_debug("Timer handler fired - polling active measurements\n");
 
 	/* Get global workqueue */
@@ -331,6 +339,12 @@ void amdgpu_pmu_start_timer(void)
 {
 	struct amdgpu_pmu *pmu = amdgpu_pmu_instance;
 
+	/*
+	 * Timer lifetime model:
+	 * - start is requested when a measurement transitions to ACTIVE
+	 * - start is idempotent (hrtimer_active check)
+	 * - actual polling work happens asynchronously in timer handler
+	 */
 	pmu_info("amdgpu_pmu_start_timer() called\n");
 
 	if (!pmu) {
@@ -353,6 +367,13 @@ void amdgpu_pmu_stop_timer_if_idle(void)
 {
 	struct amdgpu_pmu *pmu = amdgpu_pmu_instance;
 
+	/*
+	 * Current policy is intentionally conservative: stop unconditionally.
+	 * Any subsequent measurement start will re-arm the timer.
+	 *
+	 * This avoids subtle races where "idle" checks can become stale between
+	 * active list inspection and timer cancel.
+	 */
 	pmu_info("amdgpu_pmu_stop_timer_if_idle() called\n");
 
 	if (!pmu) {
@@ -462,6 +483,15 @@ static int amdgpu_pmu_event_init(struct perf_event *event)
 	u64 config1 = event->attr.config1;
 	int ret;
 
+	/*
+	 * perf core calls event_init to validate user attributes and bind driver
+	 * specific state. This function defines the PMU contract:
+	 * - event->attr.config  : logical counter id from registry
+	 * - event->attr.config1 : optional dimension coordinates/flags
+	 * - event->cpu          : GPU selection key (mapped to real gpu_id)
+	 *
+	 * Successful init installs an AQL measurement pointer in hw.config_base.
+	 */
 	pmu_debug("event_init: config=0x%llx config1=0x%llx\n", config, config1);
 
 	/* Check if event is for our PMU */
@@ -604,6 +634,11 @@ static int amdgpu_pmu_add(struct perf_event *event, int flags)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
+	/*
+	 * add() transitions a validated event into schedulable PMU state.
+	 * If PERF_EF_START is set, START is queued immediately; otherwise the
+	 * event stays stopped until perf core later calls ->start().
+	 */
 	pmu_debug("add: config=0x%llx, flags=0x%x\n", event->attr.config, flags);
 
 	/* Check if this is an AQL hardware event */
@@ -641,6 +676,13 @@ static void amdgpu_pmu_del(struct perf_event *event, int flags)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
+	/*
+	 * del() removes the event from active scheduling, but does not free the
+	 * measurement object. Destruction is deferred to event->destroy callback.
+	 *
+	 * This split is important because perf may del/add the same event object
+	 * across enable/disable cycles.
+	 */
 	pmu_info("del: ENTRY - config=0x%llx, flags=0x%x\n", event->attr.config, flags);
 
 	/* Check if this is an AQL hardware event */
@@ -694,6 +736,12 @@ static void amdgpu_pmu_start(struct perf_event *event, int flags)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
+	/*
+	 * start() is pure state transition from perf perspective:
+	 * - optional reload resets software-visible count
+	 * - hardware START is delegated to AQL path
+	 * - timer activation is handled after measurement reaches ACTIVE
+	 */
 	pmu_info("start: ENTRY - config=0x%llx, flags=0x%x, hwc->config_base=0x%lx\n",
 		 event->attr.config, flags, hwc->config_base);
 
@@ -728,6 +776,13 @@ static void amdgpu_pmu_stop(struct perf_event *event, int flags)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
+	/*
+	 * stop() mirrors ->start():
+	 * - optional PERF_EF_UPDATE requests a final read into event->count
+	 * - STOP transitions measurement to idle/offline in AQL layer
+	 * - resource release is deferred to destroy path for correctness with
+	 *   perf object lifetime.
+	 */
 	pmu_info("stop: ENTRY - config=0x%llx, flags=0x%x, hwc->config_base=0x%lx\n",
 		 event->attr.config, flags, hwc->config_base);
 
@@ -776,6 +831,11 @@ static void amdgpu_pmu_read(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	uint64_t old_count, new_count;
 
+	/*
+	 * read() returns the latest cached value from AQL measurement state.
+	 * For high-frequency paths, actual GPU reads are done asynchronously by
+	 * workqueue/timer workers to keep perf callback context lightweight.
+	 */
 	old_count = local64_read(&event->count);
 
 	pmu_info("read: ENTRY - config=0x%llx, old_count=%llu, hwc->config_base=0x%lx\n",
@@ -902,6 +962,16 @@ static int __init amdgpu_pmu_init(void)
 	struct amdgpu_pmu *pmu;
 	int ret;
 
+	/*
+	 * Initialization phases (strict order):
+	 * 1) Build sysfs event table from counter registry
+	 * 2) Allocate/register perf PMU callbacks
+	 * 3) Bring up AQL backend session/workqueue
+	 * 4) Validate GPU architecture metadata required for dimensions
+	 * 5) Optionally register trace miscdevice
+	 *
+	 * Any failure unwinds in reverse order to avoid leaked global state.
+	 */
 	pmu_info("Initializing PMU Stub module v%s\n", AMDGPU_PMU_VERSION);
 
 	/* Initialize event attributes from counter_registry */
@@ -1008,6 +1078,13 @@ static void __exit amdgpu_pmu_exit(void)
 {
 	struct amdgpu_pmu *pmu = amdgpu_pmu_instance;
 
+	/*
+	 * Teardown ordering is critical:
+	 * - stop timer first so no new READ work is queued
+	 * - unregister PMU so perf destroys events and drops measurement refs
+	 * - flush workqueue so async STOP/READ work cannot race cleanup
+	 * - release global AQL session/workqueue last
+	 */
 	pmu_info("Unloading PMU Stub module\n");
 
 	/* Unregister trace device */
