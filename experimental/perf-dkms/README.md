@@ -72,7 +72,7 @@ perf --version
 
 ```bash
 # Clone and enter directory
-cd perf-pmu-stub
+cd perf-dkms
 
 # Build kernel module and tools
 cmake -B build && cmake --build build
@@ -260,7 +260,7 @@ perf stat -e amdgpu_pmu/gl2c_hit,se=0,sa=0/ \
 For detailed information, see:
 - **User Guide**: `docs/user_guide_dimensions.md` - Complete usage guide with examples
 - **Design Doc**: `docs/design.md` - Technical implementation details
-- **Tests**: `test/dimension_test.sh` - Integration test examples
+- **Tests**: `test/load_test.sh`, `test/perf_test.sh` - Integration tests
 
 ## Architecture Support
 
@@ -270,9 +270,12 @@ For detailed information, see:
   - Radeon RX 9070 series
   - All hardware blocks (SQ, CPC, CPF, GL1, GL2, CHA, CHC, etc.)
 
-- **GFX9/10/11**: ❌ **Not Currently Supported**
+- **GFX9 (Vega/MI)**: ✅ **Supported**
+  - MI100, MI200, Vega series
+  - SQ, GL2C, TA, GRBM blocks
+
+- **GFX10/11**: ❌ **Not Currently Supported**
   - Framework exists but event mappings incomplete
-  - Will fail on non-GFX12 hardware
 
 ### Hardware Blocks
 
@@ -351,19 +354,27 @@ build/src/aql_c/tools/pm4_decoder <hex_packet_data>
 ## File Structure
 
 ```
-perf-pmu-stub/
+perf-dkms/
 ├── src/
 │   ├── pmu_main.c              # Perf PMU driver
 │   ├── pmu_events.c            # Event definitions
-│   ├── aql_perf.c              # AQL performance integration
+│   ├── pmu_dimension.h         # Dimension encoding/validation
+│   ├── aql_perf.c/h            # AQL session & GPU discovery
 │   ├── aql_packet_ops.c        # PM4 packet operations
 │   ├── aql_pmu_integration.c   # PMU-AQL bridge
-│   └── aql_c/                  # AQL C library
+│   ├── aql_error_recovery.c    # Error handling & recovery
+│   ├── aql_queue_manager.c/h   # AQL queue lifecycle
+│   ├── kfd_ioctl_bridge.c/h    # KFD ioctl bridge (vm_mmap)
+│   └── aql_c/                  # AQL C library (kernel/userspace)
 │       ├── packet_generation.c # PM4 packet generation
+│       ├── pm4_packets.c       # Low-level PM4 primitives
 │       ├── counter_registry.c  # Counter definitions
-│       ├── arch_creator.c      # Architecture detection
+│       ├── arch_creator.c      # Architecture factory
 │       ├── gfx12_creator.c     # GFX12 implementation
 │       ├── gfx12_events.c      # GFX12 event definitions
+│       ├── gfx9_creator.c      # GFX9 implementation
+│       ├── gfx9_events.c       # GFX9 event definitions
+│       ├── aql_queue.c/h       # Ring buffer & IB pool
 │       ├── tests/              # Validation tests
 │       └── tools/              # Packet tools
 ├── docs/                       # Documentation

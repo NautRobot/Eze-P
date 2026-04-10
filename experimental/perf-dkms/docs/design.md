@@ -46,14 +46,32 @@ This document describes the design and implementation of a DKMS-compatible kerne
 ## File Structure
 
 ```
-perf-pmu-stub/
+perf-dkms/
+├── CMakeLists.txt            # Root build configuration
 ├── dkms.conf                 # DKMS configuration
-├── Makefile                  # Main build file
+├── linux-kernel.patch        # Kernel patch (compute_perfcount_enable)
 ├── src/
-│   ├── Makefile             # Kernel module build file
-│   ├── amdgpu_pmu.h           # Main header file
+│   ├── CMakeLists.txt       # Kbuild wrapper
+│   ├── amdgpu_pmu.h         # Main header file
 │   ├── pmu_main.c           # Core PMU implementation
-│   └── pmu_events.c         # Event handling utilities
+│   ├── pmu_events.c         # Event handling utilities
+│   ├── pmu_dimension.h      # Dimension encoding/validation
+│   ├── aql_perf.c/h         # AQL session & GPU discovery
+│   ├── aql_packet_ops.c     # PM4 packet operations
+│   ├── aql_pmu_integration.c # PMU-AQL bridge
+│   ├── aql_error_recovery.c # Error handling & recovery
+│   ├── aql_queue_manager.c/h # AQL queue lifecycle
+│   ├── kfd_ioctl_bridge.c/h # KFD ioctl bridge (vm_mmap)
+│   └── aql_c/               # Pure C library (kernel/userspace)
+│       ├── aql_queue.c/h    # Ring buffer & IB pool
+│       ├── pm4_packets.c    # Low-level PM4 primitives
+│       ├── packet_generation.c # PM4 sequence generation
+│       ├── counter_registry.c # Counter definitions
+│       ├── arch_creator.c   # Architecture factory
+│       ├── gfx12_creator.c  # GFX12 implementation
+│       ├── gfx9_creator.c   # GFX9 implementation
+│       ├── tests/           # Validation tests
+│       └── tools/           # Packet tools
 ├── test/
 │   ├── load_test.sh         # Basic module load/unload test
 │   └── perf_test.sh         # Perf integration test
@@ -199,8 +217,8 @@ The module creates the following sysfs structure:
 1. **Clone/Download** the module source
 2. **Build** using make:
    ```bash
-   cd perf-pmu-stub
-   make
+   cd perf-dkms
+   cmake -B build && cmake --build build
    ```
 3. **Install via DKMS**:
    ```bash
@@ -853,8 +871,8 @@ Export per-GPU dimension limits via sysfs for runtime discovery:
 
 See test files:
 - `src/aql_c/tests/test_dimension_helpers.c` - Unit tests for dimension encoding/decoding
-- `test/dimension_test.sh` - Integration tests for dimension syntax
-- `test/gpu_workload_test.sh` - GPU workload tests with dimension monitoring
+- `test/load_test.sh` - Module load/unload verification
+- `test/perf_test.sh` - Perf integration tests
 
 ### References
 

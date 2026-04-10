@@ -533,7 +533,7 @@ perf stat \
 
 - Check kernel logs: `dmesg | grep amdgpu_pmu`
 - Review module parameters: `modinfo amdgpu_pmu`
-- Test scripts provided: `test/dimension_test.sh`
+- Test scripts provided: `test/load_test.sh`, `test/perf_test.sh`
 - Report issues with full error messages and GPU model
 
 ## Summary

@@ -81,7 +81,7 @@ The perf-dkms kernel module provides GPU performance counter monitoring through 
 ### File Organization
 
 ```
-projects/perf-dkms/
+experimental/perf-dkms/
 ├── src/
 │   ├── pmu_main.c               # PMU driver entry point & callbacks
 │   ├── pmu_events.c             # Event validation & utilities
@@ -90,13 +90,18 @@ projects/perf-dkms/
 │   ├── aql_perf.c               # Session & GPU discovery
 │   ├── aql_packet_ops.c         # Measurement & packet creation
 │   ├── aql_error_recovery.c     # Error handling & recovery
+│   ├── aql_queue_manager.c/h   # AQL queue lifecycle
+│   ├── kfd_ioctl_bridge.c/h    # KFD ioctl bridge (vm_mmap)
 │   └── aql_c/
 │       ├── packet_generation.c  # PM4 packet builders
 │       ├── pm4_packets.c        # Low-level PM4 primitives
 │       ├── counter_registry.c   # Counter definitions
 │       ├── arch_creator.c       # Architecture factory
 │       ├── gfx12_creator.c      # GFX12-specific architecture
-│       └── gfx12_events.c       # GFX12 event mappings
+│       ├── gfx12_events.c       # GFX12 event mappings
+│       ├── gfx9_creator.c       # GFX9-specific architecture
+│       ├── gfx9_events.c        # GFX9 event mappings
+│       └── aql_queue.c/h        # Ring buffer & IB pool
 └── QUICKSTART.md                # This file
 ```
 
@@ -693,16 +698,17 @@ typedef struct {
         uint32_t user_id;              // perf_event pointer
         ktime_t allocation_time;
 
-        // GPU memory buffers (pre-allocated)
-        struct kfd_data_alloc *command_buffer;
-        struct kfd_data_alloc *data_buffer;
+        // GPU data buffer pointers (provided by AQL queue manager)
+        void     *data_cpu_addr;   // Kernel VA for reading counter results
+        uint64_t  data_gpu_addr;   // GPU VA for COPY_DATA destination
+        uint32_t  data_size;       // Size of available data buffer
     } allocation;
 } counter_reg_info_t;
 ```
 
 **Location**: `src/aql_c/aql_structures.h`
 
-**Allocation**: Buffers allocated during session init via `aql_perf_allocate_counter_buffers()`
+**Allocation**: Buffers provided by the per-GPU AQL queue's shared data buffer during `aql_perf_setup_counter_buffers()`
 
 ---
 
@@ -990,4 +996,4 @@ Key architectural principles:
 - **Software dimension filtering** - Hardware reads all instances, SW selects
 - **Background polling** - Periodic cache refresh for low latency reads
 
-For more details, consult the source code in `projects/perf-dkms/src/`.
+For more details, consult the source code in `experimental/perf-dkms/src/`.
