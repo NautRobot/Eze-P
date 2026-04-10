@@ -498,10 +498,7 @@ hsa_status_t hsa_system_get_major_extension_table(uint16_t extension, uint16_t v
       return HSA_STATUS_ERROR;
     }
 
-    // Use the cached aqlprofile library handle from Runtime instead of
-    // opening a new one.  The handle is loaded once during Runtime::Load()
-    // and closed in Runtime::Unload(), avoiding a dlopen handle leak.
-    os::LibHandle lib = core::Runtime::runtime_singleton_->AqlProfileLib();
+    os::LibHandle lib = os::LoadLib(kAqlProfileLib);
     if (lib == NULL) {
       debug_print("Loading '%s' failed\n", kAqlProfileLib);
       return HSA_STATUS_ERROR;
