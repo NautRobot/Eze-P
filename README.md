@@ -17,6 +17,7 @@ This table provides the current status of the migration of specific ROCm systems
 | `aqlprofile`           | Public          | Completed        | [![CodeQL](https://github.com/ROCm/rocm-systems/actions/workflows/aqlprofile-codeql.yml/badge.svg?branch=develop)](https://github.com/ROCm/rocm-systems/actions/workflows/aqlprofile-codeql.yml) <br> [![Continuous Integration](https://github.com/ROCm/rocm-systems/actions/workflows/aqlprofile-continuous_integration.yml/badge.svg?branch=develop)](https://github.com/ROCm/rocm-systems/actions/workflows/aqlprofile-continuous_integration.yml) |
 | `clr`                  | Public          | Completed         |                                       |
 | `hip`                  | Public          | Completed         |                                       |
+| `hipfile`              | Public          | Completed         |                                       |
 | `hipother`             | Public          | Completed         |                                       |
 | `hip-tests`            | Public          | Completed         |                                       |
 | `rdc`                  | Public          | Completed        |                                       |
@@ -66,6 +67,7 @@ projects/
   aqlprofile/
   clr/
   hip/
+  hipfile/
   hipother/
   hip-tests/
   rccl/
