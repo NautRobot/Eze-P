@@ -1084,8 +1084,14 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
   auto expected_fence_state = extractAqlBits(header, HSA_PACKET_HEADER_SCRELEASE_FENCE_SCOPE,
                                              HSA_PACKET_HEADER_WIDTH_SCRELEASE_FENCE_SCOPE);
 
-  if (fence_state_ == amd::Device::kCacheStateSystem
-      && expected_fence_state == amd::Device::kCacheStateSystem) {
+  // Reset fence_dirty_ flag if we submit a packet with system scopes
+  if (expected_fence_state == amd::Device::kCacheStateSystem) {
+    setFenceDirty(false);
+  }
+
+  // Dirty optimization to save on consequent dispatch packets which have requested flushes
+  if (fence_state_ == amd::Device::kCacheStateSystem &&
+      expected_fence_state == amd::Device::kCacheStateSystem) {
     header = dispatchPacketHeader_;
     setFenceDirty(true);
   }
@@ -1804,12 +1810,16 @@ VirtualGPU::VirtualGPU(Device& device, bool profiling, bool cooperative,
                                             << HSA_PACKET_HEADER_TYPE);
 
   if (device.settings().fenceScopeAgent_) {
+    const auto& isa = device.isa();
+    const bool isGfx12 = (isa.versionMajor() == 12) && (isa.versionMinor() == 0) &&
+                         (isa.versionStepping() == 0 || isa.versionStepping() == 1);
+
     dispatchPacketHeaderNoSync_ =
         ((device.settings().ext_dispatch_packet_ ? vendorSpecificHBits : kernelDispatchHBits) |
-         agentScopeHBits);
+         (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
     dispatchPacketHeader_ =
         ((device.settings().ext_dispatch_packet_ ? vendorSpecificHBits : kernelDispatchHBits) |
-         barrierHBits | agentScopeHBits);
+         barrierHBits | (isGfx12 ? sysAcquireAgentReleaseHBits : agentScopeHBits));
   } else {
     dispatchPacketHeaderNoSync_ =
         ((device.settings().ext_dispatch_packet_ ? vendorSpecificHBits : kernelDispatchHBits) |
