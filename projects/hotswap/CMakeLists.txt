@@ -11,7 +11,9 @@ set(HSA_RUNTIME_INC "${CMAKE_CURRENT_SOURCE_DIR}/../rocr-runtime/runtime/hsa-run
 # COMGR is required — provides amd_comgr_hotswap_rewrite.
 find_package(amd_comgr CONFIG REQUIRED)
 
-# Shared library for HSA_TOOLS_LIB usage — links COMGR directly
+find_path(HSA_INCLUDE_DIR hsa.h PATHS ${HSA_RUNTIME_INC} NO_DEFAULT_PATH REQUIRED)
+
+# Shared library for HSA_TOOLS_LIB usage
 set(HOTSWAP_PLATFORM_IO_SRC hotswap_platform_io_posix.cpp)
 if(WIN32)
   set(HOTSWAP_PLATFORM_IO_SRC hotswap_platform_io_win.cpp)
@@ -33,10 +35,8 @@ target_link_libraries(hsa-hotswap PRIVATE amd_comgr)
 set_target_properties(hsa-hotswap PROPERTIES
   POSITION_INDEPENDENT_CODE ON)
 
-# Test executable — links COMGR directly
-add_executable(hotswap_test tests/hotswap_test.cpp
-  hotswap.cpp
-)
+# Test executable
+add_executable(hotswap_test tests/hotswap_test.cpp hotswap.cpp)
 target_include_directories(hotswap_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(hotswap_test PRIVATE amd_comgr)
 

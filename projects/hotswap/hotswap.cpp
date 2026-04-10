@@ -61,10 +61,15 @@ int RetargetCodeObject(const void *elf_data, size_t elf_size,
   // Extract output bytes.
   size_t output_size = 0;
   status = amd_comgr_get_data(output, &output_size, nullptr);
-  if (status != AMD_COMGR_STATUS_SUCCESS || output_size == 0) {
+  if (status != AMD_COMGR_STATUS_SUCCESS) {
     amd_comgr_release_data(output);
     fprintf(stderr, "hotswap: failed to query COMGR output size\n");
     return static_cast<int>(status);
+  }
+  if (output_size == 0) {
+    amd_comgr_release_data(output);
+    fprintf(stderr, "hotswap: COMGR returned empty output\n");
+    return -1;
   }
 
   void *output_buf = std::malloc(output_size);
