@@ -36,29 +36,6 @@ This kernel module bridges AMD GPU hardware performance counters with the Linux 
 
 ### Prerequisites
 
-**⚠️ IMPORTANT: Linux Kernel Patch Required**
-
-This module requires a patched Linux kernel to function properly. The `linux-kernel.patch` file must be applied to your kernel source before building this module.
-
-**Tested kernel base commit:** `e6b9dce0aeeb91dfc0974ab87f02454e24566182`
-
-```bash
-# Apply kernel patch
-cd /path/to/linux/kernel/source
-git checkout e6b9dce0aeeb91dfc0974ab87f02454e24566182  # Or use your current kernel version
-patch -p1 < /path/to/perf-dkms/linux-kernel.patch
-
-# Rebuild and install kernel
-make -j$(nproc)
-sudo make modules_install
-sudo make install
-
-# Reboot into patched kernel
-sudo reboot
-```
-
-**After kernel is patched and running:**
-
 ```bash
 # Install build tools and kernel headers
 sudo apt update
@@ -497,16 +474,15 @@ dmesg | tail -20
 
 ### Current Restrictions
 
-1. **Kernel Patch Required**: This module requires the `linux-kernel.patch` to be applied to your Linux kernel source. The module will not function without the patched kernel. Tested on base commit `e6b9dce0aeeb91dfc0974ab87f02454e24566182`.
-
-2. **Hardware Integration**: Uses real GPU hardware access via:
+1. **Hardware Integration**: Uses real GPU hardware access via:
    - KFD (Kernel Fusion Driver) integration
    - AMDGPU driver coordination
    - GPU memory allocation for PM4 buffers
 
-3. **Architecture Support**:
+2. **Architecture Support**:
    - **GFX12/RDNA4: Full support** (RX 9070 series)
-   - **GFX9/10/11: Not supported** (framework only, missing event definitions)
+   - **GFX9/Vega/MI: Supported** (MI100, MI200, Vega series)
+   - **GFX10/11: Not supported** (framework only, missing event definitions)
 
 4. **Kernel Compatibility**:
    - Development kernels may produce `.o` instead of `.ko` files

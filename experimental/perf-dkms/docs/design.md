@@ -49,7 +49,6 @@ This document describes the design and implementation of a DKMS-compatible kerne
 perf-dkms/
 ├── CMakeLists.txt            # Root build configuration
 ├── dkms.conf                 # DKMS configuration
-├── linux-kernel.patch        # Kernel patch (compute_perfcount_enable)
 ├── src/
 │   ├── CMakeLists.txt       # Kbuild wrapper
 │   ├── amdgpu_pmu.h         # Main header file
