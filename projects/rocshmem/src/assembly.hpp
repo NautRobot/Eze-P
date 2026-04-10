@@ -277,6 +277,23 @@ __device__ __forceinline__ void store_asm(uint8_t* val, [[maybe_unused]] uint8_t
 #endif
       break;
     }
+    case 16: {
+      __int128_t val128{*(reinterpret_cast<__int128_t*>(val))};
+#if defined(__gfx906__)
+#endif
+#if defined(__gfx908__)
+#endif
+#if defined(__gfx90a__) || defined(__gfx1100__)
+      asm volatile("flat_store_dwordx4 %0 %1 glc slc" : : "v"(dst), "v"(val128));
+#endif
+#if defined(__gfx942__) || defined(__gfx950__)
+      asm volatile("flat_store_dwordx4 %0 %1 sc0 sc1" : : "v"(dst), "v"(val128));
+#endif
+#if defined(__gfx1201__)
+      asm volatile("flat_store_b128 %0 %1 scope:SCOPE_SYS" : : "v"(dst), "v"(val128));
+#endif
+      break;
+    }
     default:
       break;
   }
