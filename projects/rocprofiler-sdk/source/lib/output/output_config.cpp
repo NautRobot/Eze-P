@@ -77,26 +77,19 @@ output_config::parse_env()
     for(const auto& itr : sdk::parse::tokenize(output_format, " \t,;:"))
         entries.emplace(to_upper(itr));
 
-    csv_output              = entries.count("CSV") > 0;
-    json_output             = entries.count("JSON") > 0;
-    pftrace_output          = entries.count("PFTRACE") > 0;
-    otf2_output             = entries.count("OTF2") > 0;
-    perf_user_events_output = entries.count("PERF_USER_EVENTS") > 0;
-    // Enable rocpd_output by default, when explicitly requested, or when perf_user_events is enabled
-    // (perf_user_events needs rocpd buffers to be initialized)
-    rocpd_output            = entries.count("ROCPD") > 0 || entries.empty() || perf_user_events_output;
+    csv_output     = entries.count("CSV") > 0;
+    json_output    = entries.count("JSON") > 0;
+    pftrace_output = entries.count("PFTRACE") > 0;
+    otf2_output    = entries.count("OTF2") > 0;
+    rocpd_output   = entries.count("ROCPD") > 0 || entries.empty();
 
     const auto supported_formats =
-        std::set<std::string_view>{"CSV", "JSON", "PFTRACE", "OTF2", "ROCPD", "PERF_USER_EVENTS"};
+        std::set<std::string_view>{"CSV", "JSON", "PFTRACE", "OTF2", "ROCPD"};
     for(const auto& itr : entries)
     {
         LOG_IF(FATAL, supported_formats.count(itr) == 0)
             << "Unsupported output format type: " << itr;
     }
-
-    // Allow direct environment variable override
-    perf_user_events_output =
-        common::get_env("ROCPROF_PERF_USER_EVENTS_OUTPUT", perf_user_events_output);
 
     std::string agent_index = common::get_env("ROCPROF_AGENT_INDEX", "relative");
     if(agent_index == "type-relative")
