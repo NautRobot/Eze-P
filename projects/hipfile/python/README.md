@@ -16,7 +16,7 @@ $ source .venv/bin/activate
 3. Build the C hipFile library. See [INSTALL.md](../INSTALL.md).
 4. Build & Install the hipFile package.
 ```bash
-(.venv) $ pip install -e python -Ccmake.define.HIPFILE_INCLUDE_DIR=../include -Ccmake.define.HIP_INCLUDE_DIR=/opt/rocm/include
+(.venv) $ pip install -e . -Ccmake.define.HIPFILE_INCLUDE_DIR=../include -Ccmake.define.HIP_INCLUDE_DIR=/opt/rocm/include
 ```
 
 This will install an editable version of hipFile in your virtual environment.

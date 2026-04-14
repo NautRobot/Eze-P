@@ -1,6 +1,7 @@
 # pylint: disable=C0114,C0115,C0116
 import os
 import stat
+from sys import stderr
 
 from hipfile._hipfile import (  # pylint: disable=E0401,E0611
     hipFileHandleRegister,
@@ -28,7 +29,13 @@ class FileHandle:
         self.handle_type = handle_type
 
     def __del__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:  # pylint: disable=W0718  # Suppress exceptions in a dtor
+            print(
+                "Failed to deregister hipFile.FileHandle at destruction time.",
+                file=stderr,
+            )
 
     def __enter__(self):
         self.open()
@@ -76,6 +83,7 @@ class FileHandle:
         handle, err = hipFileHandleRegister(self._fd, self._handle_type)
         if err[0] != 0:
             os.close(self._fd)
+            self._fd = None
             raise HipFileException(err[0], err[1])
         self._handle = handle
 
