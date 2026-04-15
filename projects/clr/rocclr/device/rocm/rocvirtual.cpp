@@ -1243,7 +1243,7 @@ bool VirtualGPU::dispatchGenericAqlPacket(AqlPacket* packet, uint16_t header, ui
 // ================================================================================================
 void VirtualGPU::dispatchBlockingWait(hsa_kernel_dispatch_packet_t* packet) {
   auto wait_signals = Barriers().WaitingSignal();
-  if (dev().settings().ext_dispatch_packet_ && wait_signals.size() == 1) {
+  if (dev().settings().ext_dispatch_packet_ && wait_signals.size() == 1 && packet != nullptr) {
       // The Ext Dispatch Packet supports only one dependent signal
       auto ext_packet = reinterpret_cast<hsa_amd_ext_kernel_dispatch_packet_t*>(packet);
       ext_packet->dep_signal = wait_signals[0];
@@ -1304,7 +1304,7 @@ bool VirtualGPU::dispatchAqlPacketBatchFlat(const std::vector<uint8_t>& flatPack
 
   std::scoped_lock lock(execution());
   profilingBegin(*vcmd);
-  dispatchBlockingWait();
+  dispatchBlockingWait(nullptr);
 
   if (kernelNames != nullptr) {
     vcmd->setKernelNamesRef(kernelNames);
