@@ -894,7 +894,6 @@ uint32_t hsa_amd_signal_wait_any(uint32_t signal_count, hsa_signal_t* hsa_signal
   uint32_t satisfying_signal_idx =
       core::Signal::WaitMultiple(valid_signals.size(), valid_signals.data(), conds, values, timeout_hint, wait_hint,
                                  satisfying_value_vec, false);
-
   //  Map back the index
   satisfying_signal_idx = valid_signal_ids[satisfying_signal_idx];
 
@@ -903,6 +902,18 @@ uint32_t hsa_amd_signal_wait_any(uint32_t signal_count, hsa_signal_t* hsa_signal
   return satisfying_signal_idx;
   CATCHRET(uint32_t);
 }
+
+hsa_status_t hsa_amd_signal_get_event_id(hsa_signal_t hsa_signal, uint32_t *event_id) {
+  TRY;
+  IS_OPEN();
+  IS_BAD_PTR(event_id);
+  core::Signal* signal = core::Signal::Convert(hsa_signal);
+  IS_VALID(signal);
+
+  return core::Runtime::runtime_singleton_->GetSignalEventId(hsa_signal, event_id);
+  CATCH;
+}
+
 
 hsa_status_t hsa_amd_signal_async_handler(hsa_signal_t hsa_signal, hsa_signal_condition_t cond,
                                           hsa_signal_value_t value, hsa_amd_signal_handler handler,
@@ -1863,6 +1874,33 @@ hsa_amd_counted_queue_release(hsa_queue_t* queue) {
 
   return gpu_agent->ReleaseCountedQueue(queue);
   CATCH;
+}
+
+hsa_status_t HSA_API hsa_amd_svm_discard_batch_async(void** ptrs, size_t* sizes, uint32_t count,
+                                               uint32_t num_dep_signals,
+                                               const hsa_signal_t* dep_signals,
+                                               hsa_signal_t completion_signal) {
+  TRY;
+  IS_OPEN();
+  IS_BAD_PTR(ptrs);
+  IS_BAD_PTR(sizes);
+  IS_ZERO(count);
+  
+  if (!core::Runtime::runtime_singleton_->XnackEnabled()) {
+    return static_cast<hsa_status_t>(HSA_STATUS_ERROR_XNACK_DISABLED);
+  }
+
+  // Check if dep_signals and num_dep_signals are consistent
+  if ((num_dep_signals == 0 && dep_signals != nullptr) || 
+      (num_dep_signals > 0 && dep_signals == nullptr)) {
+    return HSA_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  return core::Runtime::runtime_singleton_->SvmBatchDiscard(ptrs, sizes, count, 
+                                                num_dep_signals, dep_signals,
+                                                completion_signal);
+
+  CATCH;                                       
 }
 
 hsa_status_t hsa_amd_enable_logging(uint8_t* flags, void *file) {
