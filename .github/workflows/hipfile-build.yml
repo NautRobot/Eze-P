@@ -110,9 +110,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Get list of docker images
-        run: |
-          docker images
       # Detach the container and run separate commands to it.
       # Thus we can make separate explicit steps in the Github CI
       # as if we were able to parameterize the container image in the first place.

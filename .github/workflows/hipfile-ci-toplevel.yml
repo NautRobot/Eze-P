@@ -35,7 +35,7 @@ jobs:
           - suse
           - ubuntu
         rocm_versions:
-          - 7.2.0
+          - 7.2.2
     uses: ./.github/workflows/hipfile-ci.yml
     with:
       platform: ${{ matrix.supported_platforms }}
