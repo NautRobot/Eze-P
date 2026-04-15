@@ -89,10 +89,8 @@ else()
             http://mirrors.kernel.org/sourceware/binutils/releases/binutils-2.46.0.tar.gz
         BUILD_IN_SOURCE 1
         CONFIGURE_COMMAND
-            ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER}
-            CFLAGS=-fPIC\ -O3\ -Wno-maybe-uninitialized\ -Wno-format-truncation
-            CXX=${CMAKE_CXX_COMPILER}
-            CXXFLAGS=-fPIC\ -O3\ -Wno-maybe-uninitialized\ -Wno-format-truncation
+            ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CFLAGS=-fPIC\ -O3\ -Wno-error
+            CXX=${CMAKE_CXX_COMPILER} CXXFLAGS=-fPIC\ -O3\ -Wno-error
             <SOURCE_DIR>/configure --prefix=${_li_root}
         BUILD_COMMAND make
         INSTALL_COMMAND ""
