@@ -241,7 +241,7 @@ union PipelineCreateFlags
     {
         uint32 clientInternal        :  1; ///< Internal pipeline not created by the application.
         uint32 reverseWorkgroupOrder :  1; ///< Indicates that any Dispatch using this pipeline should execute in
-                                           ///  reverse workgroup order. This superceeds the flag on the CommandBuffer
+                                           ///  reverse workgroup order. This supersedes the flag on the CommandBuffer
                                            ///  (dispatchPingPongWalk) - always forcing reverse workgroup order! This
                                            ///  is a best effort as not all implementations or Queues may support this.
         uint32 reserved              : 30; ///< Reserved for future use.
@@ -249,7 +249,7 @@ union PipelineCreateFlags
     uint32 u32All;                         ///< Flags packed as 32-bit uint.
 };
 
-/// Constant definining the max number of view instance count that is supported.
+/// Constant defining the max number of view instance count that is supported.
 constexpr uint32 MaxViewInstanceCount = 6;
 
 /// Specifies graphic pipeline view instancing state.
@@ -322,7 +322,7 @@ struct ComputePipelineCreateInfo
     Extent3d threadsPerGroup;
     TriState groupLaunchGuarantee; ///< Force the group launch guarantee mechanism on or off. This feature will throttle
                                    ///  issuing of low priority waves when it detects too many higher priority waves are
-                                   ///  failing to schedule due to resource contraints.
+                                   ///  failing to schedule due to resource constraints.
 
     const char* pKernelName; ///< When create pipeline with hsa ELF binary of multiple kernels, need to set one
                              ///  kernel to create the pipeline. null means only one kernel in ELF binary.
@@ -471,7 +471,7 @@ struct GraphicsPipelineCreateInfo
 
     TriState groupLaunchGuarantee; ///< Force the group launch guarantee mechanism on or off. This feature will throttle
                                    ///  issuing of low priority waves when it detects too many higher priority waves are
-                                   ///  failing to schedule due to resource contraints.
+                                   ///  failing to schedule due to resource constraints.
     bool     noForceReZ;           ///< Disables the ability for PAL to force ReZ modes outside of what was chosen by
                                    ///  the compiler for this pipeline.
 };
@@ -759,7 +759,7 @@ public:
     ///                                 size of the disassembly string in ShaderStats::isaSizeInBytes. Else reports 0.
     /// @returns Success if the stats were successfully obtained for this shader, including the shader disassembly size.
     ///          +ErrorUnavailable if a wrong shader stage for this pipeline was specified, or if some internal error
-    ///                           occured.
+    ///                           occurred.
     virtual Result GetShaderStats(
         ShaderType   shaderType,
         ShaderStats* pShaderStats,
