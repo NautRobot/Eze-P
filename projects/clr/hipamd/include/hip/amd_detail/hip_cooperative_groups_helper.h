@@ -175,13 +175,15 @@ __CG_STATIC_QUALIFIER__ bool is_valid() { return static_cast<bool>(__ockl_grid_i
 
 __CG_STATIC_QUALIFIER__ void sync() { __ockl_grid_sync(); }
 
+__CG_STATIC_QUALIFIER__ dim3 grid_dim() {
+  return (dim3(static_cast<__hip_uint32_t>(gridDim.x), static_cast<__hip_uint32_t>(gridDim.y),
+               static_cast<__hip_uint32_t>(gridDim.z)));
+}
+
 __CG_STATIC_QUALIFIER__ unsigned int barrier_arrive() { return __ockl_grid_bar_arrive(); }
 
-<<<<<<< HEAD
 __CG_STATIC_QUALIFIER__ unsigned int barrier_signal() { return __ockl_grid_bar_arrive(); }
 
-=======
->>>>>>> 31e459a799 (SWDEV-493792 - add split barriers for thread_group and grid_group (#822))
 __CG_STATIC_QUALIFIER__ void barrier_wait(unsigned int s) { __ockl_grid_bar_wait(s); }
 }  // namespace grid
 
@@ -229,11 +231,7 @@ __CG_STATIC_QUALIFIER__ void barrier_arrive() {
   __builtin_amdgcn_fence(__ATOMIC_RELEASE, "workgroup");
 #if __has_builtin(__builtin_amdgcn_s_barrier_signal) &&                                            \
     __has_builtin(__builtin_amdgcn_s_barrier_wait)
-<<<<<<< HEAD
-  __builtin_amdgcn_s_barrier_signal(-1);
-=======
   __builtin_amdgcn_s_barrier_signal(-1);  // -1 is workgroup barriers
->>>>>>> 31e459a799 (SWDEV-493792 - add split barriers for thread_group and grid_group (#822))
 #endif  // __builtin_amdgcn_s_barrier_signal && __builtin_amdgcn_s_barrier_wait
 }
 
