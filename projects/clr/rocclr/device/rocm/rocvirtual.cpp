@@ -20,10 +20,6 @@
 #include "platform/sampler.hpp"
 #include "utils/debug.hpp"
 #include "os/os.hpp"
-#include "hsa/amd_hsa_kernel_code.h"
-#include "hsa/amd_hsa_queue.h"
-#include "hsa/amd_hsa_signal.h"
-#include "hsa/hsa_ext_amd.h"
 
 #include <fstream>
 #include <limits>
