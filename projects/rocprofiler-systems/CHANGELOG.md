@@ -20,10 +20,12 @@ Full documentation for ROCm Systems Profiler is available at [https://rocm.docs.
 - Topic-based help system: `--help` now shows a compact summary with essential options and a list of help topics. Use `--help=<topic>` (e.g., `--help=sampling`, `--help=gpu`, `--help=tracing`) to see only relevant options. Use `--help=all` for the full option listing.
 - Post-run output summary during library finalization showing result file locations.
 - JSON schema file (`share/rocprofiler-systems/presets/schema.json`) for preset validation.
+- Documentation (`docs/how-to/instrumenting-rewriting-binary-application.rst`) describing what to do when Dyninst reports a "Failed to transform trace" error during instrumentation.
 
 ### Changed
 
 - `rocprof-sys-avail` no longer queries GPU devices or hardware counters unless `--hw-counters` or `--all` is requested, reducing startup time and allowing settings/component queries in environments without GPU/ROCm.
+- `rocprof-sys-instrument` diagnostic file dumps (available, instrumented, excluded, coverage, overlapping) are now gated behind the `--dump-info` flag instead of being generated unconditionally.
 - Preset flags changed from `--balanced` to `--preset=balanced` syntax. The old `--<preset-name>` flags are still supported and handled within `preset_registry`.
 - Removed the `ROCPROFSYS_USE_ROCM` CMake option. ROCm is now required for building the ROCm Systems Profiler.
 
