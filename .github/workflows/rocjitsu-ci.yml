@@ -37,7 +37,7 @@ jobs:
           sparse-checkout-cone-mode: true
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang libdrm-dev
 
       - name: Configure
         env:
