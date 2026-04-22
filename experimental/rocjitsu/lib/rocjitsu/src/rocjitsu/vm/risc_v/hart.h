@@ -50,7 +50,7 @@ public:
   /// @returns Const reference to the memory interface.
   const Memory &memory() const { return memory_; }
 
-  /// @brief Set the execution plugin group (non-owning).
+  /// @brief Set the execution plugin group (shared ownership).
   void set_plugin_group(std::shared_ptr<ExecutionPluginGroup> pg) { plugin_group_ = pg; }
 
 private:

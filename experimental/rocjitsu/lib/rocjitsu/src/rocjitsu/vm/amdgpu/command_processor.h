@@ -112,7 +112,7 @@ public:
   /// sees the new ring without tearing.
   void update_queue(uint32_t queue_id, uint64_t ring_base_va, uint32_t ring_size);
 
-  /// @brief Set the execution plugin group (non-owning; owned by SoC).
+  /// @brief Set the execution plugin group (shared ownership).
   void set_plugin_group(std::shared_ptr<ExecutionPluginGroup> pg) { plugin_group_ = pg; }
 
   /// @brief Register a compute unit that this CP can dispatch to.

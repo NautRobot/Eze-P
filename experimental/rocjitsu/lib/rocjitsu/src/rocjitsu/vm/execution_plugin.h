@@ -29,9 +29,11 @@ namespace rocjitsu {
 /// what they need. The no-plugin path has zero overhead (callers guard
 /// with a null check on the plugin group pointer).
 ///
-/// Ownership: plugins are owned by an ExecutionPluginGroup, which is
-/// owned by the SoC. The SoC pushes a raw pointer to each component
-/// that fires hooks (CommandProcessor, ComputeUnit).
+/// Ownership: plugins are owned by an ExecutionPluginGroup via
+/// unique_ptr. The group itself is shared (via shared_ptr) between
+/// the SoC and all components that fire hooks (CommandProcessor,
+/// ComputeUnit, Hart). A static empty group is used as the default
+/// so the plugin group pointer is never null.
 class ExecutionPlugin {
 public:
   virtual ~ExecutionPlugin() = default;

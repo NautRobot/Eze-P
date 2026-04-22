@@ -143,7 +143,7 @@ public:
   /// @param cb Callback to invoke when idle.
   void set_on_idle(std::function<void()> cb) { on_idle_ = std::move(cb); }
 
-  /// @brief Set the execution plugin group (non-owning; owned by SoC).
+  /// @brief Set the execution plugin group (shared ownership).
   void set_plugin_group(std::shared_ptr<ExecutionPluginGroup> pg) { plugin_group_ = pg; }
 
   /// @brief Return the number of dispatched (active or halted) wavefront slots.
