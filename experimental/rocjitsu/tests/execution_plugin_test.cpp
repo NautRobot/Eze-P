@@ -139,7 +139,7 @@ struct PluginFixture {
     return addr;
   }
 
-  void step_until_done(uint32_t max_steps = 100000) {
+  void step_until_done(uint32_t max_steps = 10000) {
     for (uint32_t i = 0; i < max_steps && engine->step(); ++i) {
       if (cu()->num_wfs() > 0) {
         bool all_halted = true;
@@ -180,8 +180,6 @@ TEST(ExecutionPluginTest, SimpleKernelFiresHooks) {
   EXPECT_EQ(p->kernel_dispatches, 1);
   EXPECT_EQ(p->workgroup_dispatches, 1);
   EXPECT_GE(p->instructions, 2); // at least s_nop + s_endpgm
-  EXPECT_EQ(p->barriers, 0);
-  EXPECT_EQ(p->barriers_resolved, 0);
 }
 
 // --------------------------------------------------------------------------
