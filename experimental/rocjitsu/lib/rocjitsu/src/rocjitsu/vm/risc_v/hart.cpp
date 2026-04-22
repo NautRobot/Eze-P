@@ -27,7 +27,7 @@ bool Hart::advance(simdojo::Tick /*now*/) {
 
   set_current_memory(&memory_);
 
-  plugin_group_->onRiscvInstructionExecuted(state_.pc, *inst);
+  plugin_group_->onRiscvExecuteInstruction(state_.pc, *inst);
 
   inst->execute(*inst, &state_);
 

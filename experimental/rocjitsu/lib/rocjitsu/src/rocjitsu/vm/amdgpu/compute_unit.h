@@ -144,7 +144,7 @@ public:
   void set_on_idle(std::function<void()> cb) { on_idle_ = std::move(cb); }
 
   /// @brief Set the execution plugin group (shared ownership).
-  void set_plugin_group(std::shared_ptr<ExecutionPluginGroup> pg) { plugin_group_ = pg; }
+  void set_plugin_group(std::shared_ptr<ExecutionPluginGroup> pg) { plugin_group_ = pg ? pg : ExecutionPluginGroup::empty_group(); }
 
   /// @brief Return the number of dispatched (active or halted) wavefront slots.
   /// @returns Count of non-idle wavefront slots.

@@ -5,9 +5,7 @@
 /// @brief Architecture-neutral plugin interface for execution hooks.
 ///
 /// A single plugin class serves both AMDGPU and RISC-V execution paths.
-/// Hooks that are specific to an architecture are prefixed with the
-/// architecture name (onAmdgpu*, onRiscv*). Generic hooks that apply
-/// to any architecture have no prefix.
+/// Hooks are prefixed with their architecture name (onAmdgpu*, onRiscv*).
 
 #pragma once
 
@@ -24,10 +22,10 @@ namespace rocjitsu {
 
 /// @brief Abstract plugin interface for execution hooks.
 ///
-/// Plugins receive callbacks at key points during instruction execution.
+/// Plugins receive callbacks at key points during simulation execution.
 /// All hooks have empty default implementations so plugins only override
-/// what they need. The no-plugin path has zero overhead (callers guard
-/// with a null check on the plugin group pointer).
+/// what they need. The no-plugin path has near-zero overhead (the
+/// default empty group's delegation loops iterate an empty vector).
 ///
 /// Ownership: plugins are owned by an ExecutionPluginGroup via
 /// unique_ptr. The group itself is shared (via shared_ptr) between
@@ -41,33 +39,33 @@ public:
   // -- AMDGPU hooks --------------------------------------------------------
 
   /// Called before every AMDGPU instruction is executed.
-  virtual void onAmdgpuInstructionExecuted(uint64_t /*pc*/, const Instruction& /*inst*/) {}
+  virtual void onAmdgpuExecuteInstruction(uint64_t /*pc*/, const Instruction& /*inst*/) {}
 
   /// Called when an AMDGPU memory instruction is routed to a pipeline.
-  virtual void onAmdgpuMemoryInstruction(Instruction * /*inst*/) {}
+  virtual void onAmdgpuRouteMemoryInstruction(const Instruction & /*inst*/) {}
 
   /// Called when a new AMDGPU kernel dispatch begins.
   virtual void onAmdgpuKernelDispatch(uint64_t /*kernel_object*/,
                                       uint64_t /*entry_pc*/) {}
 
   /// Called after a workgroup's wavefronts have been dispatched to a CU.
-  virtual void onAmdgpuWorkgroupDispatched(
+  virtual void onAmdgpuDispatchWorkgroup(
       uint32_t /*wg_id*/, uint32_t /*vgpr_count*/, uint32_t /*sgpr_count*/,
       std::span<amdgpu::Wavefront *> /*wavefronts*/) {}
 
   /// Called when a VGPR is read during instruction execution.
   /// Not yet wired — to be connected when race detection lands.
-  virtual void onAmdgpuVgprRead(amdgpu::Wavefront * /*wf*/,
+  virtual void onAmdgpuReadVgpr(amdgpu::Wavefront * /*wf*/,
                                 uint32_t /*logical_reg*/, uint32_t /*lane*/) {}
 
   /// Called when an SGPR is read during instruction execution.
   /// Not yet wired — to be connected when race detection lands.
-  virtual void onAmdgpuSgprRead(amdgpu::Wavefront * /*wf*/,
+  virtual void onAmdgpuReadSgpr(amdgpu::Wavefront * /*wf*/,
                                 uint32_t /*logical_reg*/) {}
 
   /// Called when s_waitcnt sets counter thresholds.
-  virtual void onAmdgpuWaitcnt(amdgpu::Wavefront * /*wf*/, int /*vmcnt*/,
-                               int /*lgkmcnt*/) {}
+  virtual void onAmdgpuSetWaitTarget(amdgpu::Wavefront * /*wf*/, int /*vmcnt*/,
+                                     int /*lgkmcnt*/) {}
 
   /// Called when all waves in a workgroup have reached s_barrier.
   virtual void onAmdgpuBarrierResolved(uint32_t /*wg_id*/) {}
@@ -75,7 +73,7 @@ public:
   // -- RISC-V hooks --------------------------------------------------------
 
   /// Called before every RISC-V instruction is executed.
-  virtual void onRiscvInstructionExecuted(uint64_t /*pc*/, const Instruction& /*inst*/) {}
+  virtual void onRiscvExecuteInstruction(uint64_t /*pc*/, const Instruction& /*inst*/) {}
 };
 
 /// @brief Collection of plugins that delegates to each member.
@@ -87,14 +85,14 @@ public:
   }
 
   // -- AMDGPU --
-  void onAmdgpuInstructionExecuted(uint64_t pc, const Instruction &inst) {
+  void onAmdgpuExecuteInstruction(uint64_t pc, const Instruction &inst) {
     for (auto &p : plugins_)
-      p->onAmdgpuInstructionExecuted(pc, inst);
+      p->onAmdgpuExecuteInstruction(pc, inst);
   }
 
-  void onAmdgpuMemoryInstruction(Instruction *inst) {
+  void onAmdgpuRouteMemoryInstruction(const Instruction &inst) {
     for (auto &p : plugins_)
-      p->onAmdgpuMemoryInstruction(inst);
+      p->onAmdgpuRouteMemoryInstruction(inst);
   }
 
   void onAmdgpuKernelDispatch(uint64_t kernel_object, uint64_t entry_pc) {
@@ -102,28 +100,28 @@ public:
       p->onAmdgpuKernelDispatch(kernel_object, entry_pc);
   }
 
-  void onAmdgpuWorkgroupDispatched(uint32_t wg_id, uint32_t vgpr_count,
+  void onAmdgpuDispatchWorkgroup(uint32_t wg_id, uint32_t vgpr_count,
                                    uint32_t sgpr_count,
                                    std::span<amdgpu::Wavefront *> wavefronts) {
     for (auto &p : plugins_)
-      p->onAmdgpuWorkgroupDispatched(wg_id, vgpr_count, sgpr_count,
+      p->onAmdgpuDispatchWorkgroup(wg_id, vgpr_count, sgpr_count,
                                      wavefronts);
   }
 
-  void onAmdgpuVgprRead(amdgpu::Wavefront *wf, uint32_t logical_reg,
+  void onAmdgpuReadVgpr(amdgpu::Wavefront *wf, uint32_t logical_reg,
                          uint32_t lane) {
     for (auto &p : plugins_)
-      p->onAmdgpuVgprRead(wf, logical_reg, lane);
+      p->onAmdgpuReadVgpr(wf, logical_reg, lane);
   }
 
-  void onAmdgpuSgprRead(amdgpu::Wavefront *wf, uint32_t logical_reg) {
+  void onAmdgpuReadSgpr(amdgpu::Wavefront *wf, uint32_t logical_reg) {
     for (auto &p : plugins_)
-      p->onAmdgpuSgprRead(wf, logical_reg);
+      p->onAmdgpuReadSgpr(wf, logical_reg);
   }
 
-  void onAmdgpuWaitcnt(amdgpu::Wavefront *wf, int vmcnt, int lgkmcnt) {
+  void onAmdgpuSetWaitTarget(amdgpu::Wavefront *wf, int vmcnt, int lgkmcnt) {
     for (auto &p : plugins_)
-      p->onAmdgpuWaitcnt(wf, vmcnt, lgkmcnt);
+      p->onAmdgpuSetWaitTarget(wf, vmcnt, lgkmcnt);
   }
 
   void onAmdgpuBarrierResolved(uint32_t wg_id) {
@@ -132,9 +130,9 @@ public:
   }
 
   // -- RISC-V --
-  void onRiscvInstructionExecuted(uint64_t pc, const Instruction &inst) {
+  void onRiscvExecuteInstruction(uint64_t pc, const Instruction &inst) {
     for (auto &p : plugins_)
-      p->onRiscvInstructionExecuted(pc, inst);
+      p->onRiscvExecuteInstruction(pc, inst);
   }
 
   bool empty() const { return plugins_.empty(); }

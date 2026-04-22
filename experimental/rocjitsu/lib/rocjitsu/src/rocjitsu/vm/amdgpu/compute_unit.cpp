@@ -217,7 +217,7 @@ void ComputeUnitCore::tick_pipelines() {
 }
 
 void ComputeUnitCore::route_memory_inst(Instruction *inst, Wavefront &wf) {
-  plugin_group_->onAmdgpuMemoryInstruction(inst);
+  plugin_group_->onAmdgpuRouteMemoryInstruction(*inst);
   switch (inst->data()->tag()) {
   case SCALAR_MEM:
     scalar_mem_pipeline_.issue(inst, wf);
@@ -424,7 +424,7 @@ bool ComputeUnitCore::step() {
     }
   }
 
-  plugin_group_->onAmdgpuInstructionExecuted(active->pc, *inst);
+  plugin_group_->onAmdgpuExecuteInstruction(active->pc, *inst);
 
   execute_instruction(inst, *active);
 

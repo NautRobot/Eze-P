@@ -61,21 +61,21 @@ public:
   int riscv_instructions = 0;
 
   void onAmdgpuKernelDispatch(uint64_t, uint64_t) override { ++kernel_dispatches; }
-  void onAmdgpuWorkgroupDispatched(uint32_t, uint32_t, uint32_t,
+  void onAmdgpuDispatchWorkgroup(uint32_t, uint32_t, uint32_t,
                                    std::span<amdgpu::Wavefront *>) override {
     ++workgroup_dispatches;
   }
-  void onAmdgpuInstructionExecuted(uint64_t, const Instruction &inst) override {
+  void onAmdgpuExecuteInstruction(uint64_t, const Instruction &inst) override {
     ++instructions;
     if (inst.mnemonic() == "s_barrier")
       ++barriers;
   }
   void onAmdgpuBarrierResolved(uint32_t) override { ++barriers_resolved; }
-  void onAmdgpuWaitcnt(amdgpu::Wavefront *, int, int) override { ++waitcnts; }
-  void onAmdgpuMemoryInstruction(Instruction *) override {
+  void onAmdgpuSetWaitTarget(amdgpu::Wavefront *, int, int) override { ++waitcnts; }
+  void onAmdgpuRouteMemoryInstruction(const Instruction &) override {
     ++memory_insts;
   }
-  void onRiscvInstructionExecuted(uint64_t, const Instruction &) override {
+  void onRiscvExecuteInstruction(uint64_t, const Instruction &) override {
     ++riscv_instructions;
   }
 };

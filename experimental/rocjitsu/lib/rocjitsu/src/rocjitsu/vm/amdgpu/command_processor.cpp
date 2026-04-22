@@ -272,7 +272,7 @@ bool CommandProcessor::step() {
         init_wavefront_regs(cu, wf, pkt, global_wg_id, w);
         wg_wavefronts.push_back(wf);
       }
-      plugin_group_->onAmdgpuWorkgroupDispatched(
+      plugin_group_->onAmdgpuDispatchWorkgroup(
             global_wg_id, pkt.vgprs_per_wf, pkt.sgprs_per_wf,
             std::span<Wavefront *>(wg_wavefronts));
       next_cu_ = (cu_idx + 1) % cus_.size();
