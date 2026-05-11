@@ -8,6 +8,8 @@ root: index
 subtrees:
   - caption: Install
     entries:
+    - file: install/install
+      title: Install ROCprofiler-SDK
     - file: install/build
       title: Build from source
   - caption: Quick Reference
