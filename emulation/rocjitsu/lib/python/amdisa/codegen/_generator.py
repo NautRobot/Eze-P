@@ -3200,6 +3200,11 @@ class CodeGenerator:
         shared_dir = os.path.join(self.out_path, 'shared')
         os.makedirs(shared_dir, exist_ok=True)
 
+        from amdisa.codegen.execute.simd_codegen import (
+            simd_extra_includes, simd_preamble_top, simd_preamble_in_namespace,
+            simd_probe_line,
+        )
+
         guard = 'ROCJITSU_ISA_AMDGPU_SHARED_EXECUTE_SHARED_H_'
         lines = CppFile._prologue_comment().splitlines()
         lines += [
@@ -3218,9 +3223,13 @@ class CodeGenerator:
             '#include <bit>',
             '#include <cmath>',
             '#include <limits>',
+            *simd_extra_includes(),
             '',
+            simd_preamble_top(),
             'namespace rocjitsu {',
             'namespace amdgpu {',
+            '',
+            simd_preamble_in_namespace(),
             '',
         ]
 
@@ -3230,6 +3239,9 @@ class CodeGenerator:
                 f'inline void execute_{mnemonic}('
                 f'[[maybe_unused]] Inst &inst, [[maybe_unused]] Wavefront &wf) {{'
             )
+            probe = simd_probe_line(mnemonic)
+            if probe is not None:
+                lines.append(probe)
             lines.append(prefixed_body)
             lines.append('}')
             lines.append('')

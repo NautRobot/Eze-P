@@ -18,10 +18,111 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <cstring>
+#include <functional>
 #include <limits>
+
+#if __has_include(<experimental/simd>)
+#include <experimental/simd>
+#define ROCJITSU_HAS_STDX_SIMD 1
+#else
+#define ROCJITSU_HAS_STDX_SIMD 0
+#endif
 
 namespace rocjitsu {
 namespace amdgpu {
+
+#if ROCJITSU_HAS_STDX_SIMD
+namespace stdx = std::experimental;
+#endif
+
+/// @brief Explicit-width alias for IEEE-754 binary32. C++23 has
+/// std::float32_t in <stdfloat>; rocjitsu is on C++20 so a local alias.
+using float32_t = float;
+
+/// @brief Per-thread runtime override that disables the SIMD fast path
+/// in kernels that have one. Used by tests/v_add_simd_benchmark.cpp.
+inline bool &simd_force_scalar() {
+  static thread_local bool flag = false;
+  return flag;
+}
+
+#if ROCJITSU_HAS_STDX_SIMD
+template <typename T, typename Op>
+inline stdx::native_simd<T> read_simd(const Op &op, const Wavefront &wf, uint32_t lane_base) {
+  using BitsSimd = stdx::native_simd<uint32_t>;
+  using ValSimd = stdx::native_simd<T>;
+  static_assert(sizeof(T) == sizeof(uint32_t), "read_simd: T must be a 32-bit lane type");
+  static_assert(sizeof(ValSimd) == sizeof(BitsSimd));
+  if (const uint32_t *p = op.simd_lane_ptr(wf, lane_base)) {
+    BitsSimd bits(p, stdx::element_aligned);
+    if constexpr (std::is_same_v<T, uint32_t>)
+      return bits;
+    else
+      return std::bit_cast<ValSimd>(bits);
+  }
+  uint32_t scalar = op.read_scalar(wf);
+  if constexpr (std::is_same_v<T, uint32_t>)
+    return ValSimd(scalar);
+  else
+    return ValSimd(std::bit_cast<T>(scalar));
+}
+
+template <typename T, typename Op>
+inline void write_simd(const Op &op, Wavefront &wf, uint32_t lane_base, stdx::native_simd<T> v,
+                       uint64_t mask) {
+  using BitsSimd = stdx::native_simd<uint32_t>;
+  using ValSimd = stdx::native_simd<T>;
+  static_assert(sizeof(T) == sizeof(uint32_t), "write_simd: T must be a 32-bit lane type");
+  static_assert(sizeof(ValSimd) == sizeof(BitsSimd));
+  constexpr std::size_t W = BitsSimd::size();
+  uint64_t full = (W >= 64) ? ~0ULL : ((1ULL << W) - 1ULL);
+  BitsSimd bits;
+  if constexpr (std::is_same_v<T, uint32_t>)
+    bits = v;
+  else
+    bits = std::bit_cast<BitsSimd>(v);
+  if (uint32_t *p = op.simd_dst_ptr(wf, lane_base)) {
+    if ((mask & full) == full) {
+      bits.copy_to(p, stdx::element_aligned);
+      return;
+    }
+    alignas(BitsSimd) uint32_t buf[W];
+    bits.copy_to(buf, stdx::vector_aligned);
+    for (std::size_t i = 0; i < W; ++i)
+      if (mask & (1ULL << i))
+        p[i] = buf[i];
+    return;
+  }
+  alignas(BitsSimd) uint32_t buf[W];
+  bits.copy_to(buf, stdx::vector_aligned);
+  op.write_lane_chunk(wf, lane_base, static_cast<uint32_t>(W), buf, mask);
+}
+
+template <typename T, typename Inst, typename BinOp>
+[[nodiscard]] inline bool try_execute_binary_vop2_simd(Inst &inst, Wavefront &wf, BinOp bin_op) {
+  if (simd_force_scalar() || !inst.src0.simd_capable() || !inst.vsrc1.simd_capable() ||
+      !inst.vdst.simd_capable())
+    return false;
+  uint64_t exec = wf.exec();
+  constexpr std::size_t W = stdx::native_simd<T>::size();
+  uint64_t chunk_full = (W >= 64) ? ~0ULL : ((1ULL << W) - 1ULL);
+  for (uint32_t base = 0; base < wf.wf_size(); base += static_cast<uint32_t>(W)) {
+    uint64_t chunk = (exec >> base) & chunk_full;
+    if (chunk == 0)
+      continue;
+    auto a = read_simd<T>(inst.src0, wf, base);
+    auto b = read_simd<T>(inst.vsrc1, wf, base);
+    write_simd<T>(inst.vdst, wf, base, bin_op(a, b), chunk);
+  }
+  return true;
+}
+#else
+template <typename T, typename Inst, typename BinOp>
+[[nodiscard]] inline bool try_execute_binary_vop2_simd(Inst &, Wavefront &, BinOp) {
+  return false;
+}
+#endif
 
 template <typename Inst>
 inline void execute_ds_bpermute_b32_ds([[maybe_unused]] Inst &inst,
@@ -2115,6 +2216,8 @@ inline void execute_v_add_f16_vop3([[maybe_unused]] Inst &inst, [[maybe_unused]]
 
 template <typename Inst>
 inline void execute_v_add_f32_vop2([[maybe_unused]] Inst &inst, [[maybe_unused]] Wavefront &wf) {
+  if (try_execute_binary_vop2_simd<float32_t>(inst, wf, std::plus<>{}))
+    return;
   uint64_t exec = wf.exec();
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))
@@ -2331,6 +2434,8 @@ inline void execute_v_add_u16_vop3([[maybe_unused]] Inst &inst, [[maybe_unused]]
 
 template <typename Inst>
 inline void execute_v_add_u32_vop2([[maybe_unused]] Inst &inst, [[maybe_unused]] Wavefront &wf) {
+  if (try_execute_binary_vop2_simd<uint32_t>(inst, wf, std::plus<>{}))
+    return;
   uint64_t exec = wf.exec();
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))

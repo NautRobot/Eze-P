@@ -128,6 +128,69 @@ public:
   void clear_delegate() { delegate_ = nullptr; }
   Operand *delegate() const { return delegate_; }
 
+  /// @brief Whether `read_lane_chunk` / `write_lane_chunk` produce correct,
+  /// SIMD-friendly results for this operand.
+  ///
+  /// @details Default is false. Arch subclasses override to return true for
+  /// operands whose per-lane values can be read or written as a contiguous
+  /// uint32_t buffer (VGPRs, SGPR/immediate/inline-const broadcasts, DPP/SDWA
+  /// delegated operands). Kernels gate SIMD fast paths on this predicate; if
+  /// any source/dest reports false, the kernel falls back to its scalar loop.
+  virtual bool simd_capable() const {
+    if (delegate_)
+      return delegate_->simd_capable();
+    return false;
+  }
+
+  /// @brief Fill `out[0..count)` with operand values for lanes
+  /// `[lane_base, lane_base + count)`.
+  ///
+  /// @details Default implementation calls `read_lane` per element so any
+  /// operand stays correct without an override. Arch subclasses override with
+  /// memcpy-based VGPR reads or scalar broadcasts.
+  virtual void read_lane_chunk(const amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                               uint32_t *out) const {
+    if (delegate_) {
+      delegate_->read_lane_chunk(wf, lane_base, count, out);
+      return;
+    }
+    for (uint32_t i = 0; i < count; ++i)
+      out[i] = read_lane(wf, lane_base + i);
+  }
+
+  /// @brief Apply masked write of `vals[0..count)` to lanes
+  /// `[lane_base, lane_base + count)`. Bit `i` of `mask` enables lane `i`.
+  virtual void write_lane_chunk(amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                                const uint32_t *vals, uint64_t mask) const {
+    for (uint32_t i = 0; i < count; ++i)
+      if (mask & (1ULL << i))
+        write_lane(wf, lane_base + i, vals[i]);
+  }
+
+  /// @brief If this operand has contiguous per-lane uint32_t storage for the
+  /// lane range starting at `lane_base`, return a pointer to lane `lane_base`.
+  /// Otherwise return nullptr — the caller should fall back to a scalar
+  /// broadcast via `read_scalar` (for SGPR/imm/inline-const operands).
+  ///
+  /// @details Enables kernels to construct a `std::experimental::simd` directly
+  /// from operand storage without staging through a uint32_t buffer. The
+  /// returned pointer is valid until the next mutation of the underlying
+  /// register file or wavefront state.
+  virtual const uint32_t *simd_lane_ptr(const amdgpu::Wavefront &wf, uint32_t lane_base) const {
+    if (delegate_)
+      return delegate_->simd_lane_ptr(wf, lane_base);
+    return nullptr;
+  }
+
+  /// @brief If this operand's destination is contiguous per-lane uint32_t
+  /// storage (a VGPR), return a writable pointer to lane `lane_base`. Otherwise
+  /// return nullptr — the caller should fall back to `write_lane_chunk`.
+  virtual uint32_t *simd_dst_ptr(amdgpu::Wavefront &wf, uint32_t lane_base) const {
+    (void)wf;
+    (void)lane_base;
+    return nullptr;
+  }
+
   int size_bits_ = 0;
   int encoding_value_ = 0;
   bool is_vgpr_ = false;
@@ -182,6 +245,23 @@ public:
   uint32_t read_scalar(const amdgpu::Wavefront & /*wf*/) const override { return data_[0]; }
 
   std::string name() const override { return "dpp_src"; }
+
+  bool simd_capable() const override { return true; }
+
+  void read_lane_chunk(const amdgpu::Wavefront & /*wf*/, uint32_t lane_base, uint32_t count,
+                       uint32_t *out) const override {
+    uint32_t lanes = static_cast<uint32_t>(lane_count_);
+    for (uint32_t i = 0; i < count; ++i) {
+      uint32_t l = lane_base + i;
+      out[i] = (l < lanes) ? data_[l] : 0u;
+    }
+  }
+
+  const uint32_t *simd_lane_ptr(const amdgpu::Wavefront & /*wf*/, uint32_t lane_base) const override {
+    if (static_cast<int>(lane_base) >= lane_count_)
+      return nullptr;
+    return &data_[lane_base];
+  }
 
 private:
   uint32_t data_[MAX_LANES]{};

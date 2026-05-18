@@ -7,7 +7,10 @@
 #include "rocjitsu/isa/arch/amdgpu/cdna4/operand.h"
 #include "rocjitsu/vm/amdgpu/compute_unit.h"
 #include "rocjitsu/vm/amdgpu/wavefront.h"
+#include <algorithm>
+#include <cstring>
 #include <format>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -1573,6 +1576,118 @@ uint64_t Operand::read_scalar64(const amdgpu::Wavefront &wf) const {
 
 void Operand::write_scalar64(amdgpu::Wavefront &wf, uint64_t val) const {
   resolve_dst_write64(wf, encoding_value_, val);
+}
+
+namespace {
+
+// Encoding-value categories that resolve_src_scalar() handles uniformly across
+// lanes (SGPR, special regs, inline-const constants). Used by simd_capable().
+bool is_uniform_scalar_ev(int ev) {
+  if (ev >= 0 && ev <= 107)
+    return true;
+  if (ev == 124 || ev == 126 || ev == 127)
+    return true;
+  if (ev >= 128 && ev <= 208)
+    return true;
+  if (ev >= 240 && ev <= 253)
+    return true;
+  return false;
+}
+
+// Resolve VGPR file offset (within the wavefront's VGPR allocation) for
+// per-lane chunked read. Returns std::nullopt if this operand is not a
+// VGPR-backed read.
+std::optional<uint32_t> vgpr_chunk_offset(OperandType opr_type, int ev) {
+  if (is_vgpr_only_type(opr_type))
+    return vgpr_index(opr_type, ev);
+  if (ev >= 256 && ev <= 511)
+    return static_cast<uint32_t>(ev - 256);
+  if (opr_type == OperandType::OPR_SRC_VGPR_OR_ACCVGPR_OR_CONST &&
+      ev >= OpSelSrcVgprOrAccvgprOrConst::OPR_SRC_VGPR_OR_ACCVGPR_OR_CONST_ACC_MIN &&
+      ev <= OpSelSrcVgprOrAccvgprOrConst::OPR_SRC_VGPR_OR_ACCVGPR_OR_CONST_ACC_MAX) {
+    return 256 + static_cast<uint32_t>(
+                     ev - OpSelSrcVgprOrAccvgprOrConst::OPR_SRC_VGPR_OR_ACCVGPR_OR_CONST_ACC_MIN);
+  }
+  return std::nullopt;
+}
+
+} // namespace
+
+bool Operand::simd_capable() const {
+  if (delegate())
+    return delegate()->simd_capable();
+  int ev = encoding_value_;
+  if (is_vgpr_only_type(opr_type_))
+    return true;
+  if (is_immediate_type(opr_type_))
+    return true;
+  if (ev >= 256 && ev <= 511)
+    return true;
+  if (opr_type_ == OperandType::OPR_SRC_VGPR_OR_ACCVGPR_OR_CONST &&
+      ev >= OpSelSrcVgprOrAccvgprOrConst::OPR_SRC_VGPR_OR_ACCVGPR_OR_CONST_ACC_MIN &&
+      ev <= OpSelSrcVgprOrAccvgprOrConst::OPR_SRC_VGPR_OR_ACCVGPR_OR_CONST_ACC_MAX) {
+    return true;
+  }
+  return is_uniform_scalar_ev(ev);
+}
+
+void Operand::read_lane_chunk(const amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                              uint32_t *out) const {
+  if (delegate()) {
+    delegate()->read_lane_chunk(wf, lane_base, count, out);
+    return;
+  }
+  int ev = encoding_value_;
+  if (auto idx = vgpr_chunk_offset(opr_type_, ev)) {
+    const uint8_t *src = wf.cu().vgpr_data(wf.vgpr_alloc().base + *idx);
+    std::memcpy(out, src + lane_base * sizeof(uint32_t), count * sizeof(uint32_t));
+    return;
+  }
+  if (is_immediate_type(opr_type_)) {
+    std::fill_n(out, count, static_cast<uint32_t>(ev));
+    return;
+  }
+  uint32_t v = resolve_src_scalar(wf, ev);
+  std::fill_n(out, count, v);
+}
+
+void Operand::write_lane_chunk(amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                               const uint32_t *vals, uint64_t mask) const {
+  int ev = encoding_value_;
+  if (!is_vgpr_only_type(opr_type_)) {
+    for (uint32_t i = 0; i < count; ++i)
+      if (mask & (1ULL << i))
+        write_lane(wf, lane_base + i, vals[i]);
+    return;
+  }
+  uint32_t reg = wf.vgpr_alloc().base + vgpr_index(opr_type_, ev);
+  uint64_t full_mask = (count >= 64) ? ~0ULL : ((1ULL << count) - 1ULL);
+  if ((mask & full_mask) == full_mask) {
+    uint8_t *dst = wf.cu().vgpr_data(reg);
+    std::memcpy(dst + lane_base * sizeof(uint32_t), vals, count * sizeof(uint32_t));
+    return;
+  }
+  for (uint32_t i = 0; i < count; ++i)
+    if (mask & (1ULL << i))
+      wf.cu().write_vgpr(reg, lane_base + i, vals[i]);
+}
+
+const uint32_t *Operand::simd_lane_ptr(const amdgpu::Wavefront &wf, uint32_t lane_base) const {
+  if (delegate())
+    return delegate()->simd_lane_ptr(wf, lane_base);
+  if (auto idx = vgpr_chunk_offset(opr_type_, encoding_value_)) {
+    const uint8_t *base = wf.cu().vgpr_data(wf.vgpr_alloc().base + *idx);
+    return reinterpret_cast<const uint32_t *>(base + lane_base * sizeof(uint32_t));
+  }
+  return nullptr;
+}
+
+uint32_t *Operand::simd_dst_ptr(amdgpu::Wavefront &wf, uint32_t lane_base) const {
+  if (!is_vgpr_only_type(opr_type_))
+    return nullptr;
+  uint32_t reg = wf.vgpr_alloc().base + vgpr_index(opr_type_, encoding_value_);
+  uint8_t *base = wf.cu().vgpr_data(reg);
+  return reinterpret_cast<uint32_t *>(base + lane_base * sizeof(uint32_t));
 }
 
 } // namespace cdna4

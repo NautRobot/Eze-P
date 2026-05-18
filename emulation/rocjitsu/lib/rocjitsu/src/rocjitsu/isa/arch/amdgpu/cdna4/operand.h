@@ -28,6 +28,14 @@ public:
   void write_lane64(amdgpu::Wavefront &wf, uint32_t lane, uint64_t val) const override;
   uint64_t read_scalar64(const amdgpu::Wavefront &wf) const override;
   void write_scalar64(amdgpu::Wavefront &wf, uint64_t val) const override;
+
+  bool simd_capable() const override;
+  void read_lane_chunk(const amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                       uint32_t *out) const override;
+  void write_lane_chunk(amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                        const uint32_t *vals, uint64_t mask) const override;
+  const uint32_t *simd_lane_ptr(const amdgpu::Wavefront &wf, uint32_t lane_base) const override;
+  uint32_t *simd_dst_ptr(amdgpu::Wavefront &wf, uint32_t lane_base) const override;
 };
 
 } // namespace cdna4
