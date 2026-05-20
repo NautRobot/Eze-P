@@ -1674,7 +1674,7 @@ void Operand::write_lane_chunk(amdgpu::Wavefront &wf, uint32_t lane_base, uint32
 
 const uint32_t *Operand::simd_lane_ptr(const amdgpu::Wavefront &wf, uint32_t lane_base) const {
   if (delegate())
-    return delegate()->simd_lane_ptr(wf, lane_base);
+    return amdgpu::SimdAccess::lane_ptr(*delegate(), wf, lane_base);
   if (auto idx = vgpr_chunk_offset(opr_type_, encoding_value_)) {
     const uint8_t *base = wf.cu().vgpr_data(wf.vgpr_alloc().base + *idx);
     return reinterpret_cast<const uint32_t *>(base + lane_base * sizeof(uint32_t));

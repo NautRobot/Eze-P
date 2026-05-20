@@ -16,6 +16,7 @@
 namespace rocjitsu {
 namespace amdgpu {
 class Wavefront;
+struct SimdAccess;
 } // namespace amdgpu
 
 /// @brief Base class for an instruction operand with value resolution.
@@ -24,6 +25,8 @@ class Wavefront;
 /// ranges and the wavefront's register state.
 class Operand {
 public:
+  friend struct amdgpu::SimdAccess;
+
   Operand() = default;
 
   /// @brief Construct an operand with the given size and encoding value.
@@ -167,15 +170,19 @@ public:
         write_lane(wf, lane_base + i, vals[i]);
   }
 
+  int size_bits_ = 0;
+  int encoding_value_ = 0;
+  bool is_vgpr_ = false;
+
+private:
   /// @brief If this operand has contiguous per-lane uint32_t storage for the
   /// lane range starting at `lane_base`, return a pointer to lane `lane_base`.
   /// Otherwise return nullptr — the caller should fall back to a scalar
   /// broadcast via `read_scalar` (for SGPR/imm/inline-const operands).
   ///
-  /// @details Enables kernels to construct a `std::experimental::simd` directly
-  /// from operand storage without staging through a uint32_t buffer. The
-  /// returned pointer is valid until the next mutation of the underlying
-  /// register file or wavefront state.
+  /// @details Internal SIMD fast-path hook, reachable only through
+  /// `amdgpu::SimdAccess`. Plugins observing register reads should hook the
+  /// public `read_lane` / `read_lane_chunk` surface instead.
   virtual const uint32_t *simd_lane_ptr(const amdgpu::Wavefront &wf, uint32_t lane_base) const {
     if (delegate_)
       return delegate_->simd_lane_ptr(wf, lane_base);
@@ -185,17 +192,15 @@ public:
   /// @brief If this operand's destination is contiguous per-lane uint32_t
   /// storage (a VGPR), return a writable pointer to lane `lane_base`. Otherwise
   /// return nullptr — the caller should fall back to `write_lane_chunk`.
+  ///
+  /// @details Internal SIMD fast-path hook; same access policy as
+  /// `simd_lane_ptr`.
   virtual uint32_t *simd_dst_ptr(amdgpu::Wavefront &wf, uint32_t lane_base) const {
     (void)wf;
     (void)lane_base;
     return nullptr;
   }
 
-  int size_bits_ = 0;
-  int encoding_value_ = 0;
-  bool is_vgpr_ = false;
-
-private:
   Operand *delegate_ = nullptr;
 };
 
@@ -224,6 +229,8 @@ public:
 /// once at construction time.
 class DppOperand : public Operand {
 public:
+  friend struct amdgpu::SimdAccess;
+
   static constexpr int MAX_LANES = 64;
 
   DppOperand() = default;
@@ -257,16 +264,36 @@ public:
     }
   }
 
+private:
   const uint32_t *simd_lane_ptr(const amdgpu::Wavefront & /*wf*/, uint32_t lane_base) const override {
     if (static_cast<int>(lane_base) >= lane_count_)
       return nullptr;
     return &data_[lane_base];
   }
 
-private:
   uint32_t data_[MAX_LANES]{};
   int lane_count_ = 0;
 };
+
+namespace amdgpu {
+/// @brief Privileged accessor for the operand SIMD fast-path hooks.
+///
+/// Only the SIMD glue in `arch/amdgpu/shared/simd_glue.h` (and arch operand
+/// implementations that need to forward a delegate dispatch) reaches the
+/// private `simd_lane_ptr` / `simd_dst_ptr` virtuals through this struct.
+/// Plugin-visible register I/O stays on the public `read_lane` /
+/// `read_lane_chunk` / `write_lane` / `write_lane_chunk` surface.
+struct SimdAccess {
+  template <typename Op>
+  static const uint32_t *lane_ptr(const Op &op, const Wavefront &wf, uint32_t lane_base) {
+    return op.simd_lane_ptr(wf, lane_base);
+  }
+  template <typename Op>
+  static uint32_t *dst_ptr(const Op &op, Wavefront &wf, uint32_t lane_base) {
+    return op.simd_dst_ptr(wf, lane_base);
+  }
+};
+} // namespace amdgpu
 
 } // namespace rocjitsu
 

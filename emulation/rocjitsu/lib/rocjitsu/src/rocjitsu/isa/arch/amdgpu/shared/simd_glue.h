@@ -14,6 +14,7 @@
 #ifndef ROCJITSU_ISA_AMDGPU_SHARED_SIMD_GLUE_H_
 #define ROCJITSU_ISA_AMDGPU_SHARED_SIMD_GLUE_H_
 
+#include "rocjitsu/isa/operand.h"
 #include "rocjitsu/vm/amdgpu/wavefront.h"
 #include "util/simd.h"
 
@@ -42,8 +43,8 @@ inline util::simd::native<T> read_simd(const Op &op, const Wavefront &wf,
                                        uint32_t lane_base) {
   static_assert(sizeof(T) == sizeof(uint32_t),
                 "read_simd: T must be a 32-bit lane type");
-  return util::simd::load_or_broadcast<T>(op.simd_lane_ptr(wf, lane_base),
-                                          op.read_scalar(wf));
+  const uint32_t *p = SimdAccess::lane_ptr(op, wf, lane_base);
+  return util::simd::load_or_broadcast<T>(p, p ? 0u : op.read_scalar(wf));
 }
 
 template <typename T, typename Op>
@@ -51,7 +52,7 @@ inline void write_simd(const Op &op, Wavefront &wf, uint32_t lane_base,
                        util::simd::native<T> v, uint64_t mask) {
   static_assert(sizeof(T) == sizeof(uint32_t));
   constexpr std::size_t W = util::simd::native_width_v<T>;
-  if (uint32_t *p = op.simd_dst_ptr(wf, lane_base)) {
+  if (uint32_t *p = SimdAccess::dst_ptr(op, wf, lane_base)) {
     util::simd::masked_store<T>(p, v, mask);
     return;
   }
