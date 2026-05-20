@@ -3201,8 +3201,7 @@ class CodeGenerator:
         os.makedirs(shared_dir, exist_ok=True)
 
         from amdisa.codegen.execute.simd_codegen import (
-            simd_extra_includes, simd_preamble_in_namespace,
-            simd_probe_line,
+            simd_extra_includes, simd_probe_line,
         )
 
         guard = 'ROCJITSU_ISA_AMDGPU_SHARED_EXECUTE_SHARED_H_'
@@ -3216,10 +3215,10 @@ class CodeGenerator:
             '#include "rocjitsu/vm/amdgpu/mem_state.h"',
             '#include "rocjitsu/isa/arch/amdgpu/shared/addr_calc_scalar.h"',
             '#include "rocjitsu/isa/arch/amdgpu/shared/transcendental.h"',
+            *simd_extra_includes(),
             '#include "util/data_types.h"',
             '#include "util/except.h"',
             '#include "util/log.h"',
-            *simd_extra_includes(),
             '#include <algorithm>',
             '#include <bit>',
             '#include <cmath>',
@@ -3228,8 +3227,6 @@ class CodeGenerator:
             '',
             'namespace rocjitsu {',
             'namespace amdgpu {',
-            '',
-            simd_preamble_in_namespace(),
             '',
         ]
 

@@ -12,10 +12,10 @@
 #include "rocjitsu/vm/amdgpu/mem_state.h"
 #include "rocjitsu/isa/arch/amdgpu/shared/addr_calc_scalar.h"
 #include "rocjitsu/isa/arch/amdgpu/shared/transcendental.h"
+#include "rocjitsu/isa/arch/amdgpu/shared/simd_glue.h"
 #include "util/data_types.h"
 #include "util/except.h"
 #include "util/log.h"
-#include "util/simd.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -24,69 +24,6 @@
 
 namespace rocjitsu {
 namespace amdgpu {
-
-#if UTIL_HAS_STDX_SIMD
-namespace stdx = std::experimental;
-#endif
-#define ROCJITSU_HAS_STDX_SIMD UTIL_HAS_STDX_SIMD
-
-/// @brief Explicit-width alias for IEEE-754 binary32. C++23 has
-/// std::float32_t in <stdfloat>; rocjitsu is on C++20 so a local alias.
-using float32_t = float;
-
-/// @brief Per-thread runtime override that disables the SIMD fast path
-/// in kernels that have one. Forwards to util::simd::force_scalar().
-inline bool &simd_force_scalar() { return util::simd::force_scalar(); }
-
-#if UTIL_HAS_STDX_SIMD
-template <typename T, typename Op>
-inline util::simd::native<T> read_simd(const Op &op, const Wavefront &wf,
-                                       uint32_t lane_base) {
-  static_assert(sizeof(T) == sizeof(uint32_t),
-                "read_simd: T must be a 32-bit lane type");
-  return util::simd::load_or_broadcast<T>(op.simd_lane_ptr(wf, lane_base),
-                                          op.read_scalar(wf));
-}
-
-template <typename T, typename Op>
-inline void write_simd(const Op &op, Wavefront &wf, uint32_t lane_base,
-                       util::simd::native<T> v, uint64_t mask) {
-  static_assert(sizeof(T) == sizeof(uint32_t));
-  constexpr std::size_t W = util::simd::native_width_v<T>;
-  if (uint32_t *p = op.simd_dst_ptr(wf, lane_base)) {
-    util::simd::masked_store<T>(p, v, mask);
-    return;
-  }
-  alignas(util::simd::native<T>) uint32_t buf[W];
-  util::simd::blit_to_buffer<T>(buf, v);
-  op.write_lane_chunk(wf, lane_base, static_cast<uint32_t>(W), buf, mask);
-}
-
-template <typename T, typename Inst, typename BinOp>
-[[nodiscard]] inline bool try_execute_binary_vop2_simd(Inst &inst, Wavefront &wf,
-                                                       BinOp bin_op) {
-  if (simd_force_scalar() || !inst.src0.simd_capable() ||
-      !inst.vsrc1.simd_capable() || !inst.vdst.simd_capable())
-    return false;
-  uint64_t exec = wf.exec();
-  constexpr std::size_t W = util::simd::native_width_v<T>;
-  uint64_t chunk_full = (W >= 64) ? ~0ULL : ((1ULL << W) - 1ULL);
-  for (uint32_t base = 0; base < wf.wf_size(); base += static_cast<uint32_t>(W)) {
-    uint64_t chunk = (exec >> base) & chunk_full;
-    if (chunk == 0)
-      continue;
-    auto a = read_simd<T>(inst.src0, wf, base);
-    auto b = read_simd<T>(inst.vsrc1, wf, base);
-    write_simd<T>(inst.vdst, wf, base, bin_op(a, b), chunk);
-  }
-  return true;
-}
-#else
-template <typename T, typename Inst, typename BinOp>
-[[nodiscard]] inline bool try_execute_binary_vop2_simd(Inst &, Wavefront &, BinOp) {
-  return false;
-}
-#endif
 
 template <typename Inst>
 inline void execute_ds_bpermute_b32_ds([[maybe_unused]] Inst &inst,
