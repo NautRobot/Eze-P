@@ -3201,7 +3201,7 @@ class CodeGenerator:
         os.makedirs(shared_dir, exist_ok=True)
 
         from amdisa.codegen.execute.simd_codegen import (
-            simd_extra_includes, simd_preamble_top, simd_preamble_in_namespace,
+            simd_extra_includes, simd_preamble_in_namespace,
             simd_probe_line,
         )
 
@@ -3219,13 +3219,13 @@ class CodeGenerator:
             '#include "util/data_types.h"',
             '#include "util/except.h"',
             '#include "util/log.h"',
+            *simd_extra_includes(),
             '#include <algorithm>',
             '#include <bit>',
             '#include <cmath>',
+            '#include <functional>',
             '#include <limits>',
-            *simd_extra_includes(),
             '',
-            simd_preamble_top(),
             'namespace rocjitsu {',
             'namespace amdgpu {',
             '',
