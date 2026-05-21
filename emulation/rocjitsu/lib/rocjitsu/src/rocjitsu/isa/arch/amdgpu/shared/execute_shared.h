@@ -2117,10 +2117,8 @@ inline void execute_v_add_f16_vop3([[maybe_unused]] Inst &inst, [[maybe_unused]]
 
 template <typename Inst>
 inline void execute_v_add_f32_vop2([[maybe_unused]] Inst &inst, [[maybe_unused]] Wavefront &wf) {
-  if constexpr (util::has_stdx_simd) {
-    if (try_execute_binary_vop2_simd<float32_t>(inst, wf, std::plus<>{}))
-      return;
-  }
+  if (try_execute_binary_vop2_simd<float32_t>(inst, wf, std::plus<>{}))
+    return;
   uint64_t exec = wf.exec();
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))
@@ -2337,10 +2335,8 @@ inline void execute_v_add_u16_vop3([[maybe_unused]] Inst &inst, [[maybe_unused]]
 
 template <typename Inst>
 inline void execute_v_add_u32_vop2([[maybe_unused]] Inst &inst, [[maybe_unused]] Wavefront &wf) {
-  if constexpr (util::has_stdx_simd) {
-    if (try_execute_binary_vop2_simd<uint32_t>(inst, wf, std::plus<>{}))
-      return;
-  }
+  if (try_execute_binary_vop2_simd<uint32_t>(inst, wf, std::plus<>{}))
+    return;
   uint64_t exec = wf.exec();
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))
