@@ -34,11 +34,11 @@ inline bool &simd_force_scalar() { return util::force_scalar(); }
 
 /// SIMD load of an operand at `lane_base`. Returns a contiguous SIMD
 /// load when the operand resolves to per-lane VGPR storage; otherwise
-/// broadcasts the operand's scalar value. The body references
-/// `util::load`/`broadcast` which only have definitions when
-/// `<experimental/simd>` is available, so instantiation outside a
-/// `util::has_stdx_simd`-gated context is a link error.
+/// broadcasts the operand's scalar value. Constrained on
+/// `util::has_stdx_simd` so toolchains without `<experimental/simd>`
+/// remove this overload from the candidate set entirely.
 template <typename T, typename Op>
+  requires(util::has_stdx_simd)
 inline util::native<T> read_simd(const Op &op, const Wavefront &wf, uint32_t lane_base) {
   static_assert(sizeof(T) == sizeof(uint32_t), "read_simd: T must be a 32-bit lane type");
   const uint32_t *p = SimdAccess::lane_ptr(op, wf, lane_base);
@@ -51,6 +51,7 @@ inline util::native<T> read_simd(const Op &op, const Wavefront &wf, uint32_t lan
 /// the lanes whose bit is set in `mask`. Falls back to per-lane
 /// `write_lane_chunk` when the operand is not contiguous VGPR storage.
 template <typename T, typename Op>
+  requires(util::has_stdx_simd)
 inline void write_simd(const Op &op, Wavefront &wf, uint32_t lane_base, util::native<T> v,
                        uint64_t mask) {
   static_assert(sizeof(T) == sizeof(uint32_t));
@@ -67,11 +68,12 @@ inline void write_simd(const Op &op, Wavefront &wf, uint32_t lane_base, util::na
 /// VOP2 binary SIMD fast path. Returns true when the SIMD path executed
 /// and the caller should skip its scalar per-lane loop; false on the
 /// `force_scalar` override or when any operand reports `!simd_capable()`.
-/// Callers must gate the invocation with
-/// `if constexpr (util::has_stdx_simd)` — the body uses `util::native<T>`
-/// and friends which only have definitions when `<experimental/simd>` is
-/// available.
+/// Constrained on `util::has_stdx_simd`; an unconstrained overload
+/// below returns false unconditionally when the constraint cannot be
+/// satisfied, so callers can write the probe without an `if constexpr`
+/// guard.
 template <typename T, typename Inst, typename BinOp>
+  requires(util::has_stdx_simd)
 [[nodiscard]] inline bool try_execute_binary_vop2_simd(Inst &inst, Wavefront &wf, BinOp bin_op) {
   if (simd_force_scalar() || !inst.src0.simd_capable() || !inst.vsrc1.simd_capable() ||
       !inst.vdst.simd_capable())
@@ -88,6 +90,14 @@ template <typename T, typename Inst, typename BinOp>
     write_simd<T>(inst.vdst, wf, base, bin_op(a, b), chunk);
   }
   return true;
+}
+
+/// Unconstrained fallback selected when `util::has_stdx_simd` is false.
+/// Trivially inlined to `return false;` so the generated probe at the
+/// call site costs nothing on toolchains without `<experimental/simd>`.
+template <typename T, typename Inst, typename BinOp>
+[[nodiscard]] inline bool try_execute_binary_vop2_simd(Inst &, Wavefront &, BinOp) {
+  return false;
 }
 
 } // namespace amdgpu

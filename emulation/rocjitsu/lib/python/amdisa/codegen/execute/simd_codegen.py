@@ -5,14 +5,16 @@
 
 Emits an `<experimental/simd>`-based fast path on top of the generated
 scalar per-lane bodies. The scalar body is preserved verbatim as a
-fallback; the SIMD probe is wrapped in `if constexpr` so the branch and
-its call are dropped entirely at compile time on toolchains without
-stdx-simd:
+fallback; the SIMD probe is a single line at the start of the kernel:
 
-    if constexpr (util::has_stdx_simd) {
-      if (try_execute_binary_vop2_simd<T>(inst, wf, op_functor))
-        return;
-    }
+    if (try_execute_binary_vop2_simd<T>(inst, wf, op_functor))
+      return;
+
+`try_execute_binary_vop2_simd` in ``simd_glue.h`` is a constrained
+template (``requires(util::has_stdx_simd)``) plus an unconstrained
+fallback that returns ``false``. On toolchains without
+``<experimental/simd>``, overload resolution picks the fallback and the
+compiler inlines the probe to a dead branch.
 
 Eligible kernels are listed in :data:`SIMD_VOP2_BINARY` — only those
 whose host SIMD result is bit-identical to the scalar generated body
@@ -20,11 +22,6 @@ whose host SIMD result is bit-identical to the scalar generated body
 elementwise bitwise ops). NaN-sensitive ops (min/max), VCC-writing ops
 (add_co), and modifier-bearing forms (VOP3 with abs/neg/clamp/omod) are
 excluded — those need their own helpers.
-
-The SIMD helper templates themselves (`read_simd`, `write_simd`,
-`try_execute_binary_vop2_simd`) live in the hand-maintained header
-``rocjitsu/isa/arch/amdgpu/shared/simd_glue.h``. This module emits only
-the probe-block call sites and the `#include` that pulls the helpers in.
 """
 
 from __future__ import annotations
@@ -48,10 +45,8 @@ def simd_probe_line(template_name: str) -> str | None:
     if spec is None:
         return None
     cpp_t, cpp_op = spec
-    return (f'  if constexpr (util::has_stdx_simd) {{\n'
-            f'    if (try_execute_binary_vop2_simd<{cpp_t}>(inst, wf, {cpp_op}))\n'
-            f'      return;\n'
-            f'  }}')
+    return (f'  if (try_execute_binary_vop2_simd<{cpp_t}>(inst, wf, {cpp_op}))\n'
+            f'    return;')
 
 
 def simd_extra_includes() -> list[str]:
