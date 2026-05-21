@@ -7,6 +7,7 @@
 #include "rocjitsu/isa/arch/amdgpu/cdna2/operand.h"
 #include "rocjitsu/vm/amdgpu/compute_unit.h"
 #include "rocjitsu/vm/amdgpu/wavefront.h"
+#include "util/bit.h"
 #include <algorithm>
 #include <cstring>
 #include <format>
@@ -1168,7 +1169,7 @@ uint32_t vgpr_index(OperandType opr_type, int ev) {
   return static_cast<uint32_t>(ev - 256);
 }
 
-std::optional<uint32_t> resolved_vgpr_offset(OperandType opr_type, int ev) {
+inline std::optional<uint32_t> resolved_vgpr_offset(OperandType opr_type, int ev) {
   if (is_vgpr_only_type(opr_type))
     return vgpr_index(opr_type, ev);
   if (ev >= 256 && ev <= 511)
@@ -1287,7 +1288,7 @@ void Operand::write_lane_chunk(amdgpu::Wavefront &wf, uint32_t lane_base, uint32
     return;
   }
   uint32_t reg = wf.vgpr_alloc().base + *off;
-  uint64_t full_mask = (count >= 64) ? ~0ULL : ((1ULL << count) - 1ULL);
+  uint64_t full_mask = util::mask<uint64_t>(static_cast<int>(count));
   if ((mask & full_mask) == full_mask) {
     uint8_t *dst = wf.cu().vgpr_data(reg);
     std::memcpy(dst + lane_base * sizeof(uint32_t), vals, count * sizeof(uint32_t));
