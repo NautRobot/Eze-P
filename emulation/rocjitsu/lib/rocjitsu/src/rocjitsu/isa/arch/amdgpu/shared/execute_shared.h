@@ -7,12 +7,12 @@
 #ifndef ROCJITSU_ISA_AMDGPU_SHARED_EXECUTE_SHARED_H_
 #define ROCJITSU_ISA_AMDGPU_SHARED_EXECUTE_SHARED_H_
 
-#include "rocjitsu/vm/amdgpu/wavefront.h"
+#include "rocjitsu/isa/arch/amdgpu/shared/addr_calc_scalar.h"
+#include "rocjitsu/isa/arch/amdgpu/shared/simd_glue.h"
+#include "rocjitsu/isa/arch/amdgpu/shared/transcendental.h"
 #include "rocjitsu/vm/amdgpu/compute_unit.h"
 #include "rocjitsu/vm/amdgpu/mem_state.h"
-#include "rocjitsu/isa/arch/amdgpu/shared/addr_calc_scalar.h"
-#include "rocjitsu/isa/arch/amdgpu/shared/transcendental.h"
-#include "rocjitsu/isa/arch/amdgpu/shared/simd_glue.h"
+#include "rocjitsu/vm/amdgpu/wavefront.h"
 #include "util/data_types.h"
 #include "util/except.h"
 #include "util/log.h"
@@ -2117,8 +2117,10 @@ inline void execute_v_add_f16_vop3([[maybe_unused]] Inst &inst, [[maybe_unused]]
 
 template <typename Inst>
 inline void execute_v_add_f32_vop2([[maybe_unused]] Inst &inst, [[maybe_unused]] Wavefront &wf) {
-  if (try_execute_binary_vop2_simd<float32_t>(inst, wf, std::plus<>{}))
-    return;
+  if constexpr (util::has_stdx_simd) {
+    if (try_execute_binary_vop2_simd<float32_t>(inst, wf, std::plus<>{}))
+      return;
+  }
   uint64_t exec = wf.exec();
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))
@@ -2335,8 +2337,10 @@ inline void execute_v_add_u16_vop3([[maybe_unused]] Inst &inst, [[maybe_unused]]
 
 template <typename Inst>
 inline void execute_v_add_u32_vop2([[maybe_unused]] Inst &inst, [[maybe_unused]] Wavefront &wf) {
-  if (try_execute_binary_vop2_simd<uint32_t>(inst, wf, std::plus<>{}))
-    return;
+  if constexpr (util::has_stdx_simd) {
+    if (try_execute_binary_vop2_simd<uint32_t>(inst, wf, std::plus<>{}))
+      return;
+  }
   uint64_t exec = wf.exec();
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))
