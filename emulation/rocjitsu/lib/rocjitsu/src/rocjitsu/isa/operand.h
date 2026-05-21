@@ -265,7 +265,8 @@ public:
   }
 
 private:
-  const uint32_t *simd_lane_ptr(const amdgpu::Wavefront & /*wf*/, uint32_t lane_base) const override {
+  const uint32_t *simd_lane_ptr(const amdgpu::Wavefront & /*wf*/,
+                                uint32_t lane_base) const override {
     if (static_cast<int>(lane_base) >= lane_count_)
       return nullptr;
     return &data_[lane_base];
@@ -288,8 +289,7 @@ struct SimdAccess {
   static const uint32_t *lane_ptr(const Op &op, const Wavefront &wf, uint32_t lane_base) {
     return op.simd_lane_ptr(wf, lane_base);
   }
-  template <typename Op>
-  static uint32_t *dst_ptr(const Op &op, Wavefront &wf, uint32_t lane_base) {
+  template <typename Op> static uint32_t *dst_ptr(const Op &op, Wavefront &wf, uint32_t lane_base) {
     return op.simd_dst_ptr(wf, lane_base);
   }
 };

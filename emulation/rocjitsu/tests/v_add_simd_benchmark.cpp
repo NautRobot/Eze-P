@@ -11,9 +11,9 @@
 /// binary32 single-rounded; matches the host SIMD adder).
 
 #include "rocjitsu/code/rj_code.h"
+#include "rocjitsu/isa/arch/amdgpu/shared/execute_shared.h"
 #include "rocjitsu/isa/decoder.h"
 #include "rocjitsu/isa/instruction.h"
-#include "rocjitsu/isa/arch/amdgpu/shared/execute_shared.h"
 #include "rocjitsu/vm/amdgpu/compute_unit.h"
 #include "rocjitsu/vm/amdgpu/gpu_memory.h"
 #include "rocjitsu/vm/amdgpu/l2_cache.h"
@@ -54,8 +54,7 @@ struct BenchFixture {
   std::unique_ptr<Decoder> decoder;
   amdgpu::Wavefront *wf = nullptr;
 
-  BenchFixture()
-      : gpu_mem("vadd_simd_bench_mem"), l2("vadd_simd_bench_l2") {
+  BenchFixture() : gpu_mem("vadd_simd_bench_mem"), l2("vadd_simd_bench_l2") {
     amdgpu::ComputeUnitCore::Config cfg{};
     cfg.arch = ROCJITSU_CODE_ARCH_CDNA4;
     cfg.num_wf_slots = 1;
@@ -167,15 +166,14 @@ void run_one(const char *label, uint32_t encoding_word, bool sanitize_finite) {
   ModeStats sd = time_mode(fx, inst, /*force_scalar=*/false, SEED, sanitize_finite);
 
   double speedup = (sd.ns_per_inst > 0) ? (sc.ns_per_inst / sd.ns_per_inst) : 0.0;
-  std::printf(
-      "\n  === %s (CDNA4 VOP2, wave64) ===\n"
-      "  iterations: %d  enc: 0x%08x\n"
-      "  scalar : %7.1f ns/inst  (%6.2f MIPS)  wall %.1f ms\n"
-      "  simd   : %7.1f ns/inst  (%6.2f MIPS)  wall %.1f ms\n"
-      "  speedup: %5.2fx\n",
-      label, ITERATIONS, encoding_word, sc.ns_per_inst, sc.mips,
-      static_cast<double>(sc.total_ns) / 1e6, sd.ns_per_inst, sd.mips,
-      static_cast<double>(sd.total_ns) / 1e6, speedup);
+  std::printf("\n  === %s (CDNA4 VOP2, wave64) ===\n"
+              "  iterations: %d  enc: 0x%08x\n"
+              "  scalar : %7.1f ns/inst  (%6.2f MIPS)  wall %.1f ms\n"
+              "  simd   : %7.1f ns/inst  (%6.2f MIPS)  wall %.1f ms\n"
+              "  speedup: %5.2fx\n",
+              label, ITERATIONS, encoding_word, sc.ns_per_inst, sc.mips,
+              static_cast<double>(sc.total_ns) / 1e6, sd.ns_per_inst, sd.mips,
+              static_cast<double>(sd.total_ns) / 1e6, speedup);
 
   EXPECT_GT(sc.mips, 0.01) << label << ": scalar baseline too slow";
   EXPECT_GT(sd.mips, 0.01) << label << ": simd path too slow";
@@ -187,33 +185,35 @@ void run_one(const char *label, uint32_t encoding_word, bool sanitize_finite) {
 
 // v_add_f32 v2, v0, v1  (CDNA4 VOP2 opcode 1)
 TEST(VAddSimdBenchmark, Cdna4_VAddF32_Vop2) {
-#if !ROCJITSU_HAS_STDX_SIMD
-  GTEST_SKIP() << "ROCJITSU_HAS_STDX_SIMD=0 — scalar fallback in use";
-#endif
-  // src0 = 256 (= v0 in VOP2 SRC encoding), vsrc1 = 1 (= v1), vdst = 2 (= v2).
-  uint32_t enc = vop2_encode(/*opcode=*/1, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
-  run_one("v_add_f32 v2, v0, v1", enc, /*sanitize_finite=*/true);
+  if constexpr (!util::has_stdx_simd) {
+    GTEST_SKIP() << "<experimental/simd> unavailable — scalar fallback in use";
+  } else {
+    // src0 = 256 (= v0 in VOP2 SRC encoding), vsrc1 = 1 (= v1), vdst = 2 (= v2).
+    uint32_t enc = vop2_encode(/*opcode=*/1, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
+    run_one("v_add_f32 v2, v0, v1", enc, /*sanitize_finite=*/true);
+  }
 }
 
 // v_add_u32 v2, v0, v1  (CDNA4 VOP2 opcode 52, no carry)
 TEST(VAddSimdBenchmark, Cdna4_VAddU32_Vop2) {
-#if !ROCJITSU_HAS_STDX_SIMD
-  GTEST_SKIP() << "ROCJITSU_HAS_STDX_SIMD=0 — scalar fallback in use";
-#endif
-  uint32_t enc = vop2_encode(/*opcode=*/52, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
-  run_one("v_add_u32 v2, v0, v1", enc, /*sanitize_finite=*/false);
+  if constexpr (!util::has_stdx_simd) {
+    GTEST_SKIP() << "<experimental/simd> unavailable — scalar fallback in use";
+  } else {
+    uint32_t enc = vop2_encode(/*opcode=*/52, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
+    run_one("v_add_u32 v2, v0, v1", enc, /*sanitize_finite=*/false);
+  }
 }
 
 // Diagnostic: report whether the SIMD fast path is compiled in.
 TEST(VAddSimdBenchmark, SimdCompileTimeReport) {
-#if ROCJITSU_HAS_STDX_SIMD
+#if __has_include(<experimental/simd>)
   using simd_u32 = std::experimental::native_simd<uint32_t>;
-  std::printf("\n  ROCJITSU_HAS_STDX_SIMD=1, native_simd<uint32_t>::size() = %zu\n",
+  std::printf("\n  util::has_stdx_simd=true, native_simd<uint32_t>::size() = %zu\n",
               simd_u32::size());
   SUCCEED();
 #else
   // Scalar fallback is documented as correct; missing <experimental/simd> is
   // a host capability, not a defect.
-  GTEST_SKIP() << "ROCJITSU_HAS_STDX_SIMD=0 — SIMD path disabled at compile time";
+  GTEST_SKIP() << "util::has_stdx_simd=false — SIMD path disabled at compile time";
 #endif
 }
