@@ -34,9 +34,10 @@ inline bool &simd_force_scalar() { return util::force_scalar(); }
 
 /// SIMD load of an operand at `lane_base`. Returns a contiguous SIMD
 /// load when the operand resolves to per-lane VGPR storage; otherwise
-/// broadcasts the operand's scalar value. Only callable from contexts
-/// gated on `util::has_stdx_simd`; the body is never instantiated when
-/// `<experimental/simd>` is absent.
+/// broadcasts the operand's scalar value. The body references
+/// `util::load`/`broadcast` which only have definitions when
+/// `<experimental/simd>` is available, so instantiation outside a
+/// `util::has_stdx_simd`-gated context is a link error.
 template <typename T, typename Op>
 inline util::native<T> read_simd(const Op &op, const Wavefront &wf, uint32_t lane_base) {
   static_assert(sizeof(T) == sizeof(uint32_t), "read_simd: T must be a 32-bit lane type");
@@ -64,33 +65,29 @@ inline void write_simd(const Op &op, Wavefront &wf, uint32_t lane_base, util::na
 }
 
 /// VOP2 binary SIMD fast path. Returns true when the SIMD path executed
-/// and the caller should skip its scalar per-lane loop; false otherwise
-/// (force_scalar override, non-SIMD-capable operands, or no
-/// `<experimental/simd>` support at build time).
+/// and the caller should skip its scalar per-lane loop; false on the
+/// `force_scalar` override or when any operand reports `!simd_capable()`.
+/// Callers must gate the invocation with
+/// `if constexpr (util::has_stdx_simd)` — the body uses `util::native<T>`
+/// and friends which only have definitions when `<experimental/simd>` is
+/// available.
 template <typename T, typename Inst, typename BinOp>
 [[nodiscard]] inline bool try_execute_binary_vop2_simd(Inst &inst, Wavefront &wf, BinOp bin_op) {
-  if constexpr (util::has_stdx_simd) {
-    if (simd_force_scalar() || !inst.src0.simd_capable() || !inst.vsrc1.simd_capable() ||
-        !inst.vdst.simd_capable())
-      return false;
-    uint64_t exec = wf.exec();
-    constexpr std::size_t W = util::native_width_v<T>;
-    uint64_t chunk_full = (W >= 64) ? ~0ULL : ((1ULL << W) - 1ULL);
-    for (uint32_t base = 0; base < wf.wf_size(); base += static_cast<uint32_t>(W)) {
-      uint64_t chunk = (exec >> base) & chunk_full;
-      if (chunk == 0)
-        continue;
-      auto a = read_simd<T>(inst.src0, wf, base);
-      auto b = read_simd<T>(inst.vsrc1, wf, base);
-      write_simd<T>(inst.vdst, wf, base, bin_op(a, b), chunk);
-    }
-    return true;
-  } else {
-    (void)inst;
-    (void)wf;
-    (void)bin_op;
+  if (simd_force_scalar() || !inst.src0.simd_capable() || !inst.vsrc1.simd_capable() ||
+      !inst.vdst.simd_capable())
     return false;
+  constexpr std::size_t W = util::native_width_v<T>;
+  const uint64_t chunk_full = util::mask<uint64_t>(static_cast<int>(W));
+  const uint64_t exec = wf.exec();
+  for (uint32_t base = 0; base < wf.wf_size(); base += static_cast<uint32_t>(W)) {
+    const uint64_t chunk = (exec >> base) & chunk_full;
+    if (chunk == 0)
+      continue;
+    const auto a = read_simd<T>(inst.src0, wf, base);
+    const auto b = read_simd<T>(inst.vsrc1, wf, base);
+    write_simd<T>(inst.vdst, wf, base, bin_op(a, b), chunk);
   }
+  return true;
 }
 
 } // namespace amdgpu

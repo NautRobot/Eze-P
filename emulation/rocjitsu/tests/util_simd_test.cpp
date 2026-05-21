@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /// @file util_simd_test.cpp
-/// @brief Generic-core unit tests for util SIMD primitives. Exercises the
-/// header-only helpers (`load`, `broadcast`, `load_or_broadcast`,
-/// `masked_store`, `blit_to_buffer`, `force_scalar`) without any rocjitsu
-/// Operand/Wavefront fixture.
+/// @brief Generic-core unit tests for util SIMD primitives. Header-only,
+/// no rocjitsu Operand/Wavefront fixture.
 
 #include "util/simd.h"
 
@@ -30,38 +28,38 @@ namespace {
 
 constexpr std::size_t kW = util::native_width_v<uint32_t>;
 
-TEST(UtilSimd, LoadOrBroadcast_Contiguous_U32) {
+TEST(UtilSimd, Load_Contiguous_U32) {
   alignas(util::native<uint32_t>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i)
     src[i] = static_cast<uint32_t>(0xDEAD'0000u + i);
-  auto v = util::load_or_broadcast<uint32_t>(src, 0u);
+  auto v = util::load<uint32_t>(src);
   for (std::size_t i = 0; i < kW; ++i)
     EXPECT_EQ(v[i], src[i]) << "lane " << i;
 }
 
-TEST(UtilSimd, LoadOrBroadcast_Contiguous_F32) {
+TEST(UtilSimd, Load_Contiguous_F32) {
   alignas(util::native<float>) uint32_t src[kW];
   std::array<float, kW> expected{};
   for (std::size_t i = 0; i < kW; ++i) {
     expected[i] = 1.5f * static_cast<float>(i) - 7.25f;
     src[i] = std::bit_cast<uint32_t>(expected[i]);
   }
-  auto v = util::load_or_broadcast<float>(src, 0u);
+  auto v = util::load<float>(src);
   for (std::size_t i = 0; i < kW; ++i)
     EXPECT_EQ(v[i], expected[i]) << "lane " << i;
 }
 
-TEST(UtilSimd, LoadOrBroadcast_NullBroadcast_U32) {
+TEST(UtilSimd, Broadcast_U32) {
   constexpr uint32_t kBits = 0xCAFEBABEu;
-  auto v = util::load_or_broadcast<uint32_t>(nullptr, kBits);
+  auto v = util::broadcast<uint32_t>(kBits);
   for (std::size_t i = 0; i < kW; ++i)
     EXPECT_EQ(v[i], kBits) << "lane " << i;
 }
 
-TEST(UtilSimd, LoadOrBroadcast_NullBroadcast_F32) {
+TEST(UtilSimd, Broadcast_F32) {
   constexpr float kVal = -3.14159f;
   const uint32_t bits = std::bit_cast<uint32_t>(kVal);
-  auto v = util::load_or_broadcast<float>(nullptr, bits);
+  auto v = util::broadcast<float>(bits);
   for (std::size_t i = 0; i < kW; ++i)
     EXPECT_EQ(v[i], kVal) << "lane " << i;
 }
@@ -71,8 +69,8 @@ TEST(UtilSimd, MaskedStore_FullMask) {
   alignas(util::native<uint32_t>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i)
     src[i] = 0xA5A5'0000u + i;
-  auto v = util::load_or_broadcast<uint32_t>(src, 0u);
-  const uint64_t full = (kW >= 64) ? ~0ULL : ((1ULL << kW) - 1ULL);
+  auto v = util::load<uint32_t>(src);
+  const uint64_t full = util::mask<uint64_t>(static_cast<int>(kW));
   util::masked_store<uint32_t>(dst, v, full);
   EXPECT_EQ(0, std::memcmp(dst, src, sizeof(dst)));
 }
@@ -84,7 +82,7 @@ TEST(UtilSimd, MaskedStore_PartialMask) {
     dst[i] = 0x1111'1111u;
     src[i] = 0x2222'0000u + i;
   }
-  auto v = util::load_or_broadcast<uint32_t>(src, 0u);
+  auto v = util::load<uint32_t>(src);
   // 0xA... pattern: enable every other lane starting from bit 1.
   uint64_t mask = 0;
   for (std::size_t i = 1; i < kW; i += 2)
@@ -105,7 +103,7 @@ TEST(UtilSimd, MaskedStore_EmptyMask) {
     dst[i] = 0xDEAD'BEEFu;
     src[i] = 0x0BAD'F00Du;
   }
-  auto v = util::load_or_broadcast<uint32_t>(src, 0u);
+  auto v = util::load<uint32_t>(src);
   util::masked_store<uint32_t>(dst, v, 0ULL);
   for (std::size_t i = 0; i < kW; ++i)
     EXPECT_EQ(dst[i], 0xDEAD'BEEFu) << "lane " << i;
@@ -115,7 +113,7 @@ TEST(UtilSimd, BlitToBuffer_F32) {
   alignas(util::native<float>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i)
     src[i] = std::bit_cast<uint32_t>(2.0f * static_cast<float>(i) + 0.5f);
-  auto v = util::load_or_broadcast<float>(src, 0u);
+  auto v = util::load<float>(src);
   alignas(util::native<float>) uint32_t buf[util::native<float>::size()] = {};
   util::blit_to_buffer<float>(buf, v);
   for (std::size_t i = 0; i < kW; ++i)

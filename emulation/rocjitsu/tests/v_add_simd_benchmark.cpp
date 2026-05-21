@@ -187,21 +187,21 @@ void run_one(const char *label, uint32_t encoding_word, bool sanitize_finite) {
 TEST(VAddSimdBenchmark, Cdna4_VAddF32_Vop2) {
   if constexpr (!util::has_stdx_simd) {
     GTEST_SKIP() << "<experimental/simd> unavailable — scalar fallback in use";
-  } else {
-    // src0 = 256 (= v0 in VOP2 SRC encoding), vsrc1 = 1 (= v1), vdst = 2 (= v2).
-    uint32_t enc = vop2_encode(/*opcode=*/1, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
-    run_one("v_add_f32 v2, v0, v1", enc, /*sanitize_finite=*/true);
+    return;
   }
+  // src0 = 256 (= v0 in VOP2 SRC encoding), vsrc1 = 1 (= v1), vdst = 2 (= v2).
+  uint32_t enc = vop2_encode(/*opcode=*/1, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
+  run_one("v_add_f32 v2, v0, v1", enc, /*sanitize_finite=*/true);
 }
 
 // v_add_u32 v2, v0, v1  (CDNA4 VOP2 opcode 52, no carry)
 TEST(VAddSimdBenchmark, Cdna4_VAddU32_Vop2) {
   if constexpr (!util::has_stdx_simd) {
     GTEST_SKIP() << "<experimental/simd> unavailable — scalar fallback in use";
-  } else {
-    uint32_t enc = vop2_encode(/*opcode=*/52, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
-    run_one("v_add_u32 v2, v0, v1", enc, /*sanitize_finite=*/false);
+    return;
   }
+  uint32_t enc = vop2_encode(/*opcode=*/52, /*vdst=*/2, /*vsrc1=*/1, /*src0=*/256);
+  run_one("v_add_u32 v2, v0, v1", enc, /*sanitize_finite=*/false);
 }
 
 // Diagnostic: report whether the SIMD fast path is compiled in.

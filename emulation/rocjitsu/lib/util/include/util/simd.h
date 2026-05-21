@@ -4,6 +4,8 @@
 #ifndef UTIL_SIMD_H_
 #define UTIL_SIMD_H_
 
+#include "util/bit.h"
+
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -48,7 +50,6 @@ template <class T> struct native; // incomplete
 template <class T> inline constexpr std::size_t native_width_v = 0;
 template <class T> native<T> load(const uint32_t *);
 template <class T> native<T> broadcast(uint32_t);
-template <class T> native<T> load_or_broadcast(const uint32_t *, uint32_t);
 template <class T> void masked_store(uint32_t *, native<T>, uint64_t);
 template <class T> void blit_to_buffer(uint32_t *, native<T>);
 #endif
@@ -79,14 +80,6 @@ template <class T> inline native<T> broadcast(uint32_t broadcast_bits) {
     return Val(std::bit_cast<T>(broadcast_bits));
 }
 
-/// Convenience: load when `p != nullptr`, otherwise broadcast.
-/// Prefer `load`/`broadcast` directly when the scalar source is
-/// expensive or can throw — this helper evaluates both arguments
-/// regardless of which path is taken at runtime.
-template <class T> inline native<T> load_or_broadcast(const uint32_t *p, uint32_t broadcast_bits) {
-  return p ? load<T>(p) : broadcast<T>(broadcast_bits);
-}
-
 /// Store `v` into contiguous uint32_t storage at `dst`, blending in only
 /// the lanes whose bit is set in `mask`. If `mask` covers the full SIMD
 /// width, falls through to a straight contiguous store.
@@ -96,7 +89,7 @@ template <class T> inline void masked_store(uint32_t *dst, native<T> v, uint64_t
   static_assert(sizeof(T) == sizeof(uint32_t));
   static_assert(sizeof(Val) == sizeof(Bits));
   constexpr std::size_t W = Bits::size();
-  uint64_t full = (W >= 64) ? ~0ULL : ((1ULL << W) - 1ULL);
+  const uint64_t full = util::mask<uint64_t>(static_cast<int>(W));
   Bits bits = [&] {
     if constexpr (std::is_same_v<T, uint32_t>)
       return v;
