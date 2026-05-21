@@ -221,6 +221,34 @@ public:
   typename Isa::OperandType opr_type_{};
 };
 
+/// @brief AMDGPU-flavored `IsaOperand` that owns the SIMD fast-path
+/// overrides (`simd_capable`, `read_lane_chunk`, `write_lane_chunk`,
+/// `simd_lane_ptr`, `simd_dst_ptr`) so per-arch `Operand` subclasses do
+/// not duplicate the same body across 9 ISAs. The implementations live
+/// in `isa_operand_simd_inl.h` and call into the per-arch `Isa::`
+/// traits struct (`resolved_vgpr_offset`, `is_immediate_type`,
+/// `can_resolve_src_scalar`, `resolve_src_scalar`). Non-AMDGPU arches
+/// (e.g. RISC-V) inherit directly from `IsaOperand` and use the base
+/// `Operand` defaults.
+///
+/// @tparam Isa AMDGPU arch ISA traits providing the SIMD helpers above.
+template <typename Isa> class AmdgpuIsaOperand : public IsaOperand<Isa> {
+public:
+  friend struct amdgpu::SimdAccess;
+
+  using IsaOperand<Isa>::IsaOperand;
+
+  bool simd_capable() const override;
+  void read_lane_chunk(const amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                       uint32_t *out) const override;
+  void write_lane_chunk(amdgpu::Wavefront &wf, uint32_t lane_base, uint32_t count,
+                        const uint32_t *vals, uint64_t mask) const override;
+
+private:
+  const uint32_t *simd_lane_ptr(const amdgpu::Wavefront &wf, uint32_t lane_base) const override;
+  uint32_t *simd_dst_ptr(amdgpu::Wavefront &wf, uint32_t lane_base) const override;
+};
+
 /// @brief DPP-aware operand proxy that applies lane permutation on read.
 ///
 /// Wraps a regular VGPR operand and overrides read_lane() to return
