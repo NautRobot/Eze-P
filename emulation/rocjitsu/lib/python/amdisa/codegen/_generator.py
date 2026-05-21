@@ -3593,7 +3593,7 @@ class CodeGenerator:
         # type means editing this helper, not chasing dispatch through ~8
         # callsites.
         _resolved_vgpr_offset_lines = [
-            'std::optional<uint32_t> resolved_vgpr_offset(OperandType opr_type, int ev) {',
+            'inline std::optional<uint32_t> resolved_vgpr_offset(OperandType opr_type, int ev) {',
             '  if (is_vgpr_only_type(opr_type))',
             '    return vgpr_index(opr_type, ev);',
             '  if (ev >= 256 && ev <= 511)',
@@ -3866,7 +3866,7 @@ class CodeGenerator:
             '    return;\n'
             '  }\n'
             '  uint32_t reg = wf.vgpr_alloc().base + *off;\n'
-            '  uint64_t full_mask = (count >= 64) ? ~0ULL : ((1ULL << count) - 1ULL);\n'
+            '  uint64_t full_mask = util::mask<uint64_t>(static_cast<int>(count));\n'
             '  if ((mask & full_mask) == full_mask) {\n'
             '    uint8_t *dst = wf.cu().vgpr_data(reg);\n'
             '    std::memcpy(dst + lane_base * sizeof(uint32_t), vals, count * sizeof(uint32_t));\n'
@@ -3920,6 +3920,7 @@ class CodeGenerator:
                 (f'rocjitsu/isa/arch/amdgpu/{arch}/operand.h', False),
                 ('rocjitsu/vm/amdgpu/compute_unit.h', False),
                 ('rocjitsu/vm/amdgpu/wavefront.h', False),
+                ('util/bit.h', False),
                 ('algorithm', True),
                 ('cstring', True),
                 ('format', True),

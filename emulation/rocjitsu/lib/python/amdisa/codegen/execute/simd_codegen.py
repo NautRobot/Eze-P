@@ -43,14 +43,7 @@ SIMD_VOP2_BINARY: dict[str, tuple[str, str]] = {
 
 
 def simd_probe_line(template_name: str) -> str | None:
-    """Return the SIMD fast-path probe block for a kernel, or None.
-
-    Emitted as `if constexpr (util::has_stdx_simd) { ... }` so the entire
-    probe — branch, call, and the helper template instantiation — is
-    discarded at compile time on toolchains without `<experimental/simd>`.
-    The discarded substatement is not instantiated, so no scalar-fallback
-    branch survives to the optimizer.
-    """
+    """Return the SIMD fast-path probe block for a kernel, or None."""
     spec = SIMD_VOP2_BINARY.get(template_name)
     if spec is None:
         return None
