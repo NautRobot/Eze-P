@@ -36,13 +36,12 @@ struct Isa : amdgpu::CdnaIsaBase {
   using OperandType = cdna2::OperandType;
   using StatusReg = amdgpu::CdnaStatusReg;
 
-  // SIMD fast-path traits — consumed by IsaOperand<Isa> in
+  // SIMD fast-path traits — consumed by AmdgpuIsaOperand<Isa> in
   // rocjitsu/isa/isa_operand_simd_inl.h. Definitions live in this arch's
-  // operand.cpp alongside the read/write methods.
-  static bool is_immediate_type(OperandType t);
+  // operand.cpp; bodies forward to the anonymous-namespace helpers.
   static std::optional<uint32_t> resolved_vgpr_offset(OperandType opr_type, int ev);
-  static bool can_resolve_src_scalar(int ev);
-  static uint32_t resolve_src_scalar(const amdgpu::Wavefront &wf, int ev);
+  static bool simd_capable_value(OperandType opr_type, int ev);
+  static uint32_t simd_broadcast_value(const amdgpu::Wavefront &wf, OperandType opr_type, int ev);
 };
 
 } // namespace cdna2

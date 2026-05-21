@@ -23,11 +23,7 @@ namespace rocjitsu {
 template <typename Isa> bool AmdgpuIsaOperand<Isa>::simd_capable() const {
   if (this->delegate())
     return this->delegate()->simd_capable();
-  if (Isa::resolved_vgpr_offset(this->opr_type_, this->encoding_value_).has_value())
-    return true;
-  if (Isa::is_immediate_type(this->opr_type_))
-    return true;
-  return Isa::can_resolve_src_scalar(this->encoding_value_);
+  return Isa::simd_capable_value(this->opr_type_, this->encoding_value_);
 }
 
 template <typename Isa>
@@ -42,9 +38,7 @@ void AmdgpuIsaOperand<Isa>::read_lane_chunk(const amdgpu::Wavefront &wf, uint32_
     std::memcpy(out, src + lane_base * sizeof(uint32_t), count * sizeof(uint32_t));
     return;
   }
-  uint32_t v = Isa::is_immediate_type(this->opr_type_) ? static_cast<uint32_t>(this->encoding_value_)
-                                                 : Isa::resolve_src_scalar(wf, this->encoding_value_);
-  std::fill_n(out, count, v);
+  std::fill_n(out, count, Isa::simd_broadcast_value(wf, this->opr_type_, this->encoding_value_));
 }
 
 template <typename Isa>
