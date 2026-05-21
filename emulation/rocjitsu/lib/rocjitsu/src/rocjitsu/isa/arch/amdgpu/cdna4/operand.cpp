@@ -1604,9 +1604,7 @@ void Operand::write_lane_chunk(amdgpu::Wavefront &wf, uint32_t lane_base, uint32
                                const uint32_t *vals, uint64_t mask) const {
   auto off = resolved_vgpr_offset(opr_type_, encoding_value_);
   if (!off) {
-    for (uint32_t i = 0; i < count; ++i)
-      if (mask & (1ULL << i))
-        write_lane(wf, lane_base + i, vals[i]);
+    IsaOperand<Isa>::write_lane_chunk(wf, lane_base, count, vals, mask);
     return;
   }
   uint32_t reg = wf.vgpr_alloc().base + *off;
