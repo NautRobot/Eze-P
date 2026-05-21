@@ -10,8 +10,12 @@
 #include "rocjitsu/isa/isa_traits.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace rocjitsu {
+namespace amdgpu {
+class Wavefront;
+}
 namespace cdna4 {
 
 /// @brief CDNA4 ISA traits (GFX950, Wave64, dedicated AccVGPR file, GFX9 S_WAITCNT).
@@ -35,6 +39,14 @@ struct Isa : amdgpu::CdnaIsaBase {
   using MachineInst = cdna4::MachineInst;
   using OperandType = cdna4::OperandType;
   using StatusReg = amdgpu::CdnaStatusReg;
+
+  // SIMD fast-path traits — consumed by IsaOperand<Isa> in
+  // rocjitsu/isa/isa_operand_simd_inl.h. Definitions live in this arch's
+  // operand.cpp alongside the read/write methods.
+  static bool is_immediate_type(OperandType t);
+  static std::optional<uint32_t> resolved_vgpr_offset(OperandType opr_type, int ev);
+  static bool can_resolve_src_scalar(int ev);
+  static uint32_t resolve_src_scalar(const amdgpu::Wavefront &wf, int ev);
 };
 
 } // namespace cdna4
