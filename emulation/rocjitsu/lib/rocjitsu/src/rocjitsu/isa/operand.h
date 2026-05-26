@@ -231,6 +231,10 @@ public:
 /// (e.g. RISC-V) inherit directly from `IsaOperand` and use the base
 /// `Operand` defaults.
 ///
+/// TODO: this AMDGPU-specific operand machinery could move under the
+/// `isa/arch/amdgpu/shared` directory alongside the other per-arch shared
+/// code; left here for now to keep the SIMD change self-contained.
+///
 /// @tparam Isa AMDGPU arch ISA traits providing the SIMD helpers above.
 template <typename Isa> class AmdgpuIsaOperand : public IsaOperand<Isa> {
 public:

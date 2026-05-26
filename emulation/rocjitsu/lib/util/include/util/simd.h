@@ -43,15 +43,20 @@ template <class T> using native = stdx::native_simd<T>;
 /// Native-SIMD width measured in 32-bit lanes. Convenience constant.
 template <class T> inline constexpr std::size_t native_width_v = native<T>::size();
 #else
-// Fallback declarations so `if constexpr (has_stdx_simd)` discarded
-// branches in callers can still parse references to these names. Bodies
-// are never instantiated because the constexpr condition is `false`.
-template <class T> struct native; // incomplete
-template <class T> inline constexpr std::size_t native_width_v = 0;
-template <class T> native<T> load(const uint32_t *);
-template <class T> native<T> broadcast(uint32_t);
-template <class T> void masked_store(uint32_t *, native<T>, uint64_t);
-template <class T> void blit_to_buffer(uint32_t *, native<T>);
+// Fallback definitions so `if constexpr (has_stdx_simd)` discarded
+// branches compile out even in non-template callers (e.g. gtest TEST
+// bodies), where the discarded branch is still fully type-checked and
+// odr-used. They are never executed: the constexpr condition is `false`
+// and callers skip the SIMD path first.
+template <class T> struct native {
+  static constexpr std::size_t size() { return 1; }
+  constexpr T operator[](std::size_t) const { return T{}; }
+};
+template <class T> inline constexpr std::size_t native_width_v = native<T>::size();
+template <class T> inline native<T> load(const uint32_t *) { return {}; }
+template <class T> inline native<T> broadcast(uint32_t) { return {}; }
+template <class T> inline void masked_store(uint32_t *, native<T>, uint64_t) {}
+template <class T> inline void blit_to_buffer(uint32_t (&)[native<T>::size()], native<T>) {}
 #endif
 
 #if __has_include(<experimental/simd>)

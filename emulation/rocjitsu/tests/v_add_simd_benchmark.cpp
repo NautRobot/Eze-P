@@ -70,17 +70,16 @@ struct BenchFixture {
   // If `sanitize_finite` is set, force each lane to a finite normal IEEE-754
   // binary32 value (no NaN, no Inf, no denormal): clear the sign bit (sign
   // stays zero — we don't need negatives for the host-SIMD equivalence
-  // check), then remap the exponent field into [0x40, 0xBE] so the value
-  // lives in roughly [2^{-63}, 2^{63}). Mantissa untouched. v_add_f32 over
-  // these inputs produces a bit-identical result on host SIMD vs the scalar
-  // generated body.
+  // check), then remap the exponent field into a finite-normal range.
+  // Mantissa untouched. v_add_f32 over these inputs produces a bit-identical
+  // result on host SIMD vs the scalar generated body.
   void seed_inputs(uint64_t seed, bool sanitize_finite = false) {
     std::mt19937_64 rng(seed);
     uint32_t vbase = wf->vgpr_alloc().base;
     auto sanitize = [](uint32_t raw) -> uint32_t {
       uint32_t mantissa = raw & 0x007FFFFFu;
       uint32_t raw_exp = (raw >> 23) & 0xFFu;
-      uint32_t exp = 0x40u | (raw_exp & 0x7Eu); // -> [0x40, 0xBE]
+      uint32_t exp = 0x40u | (raw_exp & 0x7Eu);
       return (exp << 23) | mantissa;
     };
     for (uint32_t lane = 0; lane < WF_SIZE; ++lane) {

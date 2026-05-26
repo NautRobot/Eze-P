@@ -16,19 +16,20 @@
 #include <cstring>
 #include <thread>
 
-#if !__has_include(<experimental/simd>)
-
-TEST(UtilSimd, ToolchainMissingStdxSimd) {
-  GTEST_SKIP() << "<experimental/simd> unavailable; util SIMD helpers skipped.";
-}
-
-#else
-
 namespace {
+
+// Each test skips at runtime when `<experimental/simd>` is unavailable;
+// the SIMD body is type-checked but compiles out via `if constexpr`.
+#define SKIP_IF_NO_SIMD()                                                                          \
+  if constexpr (!util::has_stdx_simd) {                                                            \
+    GTEST_SKIP() << "<experimental/simd> unavailable; util SIMD helpers skipped.";                 \
+    return;                                                                                        \
+  }
 
 constexpr std::size_t kW = util::native_width_v<uint32_t>;
 
 TEST(UtilSimd, Load_Contiguous_U32) {
+  SKIP_IF_NO_SIMD();
   alignas(util::native<uint32_t>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i)
     src[i] = static_cast<uint32_t>(0xDEAD'0000u + i);
@@ -38,6 +39,7 @@ TEST(UtilSimd, Load_Contiguous_U32) {
 }
 
 TEST(UtilSimd, Load_Contiguous_F32) {
+  SKIP_IF_NO_SIMD();
   alignas(util::native<float>) uint32_t src[kW];
   std::array<float, kW> expected{};
   for (std::size_t i = 0; i < kW; ++i) {
@@ -50,6 +52,7 @@ TEST(UtilSimd, Load_Contiguous_F32) {
 }
 
 TEST(UtilSimd, Broadcast_U32) {
+  SKIP_IF_NO_SIMD();
   constexpr uint32_t kBits = 0xCAFEBABEu;
   auto v = util::broadcast<uint32_t>(kBits);
   for (std::size_t i = 0; i < kW; ++i)
@@ -57,6 +60,7 @@ TEST(UtilSimd, Broadcast_U32) {
 }
 
 TEST(UtilSimd, Broadcast_F32) {
+  SKIP_IF_NO_SIMD();
   constexpr float kVal = -3.14159f;
   const uint32_t bits = std::bit_cast<uint32_t>(kVal);
   auto v = util::broadcast<float>(bits);
@@ -65,6 +69,7 @@ TEST(UtilSimd, Broadcast_F32) {
 }
 
 TEST(UtilSimd, MaskedStore_FullMask) {
+  SKIP_IF_NO_SIMD();
   alignas(util::native<uint32_t>) uint32_t dst[kW] = {};
   alignas(util::native<uint32_t>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i)
@@ -76,6 +81,7 @@ TEST(UtilSimd, MaskedStore_FullMask) {
 }
 
 TEST(UtilSimd, MaskedStore_PartialMask) {
+  SKIP_IF_NO_SIMD();
   alignas(util::native<uint32_t>) uint32_t dst[kW];
   alignas(util::native<uint32_t>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i) {
@@ -97,6 +103,7 @@ TEST(UtilSimd, MaskedStore_PartialMask) {
 }
 
 TEST(UtilSimd, MaskedStore_EmptyMask) {
+  SKIP_IF_NO_SIMD();
   alignas(util::native<uint32_t>) uint32_t dst[kW];
   alignas(util::native<uint32_t>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i) {
@@ -110,6 +117,7 @@ TEST(UtilSimd, MaskedStore_EmptyMask) {
 }
 
 TEST(UtilSimd, BlitToBuffer_F32) {
+  SKIP_IF_NO_SIMD();
   alignas(util::native<float>) uint32_t src[kW];
   for (std::size_t i = 0; i < kW; ++i)
     src[i] = std::bit_cast<uint32_t>(2.0f * static_cast<float>(i) + 0.5f);
@@ -133,6 +141,6 @@ TEST(UtilSimd, ForceScalar_ThreadLocal) {
   util::force_scalar() = false;
 }
 
-} // namespace
+#undef SKIP_IF_NO_SIMD
 
-#endif // __has_include(<experimental/simd>)
+} // namespace
