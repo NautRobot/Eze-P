@@ -34,8 +34,8 @@ from __future__ import annotations
 # The functor is invoked as `bin_op(simd<T>, simd<T>) -> simd<T>` inside
 # try_execute_binary_vop2_simd. Use std::*<> for stateless ops.
 SIMD_VOP2_BINARY: dict[str, tuple[str, str]] = {
-    'v_add_f32_vop2': ('float32_t', 'std::plus<>{}'),
-    'v_add_u32_vop2': ('uint32_t',  'std::plus<>{}'),
+    "v_add_f32_vop2": ("float32_t", "std::plus<>{}"),
+    "v_add_u32_vop2": ("uint32_t", "std::plus<>{}"),
 }
 
 
@@ -45,8 +45,10 @@ def simd_probe_line(template_name: str) -> str | None:
     if spec is None:
         return None
     cpp_t, cpp_op = spec
-    return (f'  if (try_execute_binary_vop2_simd<{cpp_t}>(inst, wf, {cpp_op}))\n'
-            f'    return;')
+    return (
+        f"  if (try_execute_binary_vop2_simd<{cpp_t}>(inst, wf, {cpp_op}))\n"
+        f"    return;"
+    )
 
 
 def simd_extra_includes() -> list[str]:

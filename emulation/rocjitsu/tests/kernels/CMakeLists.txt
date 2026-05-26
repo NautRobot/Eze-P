@@ -34,7 +34,10 @@ if(NOT AMDCLANG)
 endif()
 
 if(DEFINED SKIP_DEVICE_KERNELS AND SKIP_DEVICE_KERNELS)
-    message(STATUS "SKIP_DEVICE_KERNELS set - device kernel tests will be disabled")
+    message(
+        STATUS
+        "SKIP_DEVICE_KERNELS set - device kernel tests will be disabled"
+    )
     return()
 endif()
 
