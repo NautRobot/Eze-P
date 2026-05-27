@@ -21,7 +21,7 @@ The following environment variables affect the rocJPEG runtime.
         | Hardware color-space conversion is off by default regardless of the number of cores. 
         | Not used for ``CSS_440`` (4:4:0) chroma subsampling even when enabled.
    * - ``ROCJPEG_LOG_LEVEL``
-     - | Sets the maximum severity of log messages. Level defines the maximum severity of log messages to output.
+     - | Sets the maximum severity of log messages. Each level defines the maximum severity of log messages to output.
        | ``0``: Output critical messages only (default) 
        | ``1``: Output critical and error messages
        | ``2``: Output critical, error, and warning messages
