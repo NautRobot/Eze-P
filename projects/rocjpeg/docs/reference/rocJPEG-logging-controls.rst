@@ -20,4 +20,4 @@ The log level defines the maximum severity of log messages to output. For exampl
 
 .. code:: shell
 
-    ROCJPEG_LOG_LEVEL = 2
+    ROCJPEG_LOG_LEVEL=2
