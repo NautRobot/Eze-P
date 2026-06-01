@@ -3762,7 +3762,7 @@ amdsmi_status_t amdsmi_get_gpu_pci_bandwidth(amdsmi_processor_handle processor_h
  *
  *  @platform{gpu_bm_linux}
  *
- *  @details Give a processor handle @p processor_handle and a pointer to a uint64_t @p
+ *  @details Given a processor handle @p processor_handle and a pointer to a uint64_t @p
  *  bdfid, this function will write the Bus/Device/Function PCI identifier
  *  (BDFID) associated with device @p processor_handle to the value pointed to by
  *  @p bdfid.
@@ -3781,6 +3781,14 @@ amdsmi_status_t amdsmi_get_gpu_pci_bandwidth(amdsmi_processor_handle processor_h
  *  | Bus          | [15: 8] | "location id"    | (LOCATION & 0xFF00)          |
  *  | Device       | [ 7: 3] | "location id"    | (LOCATION & 0xF8)            |
  *  | Function     | [ 2: 0] | "location id"    | (LOCATION & 0x7)             |
+ *
+ *  Note: In some devices, the partition ID may be stored in the function bits
+ *  BDFID[2:0] instead of BDFID[31:28].
+ *
+ *  Note: For MI series devices, the function bits are only used to store the
+ *  partition ID, but this modified BDF is internal to the ROCm stack.
+ *  To the OS, partitions share the same BDF as the unpartitioned device and
+ *  have function bits = 0, which can be verified through lspci.
  *
  *  @param[in] processor_handle a processor handle
  *
