@@ -21,6 +21,9 @@ Full documentation for amd_smi_lib is available at [https://rocm.docs.amd.com/pr
   - Added shadow detection: if `amdsmi` loads from a path other than the resolved expected path (`AMDSMI_PATH`, `ROCM_HOME`, `ROCM_PATH`, or `/opt/rocm` default), tests exit early with a clear error message and remediation steps.
   - Non-root invocations now exit with code 1 immediately with a clear message instead of failing mid-test.
 
+- **Added new alias for `amd-smi set -C/--compute-partition` as `amd-smi set --accelerator-partition`**.
+  - Compute and accelerator partitions are fundamentally the same, so users can now use `--accelerator-partition` to set the compute/accelerator partition.
+
 ### Resolved Issues
 
 - **Fixed `amd-smi static` hanging indefinitely on gfx1153 and gfx950**.  
