@@ -35,14 +35,6 @@ rocprofiler_add_integration_validate_test(
     DISCOVERY_ARGS -k "not test_total_runtime"
     ARGS --input ${CMAKE_CURRENT_BINARY_DIR}/kernel-tracing-test.json)
 
-# test_total_runtime asserts the profiler-measured total kernel-dispatch
-# runtime is within +/-20% of a host-time-derived 1 second target. Because the
-# reproducible-runtime workload budgets by host-measured time (which includes
-# launch/queue overhead) while this checks GPU-measured durations, the measured
-# sum drifts below the lower bound under system/GPU contention. It is therefore
-# registered separately and marked UNSTABLE (disabled when
-# ROCPROFILER_DISABLE_UNSTABLE_CTESTS=ON, the default) while reusing the
-# kernel-tracing execute fixture and its JSON output.
 rocprofiler_add_integration_validate_test(
     kernel-tracing-total-runtime
     TEST_PATHS validate.py
