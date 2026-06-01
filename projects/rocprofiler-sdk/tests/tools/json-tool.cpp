@@ -2149,6 +2149,14 @@ tool_fini(void* tool_data)
     static std::atomic_flag _once = ATOMIC_FLAG_INIT;
     if(_once.test_and_set()) return;
 
+    // Each rocprofiler buffer is double-buffered: a record can land in the
+    // currently-inactive half if a producer races a watermark flush that just
+    // swapped the active buffer. A single flush only drains the active half, so
+    // such a record would be silently lost at shutdown. Flushing, stopping, then
+    // flushing again drains *both* halves (each flush advances the active index),
+    // guaranteeing every emplaced record is delivered. This mirrors the
+    // finalization sequence used by the production rocprofv3 tool.
+    flush();
     stop();
     flush();
 
