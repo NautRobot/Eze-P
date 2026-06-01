@@ -22,8 +22,8 @@ rocprofiler_add_integration_execute_test(
     PRELOAD "$<TARGET_FILE:rocprofiler-sdk-json-tool>"
     FIXTURES_SETUP kernel-tracing)
 
-# Stable structural/logical kernel-tracing validation tests. test_total_runtime
-# is excluded here and registered as its own (unstable) test below.
+# Stable structural/logical kernel-tracing validation tests. test_total_runtime is
+# excluded here and registered as its own (unstable) test below.
 rocprofiler_add_integration_validate_test(
     kernel-tracing
     TEST_PATHS validate.py
