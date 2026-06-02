@@ -654,10 +654,6 @@ static inline ncclResult_t ncclCuMemFree(void *ptr, struct ncclMemManager* manag
   WARN("CUMEM requires ROCM_VERSION >= 7.0.0");
   return ncclInternalError;
 }
-static inline ncclResult_t ncclCuMemFree(void *ptr, struct ncclMemManager* manager, int numSegments = 1) {
-  WARN("CUMEM requires ROCM_VERSION >= 7.0.0");
-  return ncclInternalError;
-}
 
 static inline ncclResult_t ncclCuMemAllocAddr(void **ptr, CUmemGenericAllocationHandle *handleIn, size_t size) {
   WARN("CUMEM requires ROCM_VERSION >= 7.0.0");
