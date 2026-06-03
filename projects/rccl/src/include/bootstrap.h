@@ -34,4 +34,19 @@ ncclResult_t bootstrapIntraNodeAllGather(void* commState, int *ranks, int rank, 
 ncclResult_t bootstrapIntraNodeBroadcast(void* commState, int *ranks, int rank, int nranks, int root, void* bcastData, int size);
 ncclResult_t bootstrapClose(void* commState);
 ncclResult_t bootstrapAbort(void* commState);
+
+// Bootstrap bidirectional AllGather gating. Exposed for unit tests; production
+// callers go through bootstrapInit / bootstrapAllGather. Reads (and depends on
+// the process-global cache of) NCCL_BOOTSTRAP_BIDIR_ALLGATHER,
+// NCCL_BOOTSTRAP_BIDIR_NET, NCCL_BOOTSTRAP_BIDIR_THRESHOLD and
+// NCCL_OOB_NET_ENABLE — same inputs as the dispatcher, so the test can verify
+// the exact contract production uses.
+//   nranks: total ranks in the comm (returns false unconditionally for < 3).
+//   kind:   0 = socket OOB path, 1 = net (IB/OFI) OOB path.
+// Marked visibility("hidden") so the symbol is linkable inside librccl.so for
+// the test TU but never exported in the final shared library; see the matching
+// attribute on the definition in src/bootstrap.cc.
+__attribute__((visibility("hidden")))
+bool bootstrapBidirEnabled(int nranks, int kind);
+
 #endif
