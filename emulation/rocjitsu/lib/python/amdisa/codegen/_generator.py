@@ -3068,7 +3068,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::GLOBAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst')};")
         L.append(f'  d->elem_size = {esz};')
         L.append(f'  d->num_elems = {ne};')
         L.append('  d->is_load = true;')
@@ -3157,7 +3157,7 @@ class CodeGenerator:
         L.append('  flat_calculate_addresses(inst_, wf, *d);')
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t lds_addr_base = {self._vgpr_base_expr('vdst')};')
+        L.append(f"  uint32_t lds_addr_base = {self._vgpr_base_expr('vdst')};")
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
         L.append('    if (!(exec & (1ULL << lane))) continue;')
         L.append(
@@ -3187,7 +3187,7 @@ class CodeGenerator:
         L.append('  auto &cu = wf.cu();')
         L.append('  const auto &lds = cu.lds();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t lds_addr_base = {self._vgpr_base_expr('vsrc')};')
+        L.append(f"  uint32_t lds_addr_base = {self._vgpr_base_expr('vsrc')};")
         L.append(f'  d->store_data.resize(wf.wf_size() * {stride});')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
         L.append('    if (!(exec & (1ULL << lane))) continue;')
@@ -3225,7 +3225,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::GLOBAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst')};")
         L.append(f'  d->elem_size = {sem.elem_size};')
         L.append(f'  d->num_elems = {sem.num_elems};')
         L.append('  d->is_load = true;')
@@ -3252,7 +3252,7 @@ class CodeGenerator:
         self._append_global_addtid_addresses(L)
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t data_base = {self._vgpr_base_expr('vsrc')};')
+        L.append(f"  uint32_t data_base = {self._vgpr_base_expr('vsrc')};")
         L.append('  d->store_data.resize(wf.wf_size() * 4);')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
         L.append('    if (!(exec & (1ULL << lane))) continue;')
@@ -3308,7 +3308,7 @@ class CodeGenerator:
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::GLOBAL_MEM);'
         )
         acc = self._acc_vgpr_expr
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst')};")
         L.append(f'  d->elem_size = {esz};')
         L.append('  d->num_elems = 1;')
         L.append(f'  d->is_load = ({sc0} != 0);')
@@ -3353,7 +3353,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::GLOBAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdata')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdata')};")
         L.append(f'  d->elem_size = {esz};')
         L.append('  d->num_elems = 1;')
         L.append(f'  d->is_load = ({sc0} != 0);')
@@ -3364,7 +3364,7 @@ class CodeGenerator:
         L.append('  mubuf_calculate_addresses(inst_, wf, *d);')
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t data_base = {self._vgpr_base_expr('vdata')};')
+        L.append(f"  uint32_t data_base = {self._vgpr_base_expr('vdata')};")
         stride = data_dwords * 4
         L.append(f'  d->store_data.resize(wf.wf_size() * {stride});')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
@@ -3395,7 +3395,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::LOCAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};")
         L.append(f'  d->elem_size = {esz};')
         L.append('  d->num_elems = 1;')
         # DS atomics always return the old value (like GLC=1).
@@ -3405,7 +3405,7 @@ class CodeGenerator:
         L.append('  ds_calculate_addresses(inst_, wf, *d);')
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t data_base = {self._vgpr_base_expr('data0')};')
+        L.append(f"  uint32_t data_base = {self._vgpr_base_expr('data0')};")
         stride = data_dwords * 4
         L.append(f'  d->store_data.resize(wf.wf_size() * {stride});')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
@@ -3442,7 +3442,7 @@ class CodeGenerator:
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::LOCAL_MEM);'
         )
         if is_rtn:
-            L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};')
+            L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};")
         L.append(f'  d->elem_size = {esz};')
         L.append('  d->num_elems = 1;')
         L.append(f'  d->is_load = {str(is_rtn).lower()};')
@@ -3452,9 +3452,9 @@ class CodeGenerator:
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
         L.append(
-            f'  uint32_t mask_base = {self._vgpr_base_expr('data0', role='Src1')};'
+            f"  uint32_t mask_base = {self._vgpr_base_expr('data0', role='Src1')};"
         )
-        L.append(f'  uint32_t src_base = {self._vgpr_base_expr('data1', role='Src2')};')
+        L.append(f"  uint32_t src_base = {self._vgpr_base_expr('data1', role='Src2')};")
         stride = esz * 2
         L.append(f'  d->store_data.resize(wf.wf_size() * {stride});')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
@@ -3484,7 +3484,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::LOCAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};")
         L.append('  d->elem_size = 4;')
         L.append('  d->num_elems = 1;')
         L.append('  d->is_load = true;')
@@ -3515,7 +3515,7 @@ class CodeGenerator:
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::LOCAL_MEM);'
         )
         if not is_async:
-            L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};')
+            L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst', role='Dst')};")
         L.append('  d->elem_size = 8;')
         L.append('  d->num_elems = 1;')
         L.append(f'  d->is_load = {str(not is_async).lower()};')
@@ -3528,7 +3528,7 @@ class CodeGenerator:
             L.append('  auto &cu = wf.cu();')
             L.append('  uint64_t exec = wf.exec();')
             L.append(
-                f'  uint32_t data_base = {self._vgpr_base_expr('data0', role='Src1')};'
+                f"  uint32_t data_base = {self._vgpr_base_expr('data0', role='Src1')};"
             )
             L.append('  d->store_data.resize(wf.wf_size() * 8);')
             L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
@@ -3590,7 +3590,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::GLOBAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdata')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdata')};")
         L.append(f'  d->elem_size = {esz};')
         L.append(f'  d->num_elems = {ne};')
         L.append('  d->is_load = true;')
@@ -3635,7 +3635,7 @@ class CodeGenerator:
         L.append(f'  {addr_fn}(inst_, wf, *d);')
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t data_base = {self._vgpr_base_expr('vdata')};')
+        L.append(f"  uint32_t data_base = {self._vgpr_base_expr('vdata')};")
         stride = esz * ne
         L.append(f'  d->store_data.resize(wf.wf_size() * {stride});')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
@@ -3674,7 +3674,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::LOCAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst')};")
         L.append(f'  d->elem_size = {esz};')
         L.append(f'  d->num_elems = {ne};')
         L.append('  d->is_load = true;')
@@ -3697,7 +3697,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::LOCAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst')};")
         L.append(f'  d->elem_size = {sem.elem_size};')
         L.append(f'  d->num_elems = {sem.num_elems};')
         L.append('  d->is_load = true;')
@@ -3753,7 +3753,7 @@ class CodeGenerator:
         L.append('  }')
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t data_base = {self._vgpr_base_expr('data0')};')
+        L.append(f"  uint32_t data_base = {self._vgpr_base_expr('data0')};")
         L.append(f'  d->store_data.resize(wf.wf_size() * {sem.elem_size});')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
         L.append('    if (!(exec & (1ULL << lane))) continue;')
@@ -3818,7 +3818,7 @@ class CodeGenerator:
         L.append('  ds_calculate_addresses(inst_, wf, *d);')
         L.append('  auto &cu = wf.cu();')
         L.append('  uint64_t exec = wf.exec();')
-        L.append(f'  uint32_t data_base = {self._vgpr_base_expr('data0')};')
+        L.append(f"  uint32_t data_base = {self._vgpr_base_expr('data0')};")
         stride = esz * ne
         L.append(f'  d->store_data.resize(wf.wf_size() * {stride});')
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
@@ -3889,7 +3889,7 @@ class CodeGenerator:
         L.append(
             '  auto d = std::make_unique<amdgpu::VectorMemState>(amdgpu::LOCAL_MEM);'
         )
-        L.append(f'  d->dst_reg_base = {self._vgpr_base_expr('vdst')};')
+        L.append(f"  d->dst_reg_base = {self._vgpr_base_expr('vdst')};")
         L.append(f'  d->elem_size = {esz};')
         L.append('  d->num_elems = 1;')
         L.append('  d->is_load = true;')
@@ -3898,10 +3898,10 @@ class CodeGenerator:
         L.append('  d->lane_mask = exec;')
         L.append('  d->ds2_active = true;')
         L.append(
-            f'  d->ds2_dst_reg_base = {self._vgpr_base_expr('vdst')} + {dwords_per_access};'
+            f"  d->ds2_dst_reg_base = {self._vgpr_base_expr('vdst')} + {dwords_per_access};"
         )
         L.append(
-            f'  uint32_t addr_base = {self._vgpr_base_expr('addr', use_acc=False)};'
+            f"  uint32_t addr_base = {self._vgpr_base_expr('addr', use_acc=False)};"
         )
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
         L.append('    if (!(exec & (1ULL << lane))) continue;')
@@ -3952,10 +3952,10 @@ class CodeGenerator:
         L.append(f'  d->store_data.resize(wf.wf_size() * {esz});')
         L.append(f'  d->ds2_store_data.resize(wf.wf_size() * {esz});')
         L.append(
-            f'  uint32_t addr_base = {self._vgpr_base_expr('addr', use_acc=False)};'
+            f"  uint32_t addr_base = {self._vgpr_base_expr('addr', use_acc=False)};"
         )
-        L.append(f'  uint32_t data0_base = {self._vgpr_base_expr('data0')};')
-        L.append(f'  uint32_t data1_base = {self._vgpr_base_expr('data1')};')
+        L.append(f"  uint32_t data0_base = {self._vgpr_base_expr('data0')};")
+        L.append(f"  uint32_t data1_base = {self._vgpr_base_expr('data1')};")
         L.append('  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {')
         L.append('    if (!(exec & (1ULL << lane))) continue;')
         L.append('    uint32_t base = cu.read_vgpr(addr_base, lane);')
@@ -4672,11 +4672,12 @@ class CodeGenerator:
                     if inst.name in _size_overrides:
                         ctor_body_parts.append(f'size_ = {_size_overrides[inst.name]};')
 
+                    ctor_body = ''.join(ctor_body_parts)
                     class_ctor_impl_str = (
                         f'{inst.fmt_name}::'
                         f'{inst.fmt_name}(const MachineInst *inst) '
                         f': {init_list} '
-                        f'{{{''.join(ctor_body_parts)}}}'
+                        f'{{{ctor_body}}}'
                     )
                     class_ctor_impl = cgen.Line(class_ctor_impl_str)
                     class_members.extend(public_members)
@@ -6468,6 +6469,7 @@ class CodeGenerator:
                         sub_decode_table_entry_str = []
                         for fn in dte.sub_decode_funcs:
                             if fn != 'decodeInvalid':
+                                class_name = fn.removeprefix('decode')
                                 sub_decode_func_decls.append(
                                     cgen.FunctionDeclaration(
                                         cgen.Value(
@@ -6499,7 +6501,7 @@ class CodeGenerator:
                                         cgen.Block(
                                             [
                                                 cgen.Statement(
-                                                    f'return std::make_unique<{fn.removeprefix('decode')}>(opcode)'
+                                                    f'return std::make_unique<{class_name}>(opcode)'
                                                 )
                                             ]
                                         ),

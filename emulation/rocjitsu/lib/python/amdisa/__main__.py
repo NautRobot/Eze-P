@@ -156,11 +156,16 @@ def _run_multi(args) -> None:
         generated = emit_legalization(dbt_output, results)
         for src, dst, entries in results:
             counts = leg_gen.summary(entries)
+            identity = counts['identity']
+            substitute = counts['substitute']
+            lower = counts['lower']
+            expand = counts['expand']
+            illegal = counts['illegal']
             print(
                 f'  {src} -> {dst}: {len(entries)} entries '
-                f'({counts['identity']} identity, {counts['substitute']} substitute, '
-                f'{counts['lower']} lower, {counts['expand']} expand, '
-                f'{counts['illegal']} illegal)',
+                f'({identity} identity, {substitute} substitute, '
+                f'{lower} lower, {expand} expand, '
+                f'{illegal} illegal)',
                 file=sys.stderr,
             )
         print(f'Generated {len(generated)} files in {dbt_output}', file=sys.stderr)
