@@ -305,6 +305,36 @@ TEST(CfgAnalysis, IndirectBranchHasNoStaticSuccessor) {
   EXPECT_TRUE(blocks[1]->predecessors().empty());
 }
 
+TEST(CfgAnalysis, ReversePostOrderStraightLine) {
+  auto blocks =
+      build_test_blocks({TestOpcode::DefVgpr0, TestOpcode::UseVgpr0, TestOpcode::UseSgpr4});
+  auto scope = block_scope(blocks);
+  auto rpo = reverse_post_order(KernelBlockScope(scope));
+  ASSERT_EQ(rpo.size(), 1u);
+  auto block_instruction_it = rpo[0]->instructions().begin();
+  ASSERT_EQ(block_instruction_it->mnemonic(), "test_def_v0");
+  ++block_instruction_it;
+  ASSERT_EQ(block_instruction_it->mnemonic(), "test_use_v0");
+  ++block_instruction_it;
+  ASSERT_EQ(block_instruction_it->mnemonic(), "test_use_s4");
+}
+
+TEST(CfgAnalysis, ReversePostOrderIfElseDiamond) {
+  auto blocks = build_test_blocks(
+      {TestOpcode::CBranchToElse, TestOpcode::BranchToJoin, TestOpcode::Nop, TestOpcode::End});
+  auto scope = block_scope(blocks);
+  auto rpo = reverse_post_order(KernelBlockScope(scope));
+  assert_EQ(rpo.size(), 3u);
+
+}
+
+TEST(CfgAnalysis, ReversePostOrderSelfLoop) {
+  auto blocks = build_test_blocks({TestOpcode::Nop, TestOpcode::BranchBackToStart});
+  auto scope = block_scope(blocks);
+  auto rpo = reverse_post_order(KernelBlockScope(scope));
+  assert_EQ(rpo.size(), 1u);
+}
+
 TEST(LivenessAnalysis, ExecMaskedVgprDefDoesNotKillInactiveLaneValue) {
   auto blocks = build_test_blocks({TestOpcode::DefVgpr0, TestOpcode::UseVgpr0, TestOpcode::End});
   LivenessAnalysis liveness = analyze_scope(blocks);
@@ -324,6 +354,15 @@ TEST(LivenessAnalysis, FindsDeadSgprAfterLiveSgpr) {
   const Instruction &use = *blocks[0]->instructions().begin();
   EXPECT_TRUE(liveness.is_live_before(use, {RegClass::SGPR, 4, 1}));
   EXPECT_EQ(liveness.find_free_sgpr(&use, 4), 5);
+}
+
+TEST(LivenessAnalysis, FindFreeSgprPair) {
+  auto blocks = build_test_blocks({TestOpcode::UseSgpr4, TestOpcode::End});
+  LivenessAnalysis liveness = analyze_scope(blocks);
+
+  const Instruction &use = *blocks[0]->instructions().begin();
+  EXPECT_TRUE(liveness.is_live_before(use, {RegClass::SGPR, 4, 1}));
+  EXPECT_EQ(liveness.find_free_sgpr_pair(&use, 4), 6);
 }
 
 TEST(LivenessAnalysis, MinFreeVgprForcesScratchAllocationAboveFloor) {
@@ -422,6 +461,32 @@ TEST(LivenessAnalysis, ExplicitBlockSubsetIgnoresOutsideSuccessors) {
   std::vector<BasicBlock *> kernel_blocks{kernel0};
   LivenessAnalysis kernel_liveness{KernelBlockScope(kernel_blocks)};
   EXPECT_FALSE(kernel_liveness.is_live_before(def, {RegClass::VGPR, 0, 1}));
+}
+
+TEST(InstDefUse, DSTOnlySGPR) {
+  const TestInstruction test_inst("test_def_v0", {{RegClass::VGPR, 0, 1}});
+  InstDefUse idu(test_inst);
+  EXPECT_TRUE(idu.defs.contains({RegClass::VGPR, 0, 1}));
+}
+
+TEST(InstDefUse, SRCOnlySGPR) {
+  const TestInstruction test_inst("test_use_s4", {}, {{RegClass::SGPR, 4, 1}});
+  InstDefUse idu(test_inst);
+  EXPECT_TRUE(idu.uses.contains({RegClass::SGPR, 4, 1}));
+}
+
+TEST(InstDefUse, RWSGPR) {
+  const TestInstruction test_inst("test_rw_s4", {{RegClass::SGPR, 4, 1}}, {{RegClass::SGPR, 4, 1}});
+  InstDefUse idu(test_inst);
+  EXPECT_TRUE(idu.defs.contains({RegClass::SGPR, 4, 1}));
+  EXPECT_TRUE(idu.uses.contains({RegClass::SGPR, 4, 1}));
+}
+
+TEST(InstDefUse, Predicated) {
+  const TestInstruction test_inst("test_pred_def_s4", {{RegClass::SGPR, 4, 1}}, {}, PREDICATED_DEF);
+  InstDefUse idu(test_inst);
+  EXPECT_TRUE(idu.defs.contains({RegClass::SGPR, 4, 1}));
+  EXPECT_TRUE(idu.has_predicated_def);
 }
 
 } // namespace
