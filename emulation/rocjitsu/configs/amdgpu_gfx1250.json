@@ -14,7 +14,7 @@
         "unique_id": 1250,
         "marketing_name": "gfx1250",
         "simd_count": 1024,
-        "max_waves_per_simd": 8,
+        "max_waves_per_simd": 20,
         "num_shader_engines": 4,
         "num_shader_arrays_per_engine": 2,
         "num_cu_per_sh": 4,
@@ -51,7 +51,7 @@
               "children": [{
                 "name": "cu[0:8]", "type": "compute_unit",
                 "config": [
-                  { "key": "num_wf_slots", "value": "32" },
+                  { "key": "num_wf_slots", "value": "80" },
                   { "key": "sgprs_per_wf", "value": "128" },
                   { "key": "vgprs_per_wf", "value": "1024" },
                   { "key": "lds_size_kb", "value": "160" }

@@ -9,6 +9,7 @@
 #include "rocjitsu/vm/amdgpu/wavefront.h"
 #include "util/except.h"
 
+#include <cassert>
 #include <cstdint>
 
 namespace rocjitsu::gfx1250 {
@@ -17,6 +18,7 @@ namespace {
 uint32_t scaled_vaddr_factor(const amdgpu::VectorMemState &d) {
   // LLVM folds gfx1250 scale_offset when the scale matches the full memory
   // access size. The encoded immediate offset remains a byte offset.
+  assert(d.elem_size != 0 && d.num_elems != 0);
   return d.elem_size * d.num_elems;
 }
 
@@ -33,8 +35,11 @@ uint32_t read_sreg_m0_operand(amdgpu::Wavefront &wf, uint32_t operand) {
     return static_cast<uint32_t>(wf.vcc());
   if (operand == 107)
     return static_cast<uint32_t>(wf.vcc() >> 32);
-  if (operand >= 108 && operand <= 123)
+  if (operand >= 108 && operand <= 123) {
+    // CommandProcessor aliases TTMP selectors into the wavefront SGPR slice.
+    assert(operand < cu.config().sgprs_per_wf);
     return cu.read_sgpr(base + operand);
+  }
   if (operand == 124)
     return 0;
   if (operand == 125)
@@ -65,6 +70,42 @@ uint32_t buffer_stride(uint32_t srd3) { return (srd3 >> 12) & 0xFFFFu; }
 
 bool buffer_oob_raw(uint32_t srd3) { return (srd3 & 0x8000'0000u) != 0; }
 
+void init_vector_mem_state(amdgpu::Wavefront &wf, amdgpu::VectorMemState &d) {
+  uint64_t exec = wf.exec();
+  d.lane_mask = exec;
+  d.exec_mask = exec;
+  d.wf_size = wf.wf_size();
+  d.wg_id = wf.wg_id();
+  d.wf_id = wf.wf_id();
+  d.cu_path = wf.cu().full_path();
+}
+
+template <typename Inst>
+void flat_global_calculate_addresses(const Inst &inst, amdgpu::Wavefront &wf,
+                                     amdgpu::VectorMemState &d) {
+  auto &cu = wf.cu();
+  init_vector_mem_state(wf, d);
+  uint64_t exec = d.exec_mask;
+  int64_t offset = static_cast<int64_t>(static_cast<int32_t>(inst.ioffset << 8) >> 8);
+  bool saddr_present = has_saddr(inst.saddr);
+  uint64_t saddr_val = saddr_present ? read_sreg64_operand(wf, inst.saddr) : 0;
+  uint32_t scale = saddr_present && inst.scale_offset ? scaled_vaddr_factor(d) : 1;
+  uint32_t vbase = resolved_vgpr_base(wf, inst.vaddr, amdgpu::VgprMsbRole::Src0);
+  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
+    if (!(exec & (1ULL << lane)))
+      continue;
+    uint64_t vaddr;
+    if (saddr_present) {
+      vaddr = cu.read_vgpr(vbase, lane);
+      vaddr *= scale;
+    } else {
+      vaddr =
+          (static_cast<uint64_t>(cu.read_vgpr(vbase + 1, lane)) << 32) | cu.read_vgpr(vbase, lane);
+    }
+    d.per_lane_addr[lane] = saddr_val + vaddr + offset;
+  }
+}
+
 } // namespace
 
 uint64_t smem_calculate_address(const SmemMachineInst &inst, amdgpu::Wavefront &wf) {
@@ -74,96 +115,46 @@ uint64_t smem_calculate_address(const SmemMachineInst &inst, amdgpu::Wavefront &
   int64_t off = static_cast<int64_t>(static_cast<int32_t>(inst.ioffset << 8) >> 8);
   if (has_smem_offset(inst.soffset))
     off += read_sreg_m0_operand(wf, inst.soffset);
-  return base + off;
+  uint64_t addr = base + off;
+  assert((addr & 0x7u) == 0 && "gfx1250 scalar memory address must be 8-byte aligned");
+  return addr;
 }
 
 void flat_calculate_addresses(const VflatMachineInst &inst, amdgpu::Wavefront &wf,
                               amdgpu::VectorMemState &d) {
-  auto &cu = wf.cu();
-  uint64_t exec = wf.exec();
-  d.lane_mask = exec;
-  d.exec_mask = exec;
-  d.wf_size = wf.wf_size();
-  d.wg_id = wf.wg_id();
-  d.wf_id = wf.wf_id();
-  d.cu_path = wf.cu().full_path();
-  int64_t offset = static_cast<int64_t>(static_cast<int32_t>(inst.ioffset << 8) >> 8);
-  uint64_t saddr_val = 0;
-  if (has_saddr(inst.saddr))
-    saddr_val = read_sreg64_operand(wf, inst.saddr);
-  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
-    if (!(exec & (1ULL << lane)))
-      continue;
-    uint32_t vbase = resolved_vgpr_base(wf, inst.vaddr, amdgpu::VgprMsbRole::Src0);
-    uint64_t vaddr;
-    if (has_saddr(inst.saddr)) {
-      vaddr = cu.read_vgpr(vbase, lane);
-      if (inst.scale_offset)
-        vaddr *= scaled_vaddr_factor(d);
-    } else {
-      vaddr =
-          (static_cast<uint64_t>(cu.read_vgpr(vbase + 1, lane)) << 32) | cu.read_vgpr(vbase, lane);
-    }
-    d.per_lane_addr[lane] = saddr_val + vaddr + offset;
-  }
+  flat_global_calculate_addresses(inst, wf, d);
 }
 
 void flat_calculate_addresses(const VglobalMachineInst &inst, amdgpu::Wavefront &wf,
                               amdgpu::VectorMemState &d) {
-  auto &cu = wf.cu();
-  uint64_t exec = wf.exec();
-  d.lane_mask = exec;
-  d.exec_mask = exec;
-  d.wf_size = wf.wf_size();
-  d.wg_id = wf.wg_id();
-  d.wf_id = wf.wf_id();
-  d.cu_path = wf.cu().full_path();
-  int64_t offset = static_cast<int64_t>(static_cast<int32_t>(inst.ioffset << 8) >> 8);
-  uint64_t saddr_val = 0;
-  if (has_saddr(inst.saddr))
-    saddr_val = read_sreg64_operand(wf, inst.saddr);
-  for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
-    if (!(exec & (1ULL << lane)))
-      continue;
-    uint32_t vbase = resolved_vgpr_base(wf, inst.vaddr, amdgpu::VgprMsbRole::Src0);
-    uint64_t vaddr;
-    if (has_saddr(inst.saddr)) {
-      vaddr = cu.read_vgpr(vbase, lane);
-      if (inst.scale_offset)
-        vaddr *= scaled_vaddr_factor(d);
-    } else {
-      vaddr =
-          (static_cast<uint64_t>(cu.read_vgpr(vbase + 1, lane)) << 32) | cu.read_vgpr(vbase, lane);
-    }
-    d.per_lane_addr[lane] = saddr_val + vaddr + offset;
-  }
+  flat_global_calculate_addresses(inst, wf, d);
 }
 
 void flat_calculate_addresses(const VscratchMachineInst &inst, amdgpu::Wavefront &wf,
                               amdgpu::VectorMemState &d) {
   auto &cu = wf.cu();
-  uint64_t exec = wf.exec();
-  d.lane_mask = exec;
-  d.exec_mask = exec;
-  d.wf_size = wf.wf_size();
-  d.wg_id = wf.wg_id();
-  d.wf_id = wf.wf_id();
-  d.cu_path = wf.cu().full_path();
+  init_vector_mem_state(wf, d);
+  uint64_t exec = d.exec_mask;
   int64_t offset = static_cast<int64_t>(static_cast<int32_t>(inst.ioffset << 8) >> 8);
   uint64_t scratch_base = wf.scratch_base();
   uint32_t saddr_val = 0;
   if (has_saddr(inst.saddr))
     saddr_val = read_sreg_m0_operand(wf, inst.saddr);
+  uint32_t vbase = 0;
+  uint32_t scale = 1;
+  if (inst.sve) {
+    vbase = resolved_vgpr_base(wf, inst.vaddr, amdgpu::VgprMsbRole::Src0);
+    if (inst.scale_offset)
+      scale = scaled_vaddr_factor(d);
+  }
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))
       continue;
     uint64_t lane_base = scratch_base + static_cast<uint64_t>(lane) * wf.scratch_lane_size();
     uint32_t vaddr = 0;
     if (inst.sve) {
-      uint32_t vbase = resolved_vgpr_base(wf, inst.vaddr, amdgpu::VgprMsbRole::Src0);
       vaddr = cu.read_vgpr(vbase, lane);
-      if (inst.scale_offset)
-        vaddr *= scaled_vaddr_factor(d);
+      vaddr *= scale;
     }
     d.per_lane_addr[lane] = lane_base + vaddr + saddr_val + offset;
   }
@@ -172,13 +163,8 @@ void flat_calculate_addresses(const VscratchMachineInst &inst, amdgpu::Wavefront
 void mubuf_calculate_addresses(const VbufferMachineInst &inst, amdgpu::Wavefront &wf,
                                amdgpu::VectorMemState &d) {
   auto &cu = wf.cu();
-  uint64_t exec = wf.exec();
-  d.lane_mask = exec;
-  d.exec_mask = exec;
-  d.wf_size = wf.wf_size();
-  d.wg_id = wf.wg_id();
-  d.wf_id = wf.wf_id();
-  d.cu_path = wf.cu().full_path();
+  init_vector_mem_state(wf, d);
+  uint64_t exec = d.exec_mask;
   uint32_t sb = wf.sgpr_alloc().base + inst.rsrc;
   uint32_t srd0 = cu.read_sgpr(sb);
   uint32_t srd1 = cu.read_sgpr(sb + 1);
@@ -190,10 +176,12 @@ void mubuf_calculate_addresses(const VbufferMachineInst &inst, amdgpu::Wavefront
   bool oob_raw = buffer_oob_raw(srd3);
   uint32_t soffset_val = has_smem_offset(inst.soffset) ? read_sreg_m0_operand(wf, inst.soffset) : 0;
   int64_t ioff = static_cast<int64_t>(static_cast<int32_t>(inst.ioffset << 8) >> 8);
+  uint32_t vbase = 0;
+  if (inst.idxen || inst.offen)
+    vbase = resolved_vgpr_base(wf, inst.vaddr, amdgpu::VgprMsbRole::Src0);
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {
     if (!(exec & (1ULL << lane)))
       continue;
-    uint32_t vbase = resolved_vgpr_base(wf, inst.vaddr, amdgpu::VgprMsbRole::Src0);
     uint32_t index = 0;
     uint32_t voffset = 0;
     if (inst.idxen && inst.offen) {
@@ -229,13 +217,8 @@ void mubuf_calculate_addresses(const VbufferMachineInst &inst, amdgpu::Wavefront
 void ds_calculate_addresses(const VdsMachineInst &inst, amdgpu::Wavefront &wf,
                             amdgpu::VectorMemState &d) {
   auto &cu = wf.cu();
-  uint64_t exec = wf.exec();
-  d.lane_mask = exec;
-  d.exec_mask = exec;
-  d.wf_size = wf.wf_size();
-  d.wg_id = wf.wg_id();
-  d.wf_id = wf.wf_id();
-  d.cu_path = wf.cu().full_path();
+  init_vector_mem_state(wf, d);
+  uint64_t exec = d.exec_mask;
   uint32_t addr_base = resolved_vgpr_base(wf, inst.addr, amdgpu::VgprMsbRole::Src0);
   uint32_t offset = (static_cast<uint32_t>(inst.offset1) << 8) | inst.offset0;
   for (uint32_t lane = 0; lane < wf.wf_size(); ++lane) {

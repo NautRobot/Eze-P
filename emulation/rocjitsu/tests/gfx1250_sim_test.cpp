@@ -66,9 +66,16 @@ constexpr uint32_t S_SET_VGPR_MSB = 0xBF860000u;
 // - llvm/lib/Target/AMDGPU/AMDGPULowerVGPREncoding.cpp:
 //   high VGPRs still use the encoded v0-v255 operand window; s_set_vgpr_msb
 //   supplies two high address bits per operand role.
+// - llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.cpp:
+//   GFX12.5 reports four SIMDs per CU, 20 waves per SIMD, and 160 KiB of
+//   addressable local memory.
 constexpr uint32_t kGfx1250ScalarSlots = 128;
 constexpr uint32_t kGfx1250Wave32VgprAllocation = 1024;
 constexpr uint32_t kGfx1250VgprEncodingGranule = 16;
+constexpr uint32_t kGfx1250SimdsPerCu = 4;
+constexpr uint32_t kGfx1250MaxWavesPerSimd = 20;
+constexpr uint32_t kGfx1250WaveSlotsPerCu = kGfx1250SimdsPerCu * kGfx1250MaxWavesPerSimd;
+constexpr uint32_t kGfx1250LdsSizeKb = 160;
 constexpr uint32_t kSdmaOpFence = 5;
 constexpr uint32_t kSdmaOpPollRegmem = 8;
 constexpr uint32_t kSdmaSubopFence64 = 2;
@@ -433,9 +440,12 @@ TEST(Gfx1250ConfigTest, ConfigLoadsTopology) {
   EXPECT_TRUE(loaded.device.present);
   EXPECT_EQ(loaded.device.gfx_target_version, 120500u);
   EXPECT_EQ(loaded.device.simd_count, 1024u);
+  EXPECT_EQ(loaded.device.max_waves_per_simd, kGfx1250MaxWavesPerSimd);
   EXPECT_EQ(loaded.device.num_shader_arrays_per_engine, 2u);
   EXPECT_EQ(loaded.device.num_cu_per_sh, 4u);
+  EXPECT_EQ(loaded.device.simd_per_cu, kGfx1250SimdsPerCu);
   EXPECT_EQ(loaded.device.wave_front_size, 32u);
+  EXPECT_EQ(loaded.device.lds_size_kb, kGfx1250LdsSizeKb);
   EXPECT_EQ(loaded.device.mem_width, 8192u);
   EXPECT_EQ(loaded.device.marketing_name, "gfx1250");
 
@@ -446,8 +456,10 @@ TEST(Gfx1250ConfigTest, ConfigLoadsTopology) {
   auto *cu = soc->xcd(0)->shader_engine(0)->compute_unit(0);
   ASSERT_NE(cu, nullptr);
   EXPECT_EQ(cu->wf_size(), 32u);
+  EXPECT_EQ(cu->config().num_wf_slots, kGfx1250WaveSlotsPerCu);
   EXPECT_EQ(cu->config().sgprs_per_wf, kGfx1250ScalarSlots);
   EXPECT_EQ(cu->config().vgprs_per_wf, kGfx1250Wave32VgprAllocation);
+  EXPECT_EQ(cu->config().lds_size_kb, kGfx1250LdsSizeKb);
   EXPECT_EQ(soc->xcd(0)->command_processor()->vgpr_granularity(), kGfx1250VgprEncodingGranule);
   EXPECT_EQ(soc->xcd(0)->command_processor()->sdma_packet_dialect(),
             amdgpu::SdmaPacketDialect::Gfx1250);
