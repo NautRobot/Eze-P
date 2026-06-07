@@ -246,6 +246,11 @@ class IsaProfile(ABC):
         return False
 
     @property
+    def smem_address_uses_access_size(self) -> bool:
+        """True when generated SMEM address helpers need the access size."""
+        return False
+
+    @property
     def semantic_overrides(self) -> dict[str, tuple[str, ...]]:
         """Per-instruction semantic overrides for this ISA.
 
@@ -1433,6 +1438,10 @@ class Gfx1250Profile(Rdna4Profile):
 
     @property
     def generate_scaled_wmma_vop3px2(self) -> bool:
+        return True
+
+    @property
+    def smem_address_uses_access_size(self) -> bool:
         return True
 
     @property
