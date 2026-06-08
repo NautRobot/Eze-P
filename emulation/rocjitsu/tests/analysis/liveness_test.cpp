@@ -112,14 +112,15 @@ enum class TestOpcode : uint32_t {
   DefVgpr0 = 5,
   UseVgpr0 = 6,
   UseSgpr4 = 7,
-  ReadWriteSgpr4 = 8,
-  PredicatedDefSgpr4 = 9,
-  ImplicitUseSgpr6Pair = 10,
-  DefSgpr4 = 11,
-  CBranchBackToUseSgpr4 = 12,
-  CBranchToElseAfterTwo = 13,
-  IndirectCall = 14,
-  IndirectBranch = 15,
+  UseSgpr7 = 8,
+  ReadWriteSgpr4 = 9,
+  PredicatedDefSgpr4 = 10,
+  ImplicitUseSgpr6Pair = 11,
+  DefSgpr4 = 12,
+  CBranchBackToUseSgpr4 = 13,
+  CBranchToElseAfterTwo = 14,
+  IndirectCall = 15,
+  IndirectBranch = 16,
 };
 
 class TestDecoder : public Decoder {
@@ -143,6 +144,8 @@ public:
       return new TestInstruction("test_use_v0", {}, {{RegClass::VGPR, 0, 1}});
     case TestOpcode::UseSgpr4:
       return new TestInstruction("test_use_s4", {}, {{RegClass::SGPR, 4, 1}});
+    case TestOpcode::UseSgpr7:
+      return new TestInstruction("test_use_s7", {}, {{RegClass::SGPR, 7, 1}});
     case TestOpcode::ReadWriteSgpr4:
       return new TestInstruction("test_rw_s4", {{RegClass::SGPR, 4, 1}}, {{RegClass::SGPR, 4, 1}});
     case TestOpcode::PredicatedDefSgpr4:
@@ -311,12 +314,7 @@ TEST(CfgAnalysis, ReversePostOrderStraightLine) {
   auto scope = block_scope(blocks);
   auto rpo = reverse_post_order(KernelBlockScope(scope));
   ASSERT_EQ(rpo.size(), 1u);
-  auto block_instruction_it = rpo[0]->instructions().begin();
-  ASSERT_EQ(block_instruction_it->mnemonic(), "test_def_v0");
-  ++block_instruction_it;
-  ASSERT_EQ(block_instruction_it->mnemonic(), "test_use_v0");
-  ++block_instruction_it;
-  ASSERT_EQ(block_instruction_it->mnemonic(), "test_use_s4");
+  EXPECT_EQ(blocks[0].get(), rpo[0]);
 }
 
 TEST(CfgAnalysis, ReversePostOrderIfElseDiamond) {
@@ -324,15 +322,32 @@ TEST(CfgAnalysis, ReversePostOrderIfElseDiamond) {
       {TestOpcode::CBranchToElse, TestOpcode::BranchToJoin, TestOpcode::Nop, TestOpcode::End});
   auto scope = block_scope(blocks);
   auto rpo = reverse_post_order(KernelBlockScope(scope));
-  assert_EQ(rpo.size(), 3u);
-
+  ASSERT_EQ(rpo.size(), 4u);
+  EXPECT_EQ(rpo[0], blocks[0].get());
+  EXPECT_EQ(rpo[1], blocks[1].get());
+  EXPECT_EQ(rpo[2], blocks[2].get());
+  EXPECT_EQ(rpo[3], blocks[3].get());
 }
+
+TEST(CfgAnalysis, ReversePostOrderChangedOrder) {
+  auto blocks = build_test_blocks(
+      {TestOpcode::BranchToJoin, TestOpcode::BranchToJoin, TestOpcode::BranchBackToStart, TestOpcode::End});
+  auto scope = block_scope(blocks);
+  auto rpo = reverse_post_order(KernelBlockScope(scope));
+  ASSERT_EQ(rpo.size(), 4u);
+  EXPECT_EQ(rpo[0], blocks[0].get());
+  EXPECT_EQ(rpo[1], blocks[2].get());
+  EXPECT_EQ(rpo[2], blocks[1].get());
+  EXPECT_EQ(rpo[3], blocks[3].get());
+}
+
 
 TEST(CfgAnalysis, ReversePostOrderSelfLoop) {
   auto blocks = build_test_blocks({TestOpcode::Nop, TestOpcode::BranchBackToStart});
   auto scope = block_scope(blocks);
   auto rpo = reverse_post_order(KernelBlockScope(scope));
-  assert_EQ(rpo.size(), 1u);
+  ASSERT_EQ(rpo.size(), 1u);
+  EXPECT_EQ(blocks[0].get(), rpo[0]);
 }
 
 TEST(LivenessAnalysis, ExecMaskedVgprDefDoesNotKillInactiveLaneValue) {
@@ -356,13 +371,23 @@ TEST(LivenessAnalysis, FindsDeadSgprAfterLiveSgpr) {
   EXPECT_EQ(liveness.find_free_sgpr(&use, 4), 5);
 }
 
-TEST(LivenessAnalysis, FindFreeSgprPair) {
+TEST(LivenessAnalysis, FindValidSgprPair) {
   auto blocks = build_test_blocks({TestOpcode::UseSgpr4, TestOpcode::End});
   LivenessAnalysis liveness = analyze_scope(blocks);
 
   const Instruction &use = *blocks[0]->instructions().begin();
   EXPECT_TRUE(liveness.is_live_before(use, {RegClass::SGPR, 4, 1}));
   EXPECT_EQ(liveness.find_free_sgpr_pair(&use, 4), 6);
+}
+
+TEST(LivenessAnalysis, FindSgprPairSkipsStraddle) {
+  auto blocks = build_test_blocks({TestOpcode::UseSgpr4, TestOpcode::UseSgpr7, TestOpcode::End});
+  LivenessAnalysis liveness = analyze_scope(blocks);
+
+  const Instruction &use = *blocks[0]->instructions().begin();
+  EXPECT_TRUE(liveness.is_live_before(use, {RegClass::SGPR, 4, 1}));
+  EXPECT_TRUE(liveness.is_live_before(use, {RegClass::SGPR, 7, 1}));
+  EXPECT_EQ(liveness.find_free_sgpr_pair(&use, 4), 8);
 }
 
 TEST(LivenessAnalysis, MinFreeVgprForcesScratchAllocationAboveFloor) {
