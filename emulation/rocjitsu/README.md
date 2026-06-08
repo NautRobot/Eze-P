@@ -69,6 +69,7 @@ lib/
         dbt/generated/  Auto-generated legalization tables and encoding translation data tables
       vm/               Virtual machine layer
         amdgpu/         AMD GPU hardware model (CU, SE, XCD, caches, pipelines)
+        plugins/        Execution plugins (e.g. kernel logging)
         risc_v/         RISC-V hart model
       kmd/linux/        KMD emulation: LD_PRELOAD interposer + simulated KFD driver
 lib/python/amdisa/      ISA code generation toolchain

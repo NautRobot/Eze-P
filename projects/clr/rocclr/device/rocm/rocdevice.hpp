@@ -509,6 +509,10 @@ class Device : public NullDevice {
   //! return a new device pointer accessible by the GPU agent.
   void* hostLock(void* hostMem, size_t size, MemorySegment memSegment) const;
 
+  //! Symmetric counterpart to hostLock(): revoke this device's GPU access to the
+  //! pinned range (SVM-API/HMM path only) and then unlock it.
+  void hostUnlock(void* hostMem, size_t size) const;
+
   //! Returns transfer engine object
   const device::BlitManager& xferMgr() const { return xferQueue()->blitMgr(); }
 
@@ -785,12 +789,6 @@ class Device : public NullDevice {
   friend void callbackQueue(hsa_status_t status, hsa_queue_t* queue, void* data);
 
  public:
-
-  //! Count of schedulerQueue_ instances per device
-  //! Windows AQL device-enqueue path.
-  std::atomic<uint32_t> hasSchedulerQueue_{0};
-  static std::atomic<bool> skipHsaShutdown_;
-
   std::atomic<uint> numOfVgpus_;  //!< Virtual gpu unique index
 
   //! Returns the valid SDMA engine bitmask for the given operation type.
