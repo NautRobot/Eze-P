@@ -1222,7 +1222,8 @@ hipError_t hipStreamEndCapture_common(hipStream_t stream, hip::Graph** pGraph) {
     *pGraph = nullptr;
     // When capture is invalidated, graph should be deleted, otherwise it leaks
     s->ReleaseCaptureGraph();
-
+    // Reset capture state to None so the stream is usable after a failed capture
+    (void)s->EndCapture();
     return hipErrorStreamCaptureInvalidated;
   }
 
@@ -2786,6 +2787,11 @@ hipError_t hipGraphAddMemAllocNode(hipGraphNode_t* pGraphNode, hipGraph_t graph,
   // The address must be provided during the node creation time
   pNodeParams->dptr =
       (HIP_MEM_POOL_USE_VM) ? mem_alloc_node->ReserveAddress() : mem_alloc_node->Execute();
+  if (pNodeParams->dptr == nullptr) {
+    amd::ScopedLock lock(hip::Graph::graphSetLock_);
+    hgraph->RemoveNode(node);
+    HIP_RETURN(hipErrorOutOfMemory);
+  }
   *pGraphNode = reinterpret_cast<hipGraphNode_t>(node);
   amd::ScopedLock lock(hip::Graph::graphSetLock_);
   hgraph->memAllocNodePtrs_.insert(pNodeParams->dptr);
