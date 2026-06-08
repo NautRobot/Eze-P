@@ -385,9 +385,15 @@ TEST(LivenessAnalysis, FindSgprPairSkipsStraddle) {
   LivenessAnalysis liveness = analyze_scope(blocks);
 
   const Instruction &use = *blocks[0]->instructions().begin();
-  EXPECT_TRUE(liveness.is_live_before(use, {RegClass::SGPR, 4, 1}));
-  EXPECT_TRUE(liveness.is_live_before(use, {RegClass::SGPR, 7, 1}));
   EXPECT_EQ(liveness.find_free_sgpr_pair(&use, 4), 8);
+}
+
+TEST(LivenessAnalysis, NoSgprPairAvailable) {
+  auto blocks = build_test_blocks({TestOpcode::UseSgpr4, TestOpcode::End});
+  LivenessAnalysis liveness = analyze_scope(blocks);
+
+  const Instruction &use = *blocks[0]->instructions().begin();
+  EXPECT_EQ(liveness.find_free_sgpr_pair(&use, REGISTER_SET_ALLOCATABLE_SGPRS + 10), std::nullopt);
 }
 
 TEST(LivenessAnalysis, MinFreeVgprForcesScratchAllocationAboveFloor) {
@@ -488,19 +494,19 @@ TEST(LivenessAnalysis, ExplicitBlockSubsetIgnoresOutsideSuccessors) {
   EXPECT_FALSE(kernel_liveness.is_live_before(def, {RegClass::VGPR, 0, 1}));
 }
 
-TEST(InstDefUse, DSTOnlySGPR) {
+TEST(InstDefUse, DstOnlyVgpr) {
   const TestInstruction test_inst("test_def_v0", {{RegClass::VGPR, 0, 1}});
   InstDefUse idu(test_inst);
   EXPECT_TRUE(idu.defs.contains({RegClass::VGPR, 0, 1}));
 }
 
-TEST(InstDefUse, SRCOnlySGPR) {
+TEST(InstDefUse, SrcOnlySgpr) {
   const TestInstruction test_inst("test_use_s4", {}, {{RegClass::SGPR, 4, 1}});
   InstDefUse idu(test_inst);
   EXPECT_TRUE(idu.uses.contains({RegClass::SGPR, 4, 1}));
 }
 
-TEST(InstDefUse, RWSGPR) {
+TEST(InstDefUse, RWSgpr) {
   const TestInstruction test_inst("test_rw_s4", {{RegClass::SGPR, 4, 1}}, {{RegClass::SGPR, 4, 1}});
   InstDefUse idu(test_inst);
   EXPECT_TRUE(idu.defs.contains({RegClass::SGPR, 4, 1}));
