@@ -191,8 +191,8 @@ record_header_buffer::load(std::fstream& _fs)
         {
             auto& _hdr = m_headers.at(i);
             if(_hdr.payload != nullptr)
-                _hdr.payload = reinterpret_cast<void*>(
-                    reinterpret_cast<uintptr_t>(_hdr.payload) - _old_addr + _new_addr);
+                _hdr.payload = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(_hdr.payload) -
+                                                       _old_addr + _new_addr);
         }
     }
 }
