@@ -513,14 +513,6 @@ TEST(InstDefUse, RWSgpr) {
   EXPECT_TRUE(idu.uses.contains({RegClass::SGPR, 4, 1}));
 }
 
-/*
-TEST(InstDefUse, IsExecMaskedDef) {
-  EXPECT_FALSE(is_exec_masked_def({RegClass::SGPR, 4, 1}));
-  EXPECT_TRUE(is_exec_masked_def({RegClass::VGPR, 4, 1}));
-  EXPECT_TRUE(is_exec_masked_def({RegClass::ACC_VGPR, 4, 1}));
-}
-*/
-
 TEST(InstDefUse, Predicated) {
   const TestInstruction test_inst("test_pred_def_s4", {{RegClass::SGPR, 4, 1}}, {}, PREDICATED_DEF);
   InstDefUse idu(test_inst);
