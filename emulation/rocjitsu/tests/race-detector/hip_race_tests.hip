@@ -169,7 +169,7 @@ static constexpr auto npos = std::string::npos;
 
 class RaceTest : public ::testing::Test {
 protected:
-  // Returned pointers are device pointers. Not freed (process exits via _exit).
+  // Returned pointers are device pointers. Not freed (process exits).
 
   template <typename T>
   T *alloc(int n) {
@@ -1180,9 +1180,7 @@ TEST_F(RaceTest, f64_vgpr_safe) {
   ExpectNoRace();
 }
 
-// Custom main: _exit() avoids hangs during HIP runtime cleanup.
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  int rc = RUN_ALL_TESTS();
-  _exit(rc);
+  return RUN_ALL_TESTS();
 }
