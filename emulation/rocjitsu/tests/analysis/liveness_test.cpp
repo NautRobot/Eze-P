@@ -330,8 +330,8 @@ TEST(CfgAnalysis, ReversePostOrderIfElseDiamond) {
 }
 
 TEST(CfgAnalysis, ReversePostOrderChangedOrder) {
-  auto blocks = build_test_blocks(
-      {TestOpcode::BranchToJoin, TestOpcode::BranchToJoin, TestOpcode::BranchBackToStart, TestOpcode::End});
+  auto blocks = build_test_blocks({TestOpcode::BranchToJoin, TestOpcode::BranchToJoin,
+                                   TestOpcode::BranchBackToStart, TestOpcode::End});
   auto scope = block_scope(blocks);
   auto rpo = reverse_post_order(KernelBlockScope(scope));
   ASSERT_EQ(rpo.size(), 4u);
@@ -340,7 +340,6 @@ TEST(CfgAnalysis, ReversePostOrderChangedOrder) {
   EXPECT_EQ(rpo[2], blocks[1].get());
   EXPECT_EQ(rpo[3], blocks[3].get());
 }
-
 
 TEST(CfgAnalysis, ReversePostOrderSelfLoop) {
   auto blocks = build_test_blocks({TestOpcode::Nop, TestOpcode::BranchBackToStart});
