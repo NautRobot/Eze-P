@@ -1132,6 +1132,54 @@ TEST_F(RaceTest, waw_global_load_then_alu) {
   ExpectNoRace();
 }
 
+// --- f64 VGPR race (64-bit global load + use without waitcnt) ---
+// Loads a double via global_load_dwordx2 into a VGPR pair, then
+// consumes it with v_fma_f64 without an intervening s_waitcnt.
+// Exercises 64-bit VGPR race detection through the scalar read_lane64
+// path (v_fma_f64 does not currently have a SIMD fast-path probe).
+
+__global__ void f64_vgpr_race_kernel(const double *src, double *dst) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  double val, result;
+  asm volatile(
+      "global_load_dwordx2 %0, %2, off\n"
+      "s_nop 0\n"
+      "v_fma_f64 %1, %0, 1.0, 1.0\n"
+      : "=&v"(val), "=v"(result) : "v"(&src[tid])
+  );
+  dst[tid] = result;
+}
+
+__global__ void f64_vgpr_safe_kernel(const double *src, double *dst) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  double val, result;
+  asm volatile(
+      "global_load_dwordx2 %0, %2, off\n"
+      "s_waitcnt vmcnt(0)\n"
+      "v_fma_f64 %1, %0, 1.0, 1.0\n"
+      : "=&v"(val), "=v"(result) : "v"(&src[tid])
+  );
+  dst[tid] = result;
+}
+
+TEST_F(RaceTest, f64_vgpr_race) {
+  double *src = allocWithData<double>(64);
+  double *dst = alloc<double>(64);
+  f64_vgpr_race_kernel<<<1, 64>>>(src, dst);
+  sync();
+  auto r = records();
+  ASSERT_GE(r.size(), 1u);
+  EXPECT_NE(r[0].type.find("VGPR"), npos);
+}
+
+TEST_F(RaceTest, f64_vgpr_safe) {
+  double *src = allocWithData<double>(64);
+  double *dst = alloc<double>(64);
+  f64_vgpr_safe_kernel<<<1, 64>>>(src, dst);
+  sync();
+  ExpectNoRace();
+}
+
 // Custom main: _exit() avoids hangs during HIP runtime cleanup.
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
