@@ -95,12 +95,17 @@ The relationship is therefore:
 ```text
 System
  └── Socket 0  (physical GPU / OAM)      ← amdsmi_socket_handle
-      ├── Processor 0  (XCP 0 / logical GPU)  ← amdsmi_processor_handle
-      ├── Processor 1  (XCP 1 / logical GPU)  ← amdsmi_processor_handle
+      ├── Processor 0  (XCP 0 / logical GPU / primary)    ← amdsmi_processor_handle: gpu_metrics + xcp_metrics (e.g. renderD128)
+      ├── Processor 1  (XCP 1 / logical GPU / secondary)  ← amdsmi_processor_handle: xcp_metrics only         (e.g. renderD129)
       └── ...  (count depends on active partition mode)
  └── Socket 1  (physical GPU / OAM)
       └── ...
 ```
+
+AMD SMI treats Processor 0 (XCP 0) as the device's **primary partition**. The primary
+partition has full visibility into **both device-level and partition-level metrics** and can
+manage the whole physical GPU. All other partitions are **secondary partitions**, scoped to
+their own resources.
 
 **Practical implications**
 
@@ -113,6 +118,12 @@ System
 - Metrics such as socket power (`socket_power`, `average_socket_power`) are reported at
   the socket level and reflect the total physical GPU. Per-XCP metrics (clocks, utilization,
   violations) are reported at the processor handle level.
+- Partition (XCP) and device-level metrics come from **separate sysfs sources**. The
+  device-wide `gpu_metrics` node exists only on the **primary partition** (XCP 0, e.g.
+  `renderD128/device/gpu_metrics`), so only the primary partition can report whole-GPU
+  values such as board power. **Secondary partitions** expose only their own `xcp_metrics`
+  (e.g. `renderD129/device/xcp/xcp_metrics`) and therefore report metrics scoped to that
+  partition — the device-wide set is not present on their node.
 - On a bare-metal system `amdsmi_get_socket_handles()` returns one handle per physical
   GPU. On a hypervisor host the socket model reflects the physical topology. Inside an
   SR-IOV guest, each assigned VF appears as a separate processor handle, but the socket
