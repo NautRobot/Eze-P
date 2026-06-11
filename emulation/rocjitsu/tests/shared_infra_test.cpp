@@ -24,6 +24,7 @@
 #include "rocjitsu/vm/amdgpu/l2_cache.h"
 
 #include "simdojo/sim/simulation.h"
+#include "util/bit.h"
 
 #include <gtest/gtest.h>
 
@@ -66,6 +67,12 @@ static_assert(kCdnaAccVgprsPerWf == 256);
 static_assert(cdna3::Isa::MAX_ACC_VGPRS_PER_WF == kCdnaAccVgprsPerWf);
 static_assert(cdna4::Isa::MAX_ACC_VGPRS_PER_WF == kCdnaAccVgprsPerWf);
 static_assert(gfx1250::Isa::MAX_ACC_VGPRS_PER_WF == 0);
+
+TEST(UtilBitTest, IsAlignedChecksPowerOfTwoAlignment) {
+  EXPECT_TRUE(util::is_aligned<uint64_t>(0x1000u, 4u));
+  EXPECT_TRUE(util::is_aligned<uint32_t>(0u, 8u));
+  EXPECT_FALSE(util::is_aligned<uint64_t>(0x1003u, 4u));
+}
 
 // ---------------------------------------------------------------------------
 // MFMA register layout tests

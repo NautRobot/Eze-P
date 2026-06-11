@@ -2760,7 +2760,11 @@ class CodeGenerator:
         L.append('  d->is_load = true;')
         self._append_wait_counter_type(L, 'smem_load')
         L.append(f'  d->mtype = {self._mtype_expr(is_smem=True)};')
-        L.append('  d->addr = smem_calculate_address(inst_, wf);')
+        if self.isa_spec.profile.smem_address_uses_access_size:
+            addr_args = 'inst_, wf, d->elem_size * d->num_dwords'
+        else:
+            addr_args = 'inst_, wf'
+        L.append(f'  d->addr = smem_calculate_address({addr_args});')
         # Counter increment handled by MemoryPipeline::issue().
         L.append('  set_data(std::move(d));')
         return '\n'.join(L)
@@ -2772,6 +2776,8 @@ class CodeGenerator:
         nd = sem.num_elems
         L.append('  auto d = std::make_unique<amdgpu::ScalarMemState>();')
         L.append(f'  d->num_dwords = {nd};')
+        if self.isa_spec.profile.smem_address_uses_access_size:
+            L.append('  d->elem_size = 4;')
         L.append('  d->is_load = false;')
         self._append_wait_counter_type(L, 'smem_store')
         L.append(f'  d->mtype = {self._mtype_expr(is_smem=True)};')
@@ -2779,7 +2785,11 @@ class CodeGenerator:
         L.append('  uint32_t sdata_base = wf.sgpr_alloc().base + inst_.sdata;')
         L.append(f'  for (uint32_t i = 0; i < {nd}; ++i)')
         L.append('    d->store_data[i] = cu.read_sgpr(sdata_base + i);')
-        L.append('  d->addr = smem_calculate_address(inst_, wf);')
+        if self.isa_spec.profile.smem_address_uses_access_size:
+            addr_args = 'inst_, wf, d->elem_size * d->num_dwords'
+        else:
+            addr_args = 'inst_, wf'
+        L.append(f'  d->addr = smem_calculate_address({addr_args});')
         # Counter increment handled by MemoryPipeline::issue().
         L.append('  set_data(std::move(d));')
         return '\n'.join(L)
