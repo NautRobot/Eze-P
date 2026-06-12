@@ -33,6 +33,13 @@ Full documentation for amd_smi_lib is available at [https://rocm.docs.amd.com/pr
 - **Added new alias for `amd-smi set -C/--compute-partition` as `amd-smi set --accelerator-partition`**.  
   - Compute and accelerator partitions are fundamentally the same, so users can now use `--accelerator-partition` to set the compute/accelerator partition.
 
+- **Added input validation for CPU `set` commands**.
+  - Out-of-range values are now rejected with a clear error showing the valid range:
+    - `--cpu-xgmi-link-width` (0-1)
+    - `--cpu-gmi3-link-width` (0-2)
+    - `--cpu-lclk-dpm-level` (0-3)
+    - `--cpu-disable-apb` (0-3)
+  - `--cpu-pwr-limit` values above the socket maximum are now reduced to the maximum and applied, with a warning.
 - **Added compute partition memory allocation mode API**.  
   - New `amd-smi static --partition` output includes `COMPUTE_PARTITION_MEM_ALLOC_MODE` field.
   - New `amd-smi set --compute-partition-mem-alloc-mode [CAPPING|ALL]` to control memory allocation mode (requires sudo).
