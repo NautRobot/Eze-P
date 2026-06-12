@@ -61,9 +61,22 @@ namespace
 {
 
 // 8 GPUs / 6 leaf / multi-NIC model. GPU rank 0 lives on NUMA 0 and reaches
-// 3 NICs (mlx5_0/1/2).
+// 3 NICs (mlx5_0/1/2), shared with the other 3 GPUs on that NUMA node.
 const char* kTopoXmlPath =
     RCCL_TEST_SOURCE_DIR "/../tools/topo_expl/models/topo_8p6l_5nic.xml";
+
+// 8 GPUs / 2 NICs sparse model. The interior GPUs (e.g. rank 1) have no
+// directly-attached NIC, so their closest NIC set is the 2 NICs (mlx5_0,
+// mlx5_2) reached at equal distance, while only 1 GPU sits closest to that
+// first NIC. This isolates AUTO's divide-NICs-across-GPUs behavior with
+// localNetCount(2) > localGpuCount(1): ceil(2 / 1) = 2, a non-degenerate value
+// (unlike the 5nic model where AUTO collapses to ceil(3 / 4) = 1).
+const char* kTopoNicsGtGpusXmlPath =
+    RCCL_TEST_SOURCE_DIR "/../tools/topo_expl/models/topo_8p_ts1.xml";
+
+// Rank inside kTopoNicsGtGpusXmlPath whose local NIC pool exceeds the GPUs
+// sharing it (see scan: ranks 1..6 all yield nets=2, gpus=1).
+constexpr int kAutoRank = 1;
 
 // Rank under test.
 constexpr int kRank = 0;
@@ -147,12 +160,14 @@ struct MockComm
     MockComm& operator=(const MockComm&) = delete;
 };
 
-// Load the fixture, compute paths, run body(system), then free.
-void withTopoSystem(const std::function<void(struct ncclTopoSystem*)>& body)
+// Load the given fixture (defaults to the 8p6l/5nic model), compute paths, run
+// body(system), then free.
+void withTopoSystem(const std::function<void(struct ncclTopoSystem*)>& body,
+                    const char* topoPath = kTopoXmlPath)
 {
     struct ncclTopoSystem* system = nullptr;
-    ASSERT_EQ(loadTopoSystem(kTopoXmlPath, &system), ncclSuccess)
-        << "failed to load topo fixture: " << kTopoXmlPath;
+    ASSERT_EQ(loadTopoSystem(topoPath, &system), ncclSuccess)
+        << "failed to load topo fixture: " << topoPath;
     ASSERT_NE(system, nullptr);
 
     MockComm mock(system);
@@ -188,7 +203,7 @@ int localGpuCount(struct ncclTopoSystem* system, int gpu)
 
 // Distinct NICs ncclTopoGetLocalNet() hands out as the channelId rotates --
 // this equals netsPerGpu, the quantity NCCL_NETDEVS_POLICY drives.
-int distinctNetsAcrossChannels(struct ncclTopoSystem* system, int nets)
+int distinctNetsAcrossChannels(struct ncclTopoSystem* system, int nets, int rank = kRank)
 {
     std::set<int> devs;
     int           channels = (nets > 0 ? nets : 1) * 4;
@@ -196,7 +211,7 @@ int distinctNetsAcrossChannels(struct ncclTopoSystem* system, int nets)
     {
         int     dev   = -1;
         int64_t netId = 0;
-        EXPECT_EQ(ncclTopoGetLocalNet(system, kRank, c, &netId, &dev), ncclSuccess);
+        EXPECT_EQ(ncclTopoGetLocalNet(system, rank, c, &netId, &dev), ncclSuccess);
         devs.insert(dev);
     }
     return static_cast<int>(devs.size());
@@ -373,6 +388,39 @@ TEST(NetDevsPolicyTests, Auto_DividesNicsAcrossGpus)
     RUN_ISOLATED_TEST_WITH_ENV(
         "Auto_DividesNicsAcrossGpus",
         []() { withTopoSystem(expectAutoSelection); },
+        {{"NCCL_NETDEVS_POLICY", "AUTO"}});
+}
+
+// NCCL_NETDEVS_POLICY=AUTO with NICs > GPUs in a locality pocket -- in
+// topo_8p_ts1, GPU rank 1 reaches 2 closest NICs that no other GPU shares
+// (localNetCount=2, localGpuCount=1), so AUTO must hand out exactly
+// ceil(2 / 1) = 2 distinct NICs. This pins AUTO's divide-across-GPUs branch to
+// a non-degenerate value (the 5nic model collapses to ceil(3 / 4) = 1).
+TEST(NetDevsPolicyTests, Auto_NicsExceedGpus_SelectsTwo)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "Auto_NicsExceedGpus_SelectsTwo",
+        []()
+        {
+            withTopoSystem(
+                [](struct ncclTopoSystem* system)
+                {
+                    int gpu = -1;
+                    ASSERT_EQ(ncclTopoRankToIndex(system, kAutoRank, &gpu, /*showWarn=*/true),
+                              ncclSuccess);
+
+                    int nets = localNetCount(system, gpu);
+                    int gpus = localGpuCount(system, gpu);
+                    ASSERT_EQ(nets, 2) << "fixture topo_8p_ts1 exposes 2 closest NICs to rank "
+                                       << kAutoRank;
+                    ASSERT_EQ(gpus, 1) << "fixture topo_8p_ts1 has 1 GPU closest to that NIC";
+
+                    EXPECT_EQ(distinctNetsAcrossChannels(system, nets, kAutoRank),
+                              divUp(nets, gpus));
+                    EXPECT_EQ(distinctNetsAcrossChannels(system, nets, kAutoRank), 2);
+                },
+                kTopoNicsGtGpusXmlPath);
+        },
         {{"NCCL_NETDEVS_POLICY", "AUTO"}});
 }
 
