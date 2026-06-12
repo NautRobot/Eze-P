@@ -4,275 +4,428 @@
  * See LICENSE.txt for license information
  ************************************************************************/
 
-// Unit tests for NCCL_NETDEVS_POLICY.
+// Topology unit tests for NCCL_NETDEVS_POLICY on the P2P NET path.
 //
-// For each interesting policy value an isolated child process:
-//   * sets NCCL_NETDEVS_POLICY (or clears it),
-//   * calls ncclTopoGetNetDevsPolicy() -- the internal parser used by the
-//     topology graph search (ncclTopoSelectNets) to consume the env var
-//     during ncclCommInitRank / ncclCommInitAll,
-//   * asserts the returned policy enum + policyNum match what the
-//     getNetDevsPolicyOnce() implementation in src/graph/topo.cc promises.
+// NCCL 2.29.2 changed send, recv, and all-to-all so they now obey
+// NCCL_NETDEVS_POLICY when running over the network. Before this change, these
+// operations counted every locally reachable NIC and ignored the policy, so
+// settings like MAX:1 did not actually limit which network devices a GPU used.
 //
-// The test target is rccl-UnitTestsFixturesDebug (Debug only): the symbol
-// ncclTopoGetNetDevsPolicy lives inside librccl.so with default-hidden
-// visibility in Release builds, so it is only linkable from the Debug
-// fixtures binary -- exactly like ParamTests::ncclLoadParam,
-// ArgCheckTests' argcheck helpers, etc.
+// The policy is applied through ncclTopoGetLocalNet(), and the per-peer
+// network channel count for remote ranks is derived from getLocalNetCountByBw()
+// (called by ncclTopoGetNchannels() in src/graph/paths.cc). These are exactly
+// the functions send/recv/all-to-all use to pick NICs and channels over the
+// network. This test ties the policy to that P2P NET channel-selection path so
+// the 2.29.2 behavior cannot silently regress.
+//
+// The test:
+//   * Loads a synthetic multi-NIC topology
+//     (tools/topo_expl/models/topo_8p6l_5nic.xml, 3 NICs reachable from GPU
+//     rank 0) directly from XML, so no real GPUs, NICs, or MPI launch are
+//     required.
+//   * Runs each case in an isolated process (RUN_ISOLATED_TEST_WITH_ENV) so the
+//     std::call_once policy parse is fresh per case and env values do not leak
+//     between tests.
+//
+// The test target is rccl-UnitTestsFixturesDebug (Debug only): the topology
+// symbols live inside librccl.so with default-hidden visibility in Release
+// builds, so they are only linkable from the Debug fixtures binary -- exactly
+// like ParamTests::ncclLoadParam, ArgCheckTests' argcheck helpers, etc.
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <functional>
+#include <set>
+#include <string>
 
-#include "graph.h"  // netDevsPolicy enum, ncclTopoGetNetDevsPolicy()
+#include "comm.h"        // struct ncclComm, struct ncclPeerInfo
+#include "graph.h"       // ncclTopoGetLocalNet(), getLocalNetCountByBw(), ncclTopoComputePaths(), ncclTopoFree()
+#include "graph/topo.h"  // struct ncclTopoSystem, ncclTopoGetSystemFromXml(), GPU/NET, ncclTopoRankToIndex()
+#include "graph/xml.h"   // struct ncclXml, ncclTopoGetXmlFromFile()
 
 #include "common/ProcessIsolatedTestRunner.hpp"
+
+#ifndef RCCL_TEST_SOURCE_DIR
+#define RCCL_TEST_SOURCE_DIR "."
+#endif
 
 namespace RcclUnitTesting
 {
 
-// Default (env unset) -- should resolve to AUTO and leave policyNum alone.
-TEST(NetDevsPolicyTests, DefaultUnset_ResolvesToAuto)
+namespace
 {
-    RUN_ISOLATED_TEST(
-        "DefaultUnset_ResolvesToAuto",
-        []()
-        {
-            // Defensive: scrub any value the parent shell may have set.
-            ::unsetenv("NCCL_NETDEVS_POLICY");
 
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-            EXPECT_EQ(num,    -1);  // num is only written for MAX
-        });
+// 8 GPUs / 6 leaf / multi-NIC model. GPU rank 0 lives on NUMA 0 and reaches
+// 3 NICs (mlx5_0/1/2).
+const char* kTopoXmlPath =
+    RCCL_TEST_SOURCE_DIR "/../tools/topo_expl/models/topo_8p6l_5nic.xml";
+
+// Rank under test.
+constexpr int kRank = 0;
+
+struct ncclXml* allocateXml(int maxNodes)
+{
+    size_t size =
+        offsetof(struct ncclXml, nodes) + sizeof(struct ncclXmlNode) * maxNodes;
+    struct ncclXml* xml = static_cast<struct ncclXml*>(malloc(size));
+    if(xml)
+    {
+        memset(xml, 0, size);
+        xml->maxNodes = maxNodes;
+        xml->maxIndex = 0;
+    }
+    return xml;
 }
 
-// Explicit AUTO.
-TEST(NetDevsPolicyTests, Auto_ResolvesToAuto)
+// Build an ncclTopoSystem directly from a topology XML file (no real hardware).
+// warn=0 + localHostHash 0 matches how tools/topo_expl loads these models
+// (the fixtures carry no host_hash attribute).
+ncclResult_t loadTopoSystem(const char* path, struct ncclTopoSystem** system)
+{
+    struct ncclXml* xml = allocateXml(NCCL_TOPO_XML_MAX_NODES);
+    if(xml == nullptr) return ncclSystemError;
+
+    ncclResult_t res = ncclTopoGetXmlFromFile(path, xml, /*warn=*/0);
+    if(res != ncclSuccess)
+    {
+        free(xml);
+        return res;
+    }
+    res = ncclTopoGetSystemFromXml(xml, system, /*localHostHash=*/0);
+    free(xml);
+    return res;
+}
+
+// Build a minimal stand-in communicator for topology-only path computation.
+//
+// ncclTopoComputePaths() cannot be called with comm == NULL: its PXN branch
+// reaches rcclSetPxn(), which dereferences comm unconditionally. We therefore
+// hand it a comm that carries just enough state, and nothing that requires real
+// hardware:
+//   * topo / rank / nRanks -> consumed by rcclSetPxn() (arch + rank threshold)
+//     and the PXN walk.
+//   * a zeroed peerInfo[]   -> p2pCanConnect() returns 0 early (hasFineGrain == 0)
+//     and shmCanConnect() reports the peers as same-host / same-shmDev, so the
+//     peer-trim loop marks no GPU pair inaccessible. This keeps the computed
+//     paths identical to the comm-less intent while avoiding the NULL deref.
+struct MockComm
+{
+    struct ncclComm*     comm     = nullptr;
+    struct ncclPeerInfo* peerInfo = nullptr;
+
+    explicit MockComm(struct ncclTopoSystem* system)
+    {
+        const int nRanks = system->nodes[GPU].count;
+        comm             = new ncclComm();
+        memset(comm, 0, sizeof(*comm));
+        comm->topo   = system;
+        comm->rank   = kRank;
+        comm->nRanks = nRanks;
+        comm->nNodes = 1;
+
+        // Indexed by GPU rank; size to the topo node bound to stay safe even if
+        // ranks are not contiguous.
+        peerInfo = new ncclPeerInfo[NCCL_TOPO_MAX_NODES];
+        memset(peerInfo, 0, NCCL_TOPO_MAX_NODES * sizeof(*peerInfo));
+        for(int r = 0; r < NCCL_TOPO_MAX_NODES; r++)
+            peerInfo[r].rank = r;
+        comm->peerInfo = peerInfo;
+    }
+
+    ~MockComm()
+    {
+        delete[] peerInfo;
+        delete comm;
+    }
+
+    MockComm(const MockComm&)            = delete;
+    MockComm& operator=(const MockComm&) = delete;
+};
+
+// Load the fixture, compute paths, run body(system), then free.
+void withTopoSystem(const std::function<void(struct ncclTopoSystem*)>& body)
+{
+    struct ncclTopoSystem* system = nullptr;
+    ASSERT_EQ(loadTopoSystem(kTopoXmlPath, &system), ncclSuccess)
+        << "failed to load topo fixture: " << kTopoXmlPath;
+    ASSERT_NE(system, nullptr);
+
+    MockComm mock(system);
+    ASSERT_EQ(ncclTopoComputePaths(system, mock.comm), ncclSuccess);
+
+    body(system);
+
+    ncclTopoFree(system);
+}
+
+// NICs locally reachable from the GPU (the pool the policy selects from).
+int localNetCount(struct ncclTopoSystem* system, int gpu)
+{
+    int locals[NCCL_TOPO_MAX_NODES];
+    int count = 0;
+    EXPECT_EQ(ncclTopoGetLocal(system, GPU, gpu, NET, locals, &count, nullptr), ncclSuccess);
+    return count;
+}
+
+// GPUs sharing the GPU's first local NIC (the AUTO denominator).
+int localGpuCount(struct ncclTopoSystem* system, int gpu)
+{
+    int nets[NCCL_TOPO_MAX_NODES];
+    int netCount = 0;
+    EXPECT_EQ(ncclTopoGetLocal(system, GPU, gpu, NET, nets, &netCount, nullptr), ncclSuccess);
+    if(netCount == 0) return 0;
+
+    int gpus[NCCL_TOPO_MAX_NODES];
+    int gpuCount = 0;
+    EXPECT_EQ(ncclTopoGetLocal(system, NET, nets[0], GPU, gpus, &gpuCount, nullptr), ncclSuccess);
+    return gpuCount;
+}
+
+// Distinct NICs ncclTopoGetLocalNet() hands out as the channelId rotates --
+// this equals netsPerGpu, the quantity NCCL_NETDEVS_POLICY drives.
+int distinctNetsAcrossChannels(struct ncclTopoSystem* system, int nets)
+{
+    std::set<int> devs;
+    int           channels = (nets > 0 ? nets : 1) * 4;
+    for(int c = 0; c < channels; c++)
+    {
+        int     dev   = -1;
+        int64_t netId = 0;
+        EXPECT_EQ(ncclTopoGetLocalNet(system, kRank, c, &netId, &dev), ncclSuccess);
+        devs.insert(dev);
+    }
+    return static_cast<int>(devs.size());
+}
+
+inline int divUp(int a, int b) { return b > 0 ? (a + b - 1) / b : 0; }
+
+// AUTO selects ceil(localNetCount / localGpuCount) NICs. Default-unset and all
+// malformed/out-of-range values fall back to AUTO, so they share this check.
+void expectAutoSelection(struct ncclTopoSystem* system)
+{
+    int gpu = -1;
+    ASSERT_EQ(ncclTopoRankToIndex(system, kRank, &gpu, /*showWarn=*/true), ncclSuccess);
+    int nets = localNetCount(system, gpu);
+    int gpus = localGpuCount(system, gpu);
+    ASSERT_GE(nets, 2);
+    ASSERT_GE(gpus, 1);
+    EXPECT_EQ(distinctNetsAcrossChannels(system, nets), divUp(nets, gpus));
+}
+
+}  // namespace
+
+// NCCL_NETDEVS_POLICY=MAX:1 -- the policy must cap network device usage to a
+// single NIC: getLocalNetCountByBw() returns 1, and ncclTopoGetLocalNet()
+// returns the same NIC for channel 0 and channel 1.
+TEST(NetDevsPolicyTests, Max1_LimitsGetLocalNetCountByBw)
 {
     RUN_ISOLATED_TEST_WITH_ENV(
-        "Auto_ResolvesToAuto",
+        "Max1_LimitsGetLocalNetCountByBw",
         []()
         {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-            EXPECT_EQ(num,    -1);
+            withTopoSystem(
+                [](struct ncclTopoSystem* system)
+                {
+                    int gpu = -1;
+                    ASSERT_EQ(ncclTopoRankToIndex(system, kRank, &gpu, /*showWarn=*/true),
+                              ncclSuccess);
+
+                    int   count = -1;
+                    float bw    = 0.0f;
+                    ASSERT_EQ(getLocalNetCountByBw(system, gpu, &count, &bw), ncclSuccess);
+                    EXPECT_EQ(count, 1);
+
+                    int     dev0 = -1, dev1 = -1;
+                    int64_t id0 = 0, id1 = 0;
+                    ASSERT_EQ(ncclTopoGetLocalNet(system, kRank, /*channelId=*/0, &id0, &dev0),
+                              ncclSuccess);
+                    ASSERT_EQ(ncclTopoGetLocalNet(system, kRank, /*channelId=*/1, &id1, &dev1),
+                              ncclSuccess);
+                    EXPECT_EQ(dev0, dev1);
+                });
         },
-        {{"NCCL_NETDEVS_POLICY", "AUTO"}});
+        {{"NCCL_NETDEVS_POLICY", "MAX:1"}});
 }
 
-// Case-insensitive AUTO ("auto") -- topo.cc uses strcasecmp.
-TEST(NetDevsPolicyTests, Auto_CaseInsensitive)
+// NCCL_NETDEVS_POLICY=ALL -- the policy must use every locally reachable NIC:
+// ncclTopoGetLocalNet() rotates across all reachable NICs (netsPerGpu ==
+// localNetCount), so distinct devices seen across channels equals the pool and
+// channels 0 and 1 map to different NICs.
+//
+// Note: this is asserted through ncclTopoGetLocalNet() rather than
+// getLocalNetCountByBw(). getLocalNetCountByBw() is bandwidth-driven -- it stops
+// once the accumulated NIC bandwidth meets the GPU's bandwidth -- so when a
+// single NIC already saturates the GPU it returns 1 regardless of the policy.
+// The policy itself only governs how ncclTopoGetLocalNet() distributes NICs.
+TEST(NetDevsPolicyTests, All_UsesEveryLocalNic)
 {
     RUN_ISOLATED_TEST_WITH_ENV(
-        "Auto_CaseInsensitive",
+        "All_UsesEveryLocalNic",
         []()
         {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-        },
-        {{"NCCL_NETDEVS_POLICY", "auto"}});
-}
+            withTopoSystem(
+                [](struct ncclTopoSystem* system)
+                {
+                    int gpu = -1;
+                    ASSERT_EQ(ncclTopoRankToIndex(system, kRank, &gpu, /*showWarn=*/true),
+                              ncclSuccess);
+                    int nets = localNetCount(system, gpu);
+                    ASSERT_GE(nets, 2);
 
-// ALL policy.
-TEST(NetDevsPolicyTests, All_ResolvesToAll)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "All_ResolvesToAll",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_ALL);
-            EXPECT_EQ(num,    -1);  // num is only written for MAX
+                    EXPECT_EQ(distinctNetsAcrossChannels(system, nets), nets);
+
+                    int     dev0 = -1, dev1 = -1;
+                    int64_t id0 = 0, id1 = 0;
+                    ASSERT_EQ(ncclTopoGetLocalNet(system, kRank, /*channelId=*/0, &id0, &dev0),
+                              ncclSuccess);
+                    ASSERT_EQ(ncclTopoGetLocalNet(system, kRank, /*channelId=*/1, &id1, &dev1),
+                              ncclSuccess);
+                    EXPECT_NE(dev0, dev1);
+                });
         },
         {{"NCCL_NETDEVS_POLICY", "ALL"}});
 }
 
-// Case-insensitive ALL.
-TEST(NetDevsPolicyTests, All_CaseInsensitive)
+// NCCL_NETDEVS_POLICY=MAX:2 -- caps usage to two NICs (strictly between 1 and
+// the 3-NIC pool). The rotation has period 2: channels 0 and 1 differ, and
+// channel 2 wraps back to channel 0's NIC.
+TEST(NetDevsPolicyTests, Max2_SelectsTwoNics)
 {
     RUN_ISOLATED_TEST_WITH_ENV(
-        "All_CaseInsensitive",
+        "Max2_SelectsTwoNics",
         []()
         {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_ALL);
-        },
-        {{"NCCL_NETDEVS_POLICY", "All"}});
-}
+            withTopoSystem(
+                [](struct ncclTopoSystem* system)
+                {
+                    int gpu = -1;
+                    ASSERT_EQ(ncclTopoRankToIndex(system, kRank, &gpu, /*showWarn=*/true),
+                              ncclSuccess);
+                    int nets = localNetCount(system, gpu);
+                    ASSERT_GE(nets, 2);
 
-// MAX:N -- policy=MAX, policyNum=N.
-TEST(NetDevsPolicyTests, MaxN_ResolvesToMaxWithCorrectNum)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "MaxN_ResolvesToMaxWithCorrectNum",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_MAX);
-            EXPECT_EQ(num,    4);
-        },
-        {{"NCCL_NETDEVS_POLICY", "MAX:4"}});
-}
+                    EXPECT_EQ(distinctNetsAcrossChannels(system, nets), std::min(2, nets));
 
-// Case-insensitive MAX:N ("max:8") -- topo.cc uses strncasecmp on "MAX:".
-TEST(NetDevsPolicyTests, MaxN_CaseInsensitive)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "MaxN_CaseInsensitive",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_MAX);
-            EXPECT_EQ(num,    8);
-        },
-        {{"NCCL_NETDEVS_POLICY", "max:8"}});
-}
-
-// MAX:0 -- envNum is zero, the parser rejects it (the `if (envNum > 0)`
-// branch never runs), policy stays UNDEF in the parser and falls back to
-// AUTO before the function returns.  Guards ncclTopoGetNetDevsPolicy()
-// from tripping its own NETDEVS_POLICY_MAX-with-non-positive-N WARN
-// guard, because the parser already prevented us from getting there.
-TEST(NetDevsPolicyTests, MaxZero_FallsBackToAuto)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "MaxZero_FallsBackToAuto",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-            EXPECT_EQ(num,    -1);  // MAX branch was never taken
-        },
-        {{"NCCL_NETDEVS_POLICY", "MAX:0"}});
-}
-
-// MAX:-1 -- atoi returns -1, fails the `> 0` check, falls back to AUTO.
-TEST(NetDevsPolicyTests, MaxNegative_FallsBackToAuto)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "MaxNegative_FallsBackToAuto",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-        },
-        {{"NCCL_NETDEVS_POLICY", "MAX:-1"}});
-}
-
-// "MAX:" with no number -- atoi("") == 0, fails the `> 0` check, AUTO.
-TEST(NetDevsPolicyTests, MaxEmpty_FallsBackToAuto)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "MaxEmpty_FallsBackToAuto",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-        },
-        {{"NCCL_NETDEVS_POLICY", "MAX:"}});
-}
-
-// Unrecognized value -- log warns "Unable to recognize ...", parser falls
-// back to AUTO; the function returns success (no crash).
-TEST(NetDevsPolicyTests, InvalidValue_FallsBackToAuto)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "InvalidValue_FallsBackToAuto",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-        },
-        {{"NCCL_NETDEVS_POLICY", "BOGUS"}});
-}
-
-// Empty string -- ncclGetEnv() returns the empty string; none of the
-// strcasecmp branches match, parser logs "Unable to recognize" and falls
-// back to AUTO.
-TEST(NetDevsPolicyTests, EmptyString_FallsBackToAuto)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "EmptyString_FallsBackToAuto",
-        []()
-        {
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            int                num    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, &num), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_AUTO);
-        },
-        {{"NCCL_NETDEVS_POLICY", ""}});
-}
-
-// Idempotency -- two back-to-back parser calls in the same process must
-// return the same policy/num.  std::call_once guarantees this; a future
-// refactor that accidentally re-parses every call would break here.
-TEST(NetDevsPolicyTests, Idempotent_AcrossCallsInSameProcess)
-{
-    RUN_ISOLATED_TEST_WITH_ENV(
-        "Idempotent_AcrossCallsInSameProcess",
-        []()
-        {
-            enum netDevsPolicy policy1 = NETDEVS_POLICY_UNDEF;
-            int                num1    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy1, &num1), ncclSuccess);
-
-            // Mutate the env var after the cache is established; the next
-            // call must return the cached value, NOT the new env value.
-            ::setenv("NCCL_NETDEVS_POLICY", "ALL", 1);
-
-            enum netDevsPolicy policy2 = NETDEVS_POLICY_UNDEF;
-            int                num2    = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy2, &num2), ncclSuccess);
-
-            EXPECT_EQ(policy2, policy1);
-            EXPECT_EQ(num2,    num1);
-            EXPECT_EQ(policy2, NETDEVS_POLICY_MAX);
-            EXPECT_EQ(num2,    2);
+                    int     dev0 = -1, dev1 = -1, dev2 = -1;
+                    int64_t id0 = 0, id1 = 0, id2 = 0;
+                    ASSERT_EQ(ncclTopoGetLocalNet(system, kRank, 0, &id0, &dev0), ncclSuccess);
+                    ASSERT_EQ(ncclTopoGetLocalNet(system, kRank, 1, &id1, &dev1), ncclSuccess);
+                    ASSERT_EQ(ncclTopoGetLocalNet(system, kRank, 2, &id2, &dev2), ncclSuccess);
+                    EXPECT_NE(dev0, dev1);
+                    EXPECT_EQ(dev0, dev2);
+                });
         },
         {{"NCCL_NETDEVS_POLICY", "MAX:2"}});
 }
 
-// Null-output safety -- caller is allowed to pass NULL for either out-param.
-TEST(NetDevsPolicyTests, AcceptsNullOutputPointers)
+// NCCL_NETDEVS_POLICY=MAX:N with N == the number of reachable NICs -- uses the
+// whole pool, equivalent to ALL.
+TEST(NetDevsPolicyTests, MaxEqualsPool_UsesEveryLocalNic)
 {
     RUN_ISOLATED_TEST_WITH_ENV(
-        "AcceptsNullOutputPointers",
+        "MaxEqualsPool_UsesEveryLocalNic",
         []()
         {
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(nullptr, nullptr), ncclSuccess);
-
-            enum netDevsPolicy policy = NETDEVS_POLICY_UNDEF;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(&policy, nullptr), ncclSuccess);
-            EXPECT_EQ(policy, NETDEVS_POLICY_MAX);
-
-            int num = -1;
-            ASSERT_EQ(ncclTopoGetNetDevsPolicy(nullptr, &num), ncclSuccess);
-            EXPECT_EQ(num, 3);
+            withTopoSystem(
+                [](struct ncclTopoSystem* system)
+                {
+                    int gpu = -1;
+                    ASSERT_EQ(ncclTopoRankToIndex(system, kRank, &gpu, /*showWarn=*/true),
+                              ncclSuccess);
+                    int nets = localNetCount(system, gpu);
+                    ASSERT_EQ(nets, 3) << "fixture topo_8p6l_5nic exposes 3 NICs to rank 0";
+                    EXPECT_EQ(distinctNetsAcrossChannels(system, nets), nets);
+                });
         },
         {{"NCCL_NETDEVS_POLICY", "MAX:3"}});
+}
+
+// NCCL_NETDEVS_POLICY=MAX:N with N larger than the pool -- clamps to the number
+// of reachable NICs (proves std::min(policyCount, localNetCount)).
+TEST(NetDevsPolicyTests, MaxLarge_ClampsToLocalNetCount)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "MaxLarge_ClampsToLocalNetCount",
+        []()
+        {
+            withTopoSystem(
+                [](struct ncclTopoSystem* system)
+                {
+                    int gpu = -1;
+                    ASSERT_EQ(ncclTopoRankToIndex(system, kRank, &gpu, /*showWarn=*/true),
+                              ncclSuccess);
+                    int nets = localNetCount(system, gpu);
+                    ASSERT_GE(nets, 2);
+                    EXPECT_EQ(distinctNetsAcrossChannels(system, nets), nets);
+                });
+        },
+        {{"NCCL_NETDEVS_POLICY", "MAX:64"}});
+}
+
+// NCCL_NETDEVS_POLICY=AUTO -- selects ceil(localNetCount / localGpuCount) NICs.
+TEST(NetDevsPolicyTests, Auto_DividesNicsAcrossGpus)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "Auto_DividesNicsAcrossGpus",
+        []() { withTopoSystem(expectAutoSelection); },
+        {{"NCCL_NETDEVS_POLICY", "AUTO"}});
+}
+
+// Env unset -- defaults to AUTO.
+TEST(NetDevsPolicyTests, DefaultUnset_MatchesAuto)
+{
+    RUN_ISOLATED_TEST(
+        "DefaultUnset_MatchesAuto",
+        []()
+        {
+            ::unsetenv("NCCL_NETDEVS_POLICY");
+            withTopoSystem(expectAutoSelection);
+        });
+}
+
+// MAX:0 -- non-positive count is rejected by the parser; falls back to AUTO.
+TEST(NetDevsPolicyTests, MaxZero_FallsBackToAuto)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "MaxZero_FallsBackToAuto", []() { withTopoSystem(expectAutoSelection); },
+        {{"NCCL_NETDEVS_POLICY", "MAX:0"}});
+}
+
+// MAX:-1 -- negative count fails the > 0 check; falls back to AUTO.
+TEST(NetDevsPolicyTests, MaxNegative_FallsBackToAuto)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "MaxNegative_FallsBackToAuto", []() { withTopoSystem(expectAutoSelection); },
+        {{"NCCL_NETDEVS_POLICY", "MAX:-1"}});
+}
+
+// "MAX:" with no number -- atoi("") == 0; falls back to AUTO.
+TEST(NetDevsPolicyTests, MaxEmpty_FallsBackToAuto)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "MaxEmpty_FallsBackToAuto", []() { withTopoSystem(expectAutoSelection); },
+        {{"NCCL_NETDEVS_POLICY", "MAX:"}});
+}
+
+// Unrecognized value -- parser warns and falls back to AUTO.
+TEST(NetDevsPolicyTests, InvalidValue_FallsBackToAuto)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "InvalidValue_FallsBackToAuto", []() { withTopoSystem(expectAutoSelection); },
+        {{"NCCL_NETDEVS_POLICY", "BOGUS"}});
+}
+
+// Empty string -- no branch matches; falls back to AUTO.
+TEST(NetDevsPolicyTests, EmptyString_FallsBackToAuto)
+{
+    RUN_ISOLATED_TEST_WITH_ENV(
+        "EmptyString_FallsBackToAuto", []() { withTopoSystem(expectAutoSelection); },
+        {{"NCCL_NETDEVS_POLICY", ""}});
 }
 
 }  // namespace RcclUnitTesting
