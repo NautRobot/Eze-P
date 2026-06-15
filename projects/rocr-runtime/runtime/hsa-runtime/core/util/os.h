@@ -48,6 +48,7 @@
 #include <chrono>
 #include <string>
 #include <vector>
+#include "inc/hsa.h"
 #include "utils.h"
 
 namespace rocr {
@@ -79,7 +80,9 @@ static_assert(false, "Operating System not detected!");
 #endif
 
 /// @brief: Loads dynamic library based on file name. Return value will be NULL
-/// if failed.
+/// if failed. Uses platform-specific mechanisms to keep the library mapped
+/// after close (RTLD_NODELETE on Linux, module pinning on Windows) to prevent
+/// crashes when libraries have circular dependencies back to ROCR.
 /// @param: filename(Input), file name of the library.
 /// @return: LibHandle.
 LibHandle LoadLib(std::string filename);
@@ -90,8 +93,10 @@ LibHandle LoadLib(std::string filename);
 /// @return: void*.
 void* GetExportAddress(LibHandle lib, std::string export_name);
 
-/// @brief: Unloads the dynamic library.
-/// @param: lib(Input), library handle which will be unloaded.
+/// @brief: Closes the dynamic library handle. Note: With RTLD_NODELETE on Linux
+/// or module pinning on Windows, this decrements the reference count but may not
+/// actually unmap the library from memory.
+/// @param: lib(Input), library handle to close.
 bool CloseLib(LibHandle lib);
 
 /// @brief: Lists loaded tool libraries that contain
@@ -355,6 +360,9 @@ bool UncommitMemory(void* addr, size_t size);
 /// Changes the Protection of a region of committed pages in virtual address space
 bool UnmapMemory(void* addr, size_t size);
 bool MapMemory(void* addr, size_t size, MemProt prot, int fd, uint64_t cpu_addr);
+
+/// Close a dmabuf file descriptor.
+hsa_status_t DmaBufClose(int dmabuf);
 
 bool ProtectMemory(void* va, size_t size, MemProt perms);
 
