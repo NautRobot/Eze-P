@@ -2,16 +2,19 @@
 # SPDX-License-Identifier: MIT
 
 """
-Automated coverage for the ``rocprof-sys-sample`` command-line help surface.
+Automated coverage for the command-line help surface of the rocprof-sys
+launchers (``rocprof-sys-run`` and ``rocprof-sys-sample``).
 
-Validates every help / informational invocation of ``rocprof-sys-sample``: the
-help entry points (``--version`` / ``--help`` / ``--help=all`` / compact help),
-every ``--help=<topic>`` / ``--help=<domain>`` page, the preset listing and the
+Validates every help / informational invocation: the help entry points
+(``--version`` / ``--help`` / ``--help=all`` / compact help), every
+``--help=<topic>`` / ``--help=<domain>`` page, the preset listing and the
 ``--explain=<preset>`` pages.
 
 Each case is a ``pytest.param`` of ``(run_args, pass_regex)`` consumed by the
-single parametrized test below; add or adjust coverage by editing the
-``HELP_CASES`` list.
+single parametrized test below, which runs it against every target in
+``TARGETS``. Patterns use the ``{prog}`` placeholder wherever the program name
+is embedded in the output; it is substituted with the target at runtime. Add or
+adjust coverage by editing the ``HELP_CASES`` list.
 """
 
 from __future__ import annotations
@@ -19,9 +22,12 @@ from __future__ import annotations
 import pytest
 from conftest import RocprofsysTest
 
-pytestmark = [pytest.mark.sampling]
-
-TARGET = "rocprof-sys-sample"
+# Both launchers share the same help/flag surface; the embedded mark selects the
+# matching runner category so a single test body covers run + sample.
+TARGETS = [
+    pytest.param("rocprof-sys-run", marks=pytest.mark.sys_run, id="run"),
+    pytest.param("rocprof-sys-sample", marks=pytest.mark.sampling, id="sample"),
+]
 
 
 # ----------------------------------------------------------------------------
@@ -30,7 +36,7 @@ TARGET = "rocprof-sys-sample"
 
 # Sections printed by the compact help screens (--help / -h / -?).
 _COMPACT = [
-    r"Usage: rocprof-sys-sample",
+    r"Usage: {prog}",
     r"QUICK START",
     r"DOMAIN FLAGS",
     r"COMMON OPTIONS",
@@ -52,7 +58,7 @@ def _explain(preset: str, category: str) -> list[str]:
     return [
         rf"Preset: {preset}",
         rf"Category:\s+{category}",
-        rf"Usage: rocprof-sys-sample --preset={preset}",
+        rf"Usage: {{prog}} --preset={preset}",
     ] + _EXPLAIN
 
 
@@ -87,7 +93,6 @@ HELP_CASES = [
             r"GPU OPTIONS \(",
             r"-D, --device",
             r"--use-amd-smi",
-            r"--amd-smi-metrics",
             r"--process-freq",
             r"--process-wait",
             r"--process-duration",
@@ -121,6 +126,7 @@ HELP_CASES = [
             r"--ai-nics",
             r"--hsa-interrupt",
             r"--rocm",
+            r"kfd_events",
             r"See also",
         ],
         id="domain_rocm",
@@ -171,174 +177,38 @@ HELP_CASES = [
         _explain("workload-trace", "gpu"),
         id="explain_workload-trace",
     ),
-    # --- Full option dump (--help=all): every section header + flag -------
+    # --- Full option dump (--help=all): assert the stable section headers.
+    # Individual flags are intentionally not asserted here: many are
+    # conditionally compiled (AMD SMI, CI/debug build options, etc.), so the
+    # bracketed section headers are the portable, build-independent signal.
     pytest.param(
         ["--help=all"],
         [
             r"Options:",
-            r"-h, -\?, --help",
+            r"-h, -\?, --help(?![-\w])",
             r"--version(?![-\w])",
             r"\[DEBUG OPTIONS\]",
-            r"--log-level(?![-\w])",
-            r"--monochrome(?![-\w])",
-            r"--debug(?![-\w])",
-            r"-v, --verbose(?![-\w])",
-            r"--ci(?![-\w])",
-            r"--log-file(?![-\w])",
-            r"--dl-verbose(?![-\w])",
-            r"--perfetto-annotations(?![-\w])",
-            r"--kokkosp-kernel-logger(?![-\w])",
-            r"--ci-skip-push-pop-check(?![-\w])",
-            r"--sampling-allocator-size(?![-\w])",
-            r"--kokkosp-name-length-max(?![-\w])",
-            r"--kokkosp-prefix(?![-\w])",
             r"\[MODE OPTIONS\]",
-            r"--mode(?![-\w])",
             r"\[GENERAL OPTIONS\]",
-            r"-c, --config(?![-\w])",
-            r"-o, --output(?![-\w])",
-            r"-T, --trace(?![-\w])",
-            r"-L, --trace-legacy(?![-\w])",
-            r"-P, --profile(?![-\w])",
-            r"-F, --flat-profile(?![-\w])",
-            r"-H, --host(?![-\w])",
-            r"-D, --device(?![-\w])",
-            r"-w, --wait(?![-\w])",
-            r"-d, --duration(?![-\w])",
-            r"--periods(?![-\w])",
-            r"--rank-filter-id(?![-\w])",
-            r"--rank-filter-output(?![-\w])",
-            r"--rank-filter-logs(?![-\w])",
             r"\[BACKEND OPTIONS\]",
-            r"-I, --include(?![-\w])",
-            r"-E, --exclude(?![-\w])",
-            r"--use-amd-smi(?![-\w])",
-            r"--use-causal(?![-\w])",
-            r"--amd-smi-metrics(?![-\w])",
-            r"--use-code-coverage(?![-\w])",
-            r"--use-kokkosp(?![-\w])",
-            r"--use-mpip(?![-\w])",
-            r"--use-rcclp(?![-\w])",
-            r"--use-rocpd(?![-\w])",
-            r"--use-sampling(?![-\w])",
-            r"--use-shmem(?![-\w])",
-            r"--use-ucx(?![-\w])",
-            r"--trace-thread-barriers(?![-\w])",
-            r"--trace-thread-join(?![-\w])",
-            r"--trace-thread-locks(?![-\w])",
-            r"--use-process-sampling(?![-\w])",
-            r"--trace-thread-rw-locks(?![-\w])",
-            r"--trace-thread-spin-locks(?![-\w])",
-            r"--use-unified-memory-profiling(?![-\w])",
             r"\[PARALLELISM OPTIONS\]",
-            r"--thread-pool-size(?![-\w])",
-            r"--num-threads-hint(?![-\w])",
             r"\[TRACING OPTIONS\]",
-            r"--trace-file(?![-\w])",
-            r"--trace-buffer-size(?![-\w])",
-            r"--trace-fill-policy(?![-\w])",
-            r"--trace-wait(?![-\w])",
-            r"--trace-duration(?![-\w])",
-            r"--trace-periods(?![-\w])",
-            r"--selected-regions(?![-\w])",
-            r"--trace-clock-id(?![-\w])",
             r"\[PROFILE OPTIONS\]",
-            r"--profile-format(?![-\w])",
-            r"--profile-diff(?![-\w])",
             r"\[HOST/DEVICE \(PROCESS SAMPLING\) OPTIONS\]",
-            r"--process-freq(?![-\w])",
-            r"--process-wait(?![-\w])",
-            r"--process-duration(?![-\w])",
-            r"--cpus(?![-\w])",
-            r"--gpus(?![-\w])",
-            r"--ai-nics(?![-\w])",
             r"\[GENERAL SAMPLING OPTIONS\]",
-            r"-f, --sampling-freq(?![-\w])",
-            r"-t, --tids(?![-\w])",
-            r"--sampling-wait(?![-\w])",
-            r"--sampling-duration(?![-\w])",
-            r"--sample-cputime(?![-\w])",
-            r"--sample-realtime(?![-\w])",
-            r"--sample-overflow(?![-\w])",
-            r"--sampling-ainics(?![-\w])",
             r"\[SAMPLING TIMER OPTIONS\]",
-            r"--sampling-cputime-delay(?![-\w])",
-            r"--sampling-cputime-freq(?![-\w])",
-            r"--sampling-cputime-signal(?![-\w])",
-            r"--sampling-cputime-tids(?![-\w])",
-            r"--sampling-realtime-delay(?![-\w])",
-            r"--sampling-realtime-freq(?![-\w])",
-            r"--sampling-realtime-signal(?![-\w])",
-            r"--sampling-realtime-tids(?![-\w])",
             r"\[ADVANCED SAMPLING OPTIONS\]",
-            r"--sampling-include-inlines(?![-\w])",
-            r"--sampling-keep-internal(?![-\w])",
-            r"--sampling-overflow-event(?![-\w])",
-            r"--sampling-overflow-freq(?![-\w])",
-            r"--sampling-overflow-signal(?![-\w])",
-            r"--sampling-overflow-tids(?![-\w])",
             r"\[HARDWARE COUNTER OPTIONS\]",
-            r"-C, --cpu-events(?![-\w])",
-            r"-G, --gpu-events(?![-\w])",
             r"\[CATEGORY OPTIONS\]",
-            r"--enable-categories(?![-\w])",
-            r"--disable-categories(?![-\w])",
             r"\[IO OPTIONS\]",
-            r"--tmpdir(?![-\w])",
-            r"--use-pid(?![-\w])",
-            r"--causal-file(?![-\w])",
-            r"--time-output(?![-\w])",
-            r"--causal-file-reset(?![-\w])",
-            r"--use-temporary-files(?![-\w])",
             r"\[PERFETTO OPTIONS\]",
-            r"--perfetto-backend(?![-\w])",
-            r"--rocm-group-by-queue(?![-\w])",
-            r"--merge-perfetto-files(?![-\w])",
-            r"--perfetto-flush-period-ms(?![-\w])",
-            r"--perfetto-shmem-size-hint-kb(?![-\w])",
             r"\[TIMEMORY OPTIONS\]",
-            r"--timemory-components(?![-\w])",
             r"\[ROCM OPTIONS\]",
-            r"--rocm-domains(?![-\w])",
-            r"--gpu-perf-counters(?![-\w])",
-            r"--rocm-hip-runtime-api-operations(?![-\w])",
-            r"--rocm-marker-api-operations(?![-\w])",
-            r"--rocm-memory-copy-operations(?![-\w])",
-            r"--rocm-kfd-page-fault-operations(?![-\w])",
             r"\[MISCELLANEOUS OPTIONS\]",
-            r"-i, --inlines(?![-\w])",
-            r"--hsa-interrupt(?![-\w])",
-            r"--use-ainic(?![-\w])",
-            r"--kill-delay(?![-\w])",
-            r"--causal-backend(?![-\w])",
-            r"--causal-delay(?![-\w])",
-            r"--causal-duration(?![-\w])",
-            r"--causal-mode(?![-\w])",
-            r"--cpu-freq-enabled(?![-\w])",
-            r"--cpu-metrics(?![-\w])",
-            r"--causal-binary-exclude(?![-\w])",
-            r"--causal-binary-scope(?![-\w])",
-            r"--causal-end-to-end(?![-\w])",
-            r"--kokkosp-deep-copy(?![-\w])",
-            r"--causal-fixed-speedup(?![-\w])",
-            r"--causal-function-exclude(?![-\w])",
-            r"--causal-function-exclude-defaults(?![-\w])",
-            r"--causal-function-scope(?![-\w])",
-            r"--causal-random-seed(?![-\w])",
-            r"--causal-source-exclude(?![-\w])",
-            r"--causal-source-scope(?![-\w])",
             r"\[LIBROCPROF-SYS OPTIONS\]",
             r"\[PRESET OPTIONS\]",
-            r"--preset(?![-\w])",
-            r"--list-presets(?![-\w])",
-            r"--explain(?![-\w])",
             r"\[DOMAIN OPTIONS\]",
-            r"--gpu(?![-\w])",
-            r"--rocm(?![-\w])",
-            r"--cpu(?![-\w])",
-            r"--parallel(?![-\w])",
             r"\[EXPORT OPTIONS\]",
-            r"--export-config(?![-\w])",
         ],
         id="help_all",
     ),
@@ -351,8 +221,8 @@ HELP_CASES = [
         ["--list-presets"],
         [
             r"Available Presets:",
-            r"Usage: rocprof-sys-sample --preset=<name>",
-            r"rocprof-sys-sample --explain=<name>",
+            r"Usage: {prog} --preset=<name>",
+            r"{prog} --explain=<name>",
             r"general:",
             r"gpu:",
             r"hpc:",
@@ -375,12 +245,11 @@ HELP_CASES = [
     pytest.param(
         ["--help=backend"],
         [
-            r"rocprof-sys-sample --help=backend",
+            r"{prog} --help=backend",
             r"-I, --include",
             r"-E, --exclude",
             r"--use-amd-smi",
             r"--use-causal",
-            r"--amd-smi-metrics",
             r"--use-code-coverage",
             r"--use-kokkosp",
             r"--use-mpip",
@@ -403,7 +272,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=counters"],
         [
-            r"rocprof-sys-sample --help=counters",
+            r"{prog} --help=counters",
             r"-C, --cpu-events",
             r"-G, --gpu-events",
             r"See also",
@@ -413,7 +282,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=debug"],
         [
-            r"rocprof-sys-sample --help=debug",
+            r"{prog} --help=debug",
             r"--log-level",
             r"--monochrome",
             r"--debug",
@@ -422,7 +291,6 @@ HELP_CASES = [
             r"--dl-verbose",
             r"--perfetto-annotations",
             r"--kokkosp-kernel-logger",
-            r"--ci-skip-push-pop-check",
             r"--sampling-allocator-size",
             r"--kokkosp-name-length-max",
             r"--kokkosp-prefix",
@@ -433,7 +301,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=general"],
         [
-            r"rocprof-sys-sample --help=general",
+            r"{prog} --help=general",
             r"-c, --config",
             r"-o, --output",
             r"-T, --trace",
@@ -455,7 +323,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=misc"],
         [
-            r"rocprof-sys-sample --help=misc",
+            r"{prog} --help=misc",
             r"-i, --inlines",
             r"--hsa-interrupt",
             r"See also",
@@ -468,7 +336,7 @@ HELP_CASES = [
         # plus every left-column flag they list.
         ["--help=preset"],
         [
-            r"rocprof-sys-sample --help=preset",
+            r"{prog} --help=preset",
             r"\[PRESET OPTIONS\]",
             r"\[DOMAIN OPTIONS\]",
             r"\[EXPORT OPTIONS\]",
@@ -487,7 +355,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=process"],
         [
-            r"rocprof-sys-sample --help=process",
+            r"{prog} --help=process",
             r"--process-freq",
             r"--process-wait",
             r"--process-duration",
@@ -501,7 +369,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=profiling"],
         [
-            r"rocprof-sys-sample --help=profiling",
+            r"{prog} --help=profiling",
             r"--profile-format",
             r"--profile-diff",
             r"See also",
@@ -511,7 +379,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=sampling"],
         [
-            r"rocprof-sys-sample --help=sampling",
+            r"{prog} --help=sampling",
             r"-f, --sampling-freq",
             r"-t, --tids",
             r"--sampling-wait",
@@ -541,7 +409,7 @@ HELP_CASES = [
     pytest.param(
         ["--help=tracing"],
         [
-            r"rocprof-sys-sample --help=tracing",
+            r"{prog} --help=tracing",
             r"--trace-file",
             r"--trace-buffer-size",
             r"--trace-fill-policy",
@@ -565,22 +433,31 @@ HELP_CASES = [
     ),
     pytest.param(
         ["--version"],
-        [r"rocprof-sys-sample v\d+\.\d+\.\d+"],
+        [r"{prog} v\d+\.\d+\.\d+"],
         id="version",
     ),
 ]
 
 
 @pytest.mark.timeout(30)
-@pytest.mark.class_name("sample-help")
-class TestSampleHelp(RocprofsysTest):
-    """Validate every help / informational invocation of rocprof-sys-sample."""
+@pytest.mark.class_name("cli-help")
+class TestCliHelp(RocprofsysTest):
+    """Validate every help / informational invocation of the rocprof-sys launchers."""
 
+    @pytest.mark.parametrize("target", TARGETS)
     @pytest.mark.parametrize("run_args, pass_regex", HELP_CASES)
-    def test_help(self, run_args, pass_regex):
+    def test(self, target, run_args, pass_regex):
+        # Substitute the program name into name-dependent patterns.
+        pass_regex = [p.replace("{prog}", target) for p in pass_regex]
+
+        # rocprof-sys-run additionally exposes an [EXECUTION OPTIONS] section in
+        # the full dump; rocprof-sys-sample does not.
+        if target == "rocprof-sys-run" and run_args == ["--help=all"]:
+            pass_regex = pass_regex + [r"\[EXECUTION OPTIONS\]"]
+
         result = self.run_test(
             "baseline",
-            target=TARGET,
+            target=target,
             run_args=run_args,
             fail_on_not_found=True,
         )
