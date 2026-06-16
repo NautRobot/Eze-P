@@ -77,6 +77,7 @@ class SvmMapMemoryCommand;
 class SvmUnmapMemoryCommand;
 class SvmPrefetchAsyncCommand;
 class SvmPrefetchBatchAsyncCommand;
+class SvmDiscardBatchAsyncCommand;
 class StreamOperationCommand;
 class BatchMemoryOperationCommand;
 class VirtualMapCommand;
@@ -1332,6 +1333,9 @@ class VirtualDevice : public amd::ReferenceCountedObject {
   virtual void submitMakeBuffersResident(amd::MakeBuffersResidentCommand& cmd) = 0;
   virtual void submitSvmPrefetchAsync(amd::SvmPrefetchAsyncCommand& cmd) { ShouldNotReachHere(); }
   virtual void SubmitSvmPrefetchBatchAsync(amd::SvmPrefetchBatchAsyncCommand& cmd) {
+    ShouldNotReachHere();
+  }
+  virtual void SubmitSvmDiscardBatchAsync(amd::SvmDiscardBatchAsyncCommand& cmd) {
     ShouldNotReachHere();
   }
   virtual void submitStreamOperation(amd::StreamOperationCommand& cmd) { ShouldNotReachHere(); }
