@@ -481,15 +481,18 @@ namespace RcclUnitTesting
     // gtest's ASSERT_*/FAIL() which return on failure, so a failed write to one
     // child would otherwise skip Finalize() and orphan the remaining children.
     // The lambda confines that early return, so Finalize() always runs.
-    using Clock = std::chrono::high_resolution_clock;
+    using Clock = std::chrono::steady_clock;
     [&]()
     {
-      auto const sendStart = Clock::now();
+      // Timestamps are only consumed when verbose, so skip the clock reads on
+      // the common (non-verbose) path, which is hot in the test suite.
+      Clock::time_point sendStart, waitStart;
+      if (ev.verbose) sendStart = Clock::now();
       for (int childId = 0; childId < this->numActiveChildren; ++childId)
       {
         PIPE_WRITE(childId, cmd);
       }
-      auto const waitStart = Clock::now();
+      if (ev.verbose) waitStart = Clock::now();
       for (int childId = 0; childId < this->numActiveChildren; ++childId)
       {
         // Wait for child acknowledgement
@@ -500,10 +503,10 @@ namespace RcclUnitTesting
       {
         using std::chrono::duration_cast;
         using std::chrono::milliseconds;
-        auto const sendMs = duration_cast<milliseconds>(waitStart - sendStart).count();
-        auto const waitMs = duration_cast<milliseconds>(Clock::now() - waitStart).count();
-        TEST_INFO("DestroyComms: %d children, send %ld ms, parallel teardown %ld ms",
-                  this->numActiveChildren, (long)sendMs, (long)waitMs);
+        long long const sendMs = duration_cast<milliseconds>(waitStart - sendStart).count();
+        long long const waitMs = duration_cast<milliseconds>(Clock::now() - waitStart).count();
+        TEST_INFO("DestroyComms: %d children, send %lld ms, parallel teardown %lld ms",
+                  this->numActiveChildren, sendMs, waitMs);
       }
     }();
 
