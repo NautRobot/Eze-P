@@ -462,3 +462,60 @@ class TestCliHelp(RocprofsysTest):
             fail_on_not_found=True,
         )
         self.assert_regex(result, pass_regex=pass_regex)
+
+    @pytest.mark.parametrize("target", TARGETS)
+    def test_explain_invalid(self, target):
+        """Negative: --explain with an unknown preset exits non-zero and
+        directs the user to --list-presets.
+
+        Kept out of HELP_CASES because that suite assumes a zero exit code;
+        an invalid --explain is a hard failure (unlike an unknown --help topic).
+        """
+        result = self.run_test(
+            "baseline",
+            target=target,
+            run_args=["--explain=invalid-preset-xyz"],
+            fail_on_pass=True,
+            fail_on_not_found=True,
+        )
+        assert result.returncode != 0, "invalid --explain should exit non-zero"
+        self.assert_regex(
+            result,
+            pass_regex=[
+                r"not found",
+                r"--list-presets",
+            ],
+        )
+
+    @pytest.mark.parametrize("target", TARGETS)
+    def test_explain_requires_value(self, target):
+        """Negative: --explain with no value is an argument-validation error
+        (distinct from an unknown preset name)."""
+        result = self.run_test(
+            "baseline",
+            target=target,
+            run_args=["--explain="],
+            fail_on_pass=True,
+            fail_on_not_found=True,
+        )
+        assert result.returncode != 0, "empty --explain should exit non-zero"
+        self.assert_regex(
+            result,
+            pass_regex=[r"--explain requires a preset name"],
+        )
+
+    @pytest.mark.parametrize("target", TARGETS)
+    def test_unrecognized_option(self, target):
+        """Negative: an unknown command-line option is rejected with a non-zero exit."""
+        result = self.run_test(
+            "baseline",
+            target=target,
+            run_args=["--does-not-exist-flag"],
+            fail_on_pass=True,
+            fail_on_not_found=True,
+        )
+        assert result.returncode != 0, "unrecognized option should exit non-zero"
+        self.assert_regex(
+            result,
+            pass_regex=[r"Unrecognized command line option"],
+        )
