@@ -78,7 +78,7 @@ static void VerifyDataOnDevice(int* data, hipStream_t stream) {
  *  - Allocates managed memory, writes data, prefetches to device, verifies data
  *  - Validates that prefetch actually occurred using hipMemRangeGetAttribute
  */
-TEST_CASE("Unit_hipMemPrefetchBatchAsync_SingleOperationSingleLocation") {
+HIP_TEST_CASE(Unit_hipMemPrefetchBatchAsync_SingleOperationSingleLocation) {
   REQUIRE_MANAGED_ACCESS_DEVICE(device);
 
   LinearAllocGuard<int> managed_memory(LinearAllocs::hipMallocManaged, kTestBufferBytes);
@@ -223,7 +223,7 @@ HIP_TEST_CASE(Unit_hipMemPrefetchBatchAsync_LocationDistribution) {
  *  - Prefetch Device->Host->Device and verify data integrity throughout
  *  - Tests round-trip data preservation and accessibility
  */
-TEST_CASE("Unit_hipMemPrefetchBatchAsync_RoundTripDataIntegrity") {
+HIP_TEST_CASE(Unit_hipMemPrefetchBatchAsync_RoundTripDataIntegrity) {
   REQUIRE_MANAGED_ACCESS_DEVICE(device);
 
   LinearAllocGuard<int> managed_memory(LinearAllocs::hipMallocManaged, kTestBufferBytes);
