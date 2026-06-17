@@ -3,20 +3,20 @@
 
 cmake_minimum_required(VERSION 3.22)
 
-if(DEFINED ENV{ROCM_PATH} AND NOT "$ENV{ROCM_PATH}" STREQUAL "")
-    set(_RJ_DEFAULT_ROCM_PATH "$ENV{ROCM_PATH}")
-else()
-    set(_RJ_DEFAULT_ROCM_PATH "/opt/rocm")
+set(_RJ_ROCM_PATH_EXPLICIT OFF)
+if(DEFINED ROCM_PATH AND NOT "${ROCM_PATH}" STREQUAL "")
+    set(_RJ_ROCM_PATH_EXPLICIT ON)
+elseif(DEFINED ENV{ROCM_PATH} AND NOT "$ENV{ROCM_PATH}" STREQUAL "")
+    set(_RJ_ROCM_PATH_EXPLICIT ON)
+    set(ROCM_PATH "$ENV{ROCM_PATH}" CACHE PATH "Path to the ROCm installation")
+elseif(IS_DIRECTORY "/opt/rocm")
+    set(ROCM_PATH "/opt/rocm" CACHE PATH "Path to the ROCm installation")
 endif()
-set(ROCM_PATH
-    "${_RJ_DEFAULT_ROCM_PATH}"
-    CACHE PATH
-    "Path to the ROCm installation"
-)
-unset(_RJ_DEFAULT_ROCM_PATH)
-if(NOT ROCM_PATH OR NOT IS_DIRECTORY "${ROCM_PATH}")
+
+if(_RJ_ROCM_PATH_EXPLICIT AND NOT IS_DIRECTORY "${ROCM_PATH}")
     message(FATAL_ERROR "ROCM_PATH must be set to a valid directory")
 endif()
+unset(_RJ_ROCM_PATH_EXPLICIT)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(rj_default_compiler)
@@ -30,7 +30,7 @@ include(rj_version)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Default install prefix to /opt/rocm, matching other ROCm projects.
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT AND ROCM_PATH)
     set(CMAKE_INSTALL_PREFIX "${ROCM_PATH}" CACHE PATH "" FORCE)
 endif()
 
