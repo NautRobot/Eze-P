@@ -4,7 +4,7 @@
 """
 Preset, domain flag, and export-config CLI tests for the rocprof-sys-sample and rocprof-sys-run launchers.
 
-These tests are parametrized over both exe, so each preset/domain/export-config
+These tests are parametrized over both exes, so each preset/domain/export-config
 case is exercised against both front-ends. Mirrors rocprof-sys-preset-tests.cmake for pytest.
 """
 
@@ -86,7 +86,7 @@ def _assert_baseline_output(
 @pytest.mark.parametrize("target", TARGETS)
 class TestPresets(RocprofsysTest):
     @pytest.mark.parametrize("preset", PRESETS)
-    def test_preset(self, target, preset):
+    def test(self, target, preset):
         _assert_baseline_output(
             self,
             target=target,
@@ -98,7 +98,7 @@ class TestPresets(RocprofsysTest):
     @pytest.mark.gpu
     @pytest.mark.rocpd
     @pytest.mark.parametrize("preset", ROCPD_PRESETS)
-    def test_preset_rocpd(self, target, preset):
+    def test_rocpd(self, target, preset):
         _assert_baseline_output(
             self,
             target=target,
@@ -106,7 +106,7 @@ class TestPresets(RocprofsysTest):
             pass_regex=[rf"Preset:\s+{preset}"],
         )
 
-    def test_preset_banner_reflects_sections(self, target):
+    def test_banner_reflects_sections(self, target):
         """The pre-execution banner reports tracing/profiling state from the preset.
 
         profile-only disables tracing but keeps (flat) profiling.
@@ -128,7 +128,7 @@ class TestPresets(RocprofsysTest):
 
 
 @pytest.mark.timeout(30)
-@pytest.mark.class_name("legacy-preset-flags")
+@pytest.mark.class_name("legacy-presets")
 @pytest.mark.parametrize("target", TARGETS)
 class TestLegacyPresetFlags(RocprofsysTest):
     """Old-style flags like --balanced still work, but are now just shortcuts.
@@ -139,7 +139,7 @@ class TestLegacyPresetFlags(RocprofsysTest):
     """
 
     @pytest.mark.parametrize("preset", PRESETS)
-    def test_legacy_flag_translates_to_preset(self, target, preset):
+    def test_flag_translates_to_preset(self, target, preset):
         _assert_baseline_output(
             self,
             target=target,
@@ -201,7 +201,7 @@ class TestDomainFlags(RocprofsysTest):
             pass_regex=["ROCPROFSYS_USE_MPIP=true"],
         )
 
-    def test_preset_plus_domain(self, target):
+    def test_preset_plus_gpu(self, target):
         _assert_baseline_output(
             self,
             target=target,
@@ -225,12 +225,12 @@ class TestDomainFlags(RocprofsysTest):
 @pytest.mark.timeout(60)
 @pytest.mark.class_name("composition-notes")
 @pytest.mark.parametrize("target", TARGETS)
-class TestCompositionNotes(RocprofsysTest):
+class TestDomainFlagOverrideNotes(RocprofsysTest):
     """Advisory notes emitted by validate_domain_flags() when presets and domain
     flags are combined. These are guidance hints printed to stderr, not errors —
     the workload still runs."""
 
-    def test_cpu_with_no_sampling_preset_note(self, target):
+    def test_cpu_with_no_sampling_preset(self, target):
         """--cpu with a preset that disables CPU sampling warns it will be overridden."""
         _assert_baseline_output(
             self,
@@ -242,7 +242,7 @@ class TestCompositionNotes(RocprofsysTest):
             ],
         )
 
-    def test_multiple_domains_without_preset_note(self, target):
+    def test_multiple_domains_without_preset(self, target):
         """Three or more domain flags without a preset suggests using one."""
         _assert_baseline_output(
             self,
@@ -254,7 +254,7 @@ class TestCompositionNotes(RocprofsysTest):
             ],
         )
 
-    def test_rocm_without_gpu_note(self, target):
+    def test_rocm_without_gpu(self, target):
         """--rocm without --gpu suggests adding --gpu for GPU metrics."""
         _assert_baseline_output(
             self,
@@ -266,7 +266,7 @@ class TestCompositionNotes(RocprofsysTest):
             ],
         )
 
-    def test_parallel_without_rocm_note(self, target):
+    def test_parallel_without_rocm(self, target):
         """--parallel without --rocm suggests adding --rocm for collective tracing."""
         _assert_baseline_output(
             self,
@@ -294,7 +294,7 @@ class TestPresetFile(RocprofsysTest):
     against rocprof-sys-run and rocprof-sys-sample.
     """
 
-    def test_custom_json_preset(self, target, tmp_path):
+    def test_custom_json(self, target, tmp_path):
         """A valid custom JSON preset loads and runs the workload."""
         preset_file = tmp_path / "custom.json"
         preset_file.write_text(json.dumps(CUSTOM_PRESET))
@@ -308,7 +308,7 @@ class TestPresetFile(RocprofsysTest):
             ],
         )
 
-    def test_preset_without_metadata_name_uses_filepath(self, target, tmp_path):
+    def test_without_metadata_name_uses_filepath(self, target, tmp_path):
         """A valid preset file lacking metadata.name loads; the name falls back to the path."""
         preset_file = tmp_path / "noname.json"
         preset_file.write_text(
@@ -331,7 +331,7 @@ class TestPresetFile(RocprofsysTest):
             fail_regex=[r"Could not load preset", r"Failed to parse preset"],
         )
 
-    def test_malformed_json_preset_warns(self, target, tmp_path):
+    def test_malformed_json_warns(self, target, tmp_path):
         """A malformed preset file warns and degrades gracefully (still runs)."""
         preset_file = tmp_path / "malformed.json"
         preset_file.write_text("{ this is not valid json ")
@@ -345,7 +345,7 @@ class TestPresetFile(RocprofsysTest):
             ],
         )
 
-    def test_missing_json_preset_warns(self, target, tmp_path):
+    def test_missing_json_warns(self, target, tmp_path):
         """A non-existent preset file warns and degrades gracefully (still runs)."""
         preset_file = tmp_path / "does_not_exist.json"
         _assert_baseline_output(
@@ -358,7 +358,7 @@ class TestPresetFile(RocprofsysTest):
             ],
         )
 
-    def test_unknown_preset_name_warns(self, target):
+    def test_unknown_name_warns(self, target):
         """An unknown built-in preset name warns and degrades gracefully (still runs)."""
         _assert_baseline_output(
             self,
@@ -370,7 +370,7 @@ class TestPresetFile(RocprofsysTest):
             ],
         )
 
-    def test_absolute_path_preset(self, target, tmp_path):
+    def test_absolute_path(self, target, tmp_path):
         """A valid preset given as an absolute file path loads and runs."""
         preset_file = tmp_path / "abs.json"
         preset_file.write_text(json.dumps(CUSTOM_PRESET))
@@ -384,7 +384,7 @@ class TestPresetFile(RocprofsysTest):
             ],
         )
 
-    def test_preset_path_traversal_rejected(self, target):
+    def test_path_traversal_rejected(self, target):
         """A preset path containing '..' is rejected (path-traversal guard); app still runs."""
         _assert_baseline_output(
             self,
@@ -403,12 +403,12 @@ class TestPresetFile(RocprofsysTest):
 
 
 @pytest.mark.timeout(30)
-@pytest.mark.class_name("preset-argparse")
+@pytest.mark.class_name("preset-arg-edge-case")
 @pytest.mark.parametrize("target", TARGETS)
 class TestPresetArgEdgeCases(RocprofsysTest):
     """How --preset handles empty, whitespace, and duplicate values."""
 
-    def test_empty_preset_is_noop(self, target):
+    def test_empty_is_noop(self, target):
         """An empty --preset= value is ignored: no preset loaded, no warning, app runs."""
         result = self.run_test(
             "baseline",
@@ -422,7 +422,7 @@ class TestPresetArgEdgeCases(RocprofsysTest):
             fail_regex=[r"Could not load preset", r"Failed to parse preset"],
         )
 
-    def test_whitespace_preset_warns(self, target):
+    def test_whitespace_warns(self, target):
         """A whitespace-only value is treated as a bad name and degrades gracefully."""
         _assert_baseline_output(
             self,
@@ -434,7 +434,7 @@ class TestPresetArgEdgeCases(RocprofsysTest):
             ],
         )
 
-    def test_duplicate_preset_uses_first(self, target):
+    def test_duplicate_uses_first(self, target):
         """When --preset is given twice the first value wins (no hard error)."""
         _assert_baseline_output(
             self,
@@ -460,7 +460,7 @@ class TestPresetArgEdgeCases(RocprofsysTest):
 class TestExportConfig(RocprofsysTest):
     """--export-config behavior, exercised against rocprof-sys-run and rocprof-sys-sample."""
 
-    def test_export_stdout(self, target):
+    def test_stdout(self, target):
         """--export-config prints the resolved preset config as JSON to stdout."""
         _assert_baseline_output(
             self,
@@ -469,7 +469,7 @@ class TestExportConfig(RocprofsysTest):
             pass_regex=['"name": "balanced"'],
         )
 
-    def test_export_to_file(self, target, tmp_path):
+    def test_to_file(self, target, tmp_path):
         """--export-config=FILE writes parseable JSON to the given path."""
         out_file = tmp_path / "exported.json"
         result = self.run_test(
@@ -484,7 +484,7 @@ class TestExportConfig(RocprofsysTest):
         data = json.loads(out_file.read_text())
         assert data.get("metadata", {}).get("name") == "balanced"
 
-    def test_export_does_not_run_app(self, target):
+    def test_does_not_run_app(self, target):
         """--export-config prints config and exits without launching the target."""
         result = self.run_test(
             "baseline",
