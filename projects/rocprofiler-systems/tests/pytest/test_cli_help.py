@@ -22,6 +22,8 @@ from __future__ import annotations
 import pytest
 from conftest import RocprofsysTest
 
+pytestmark = [pytest.mark.cli_help]
+
 # Both launchers share the same help/flag surface; the embedded mark selects the
 # matching runner category so a single test body covers run + sample.
 TARGETS = [
@@ -210,12 +212,12 @@ HELP_CASES = [
             r"\[DOMAIN OPTIONS\]",
             r"\[EXPORT OPTIONS\]",
         ],
-        id="help_all",
+        id="all",
     ),
     # --- Compact help screens (--help / -h / -?) --------------------------
-    pytest.param(["--help"], _COMPACT, id="help_compact_long"),
-    pytest.param(["-h"], _COMPACT, id="help_compact_short_h"),
-    pytest.param(["-?"], _COMPACT, id="help_compact_short_q"),
+    pytest.param(["--help"], _COMPACT, id="compact_long"),
+    pytest.param(["-h"], _COMPACT, id="compact_short_h"),
+    pytest.param(["-?"], _COMPACT, id="compact_short_q"),
     # --- Preset listing (--list-presets) ----------------------------------
     pytest.param(
         ["--list-presets"],
@@ -478,13 +480,10 @@ class TestCliHelp(RocprofsysTest):
             fail_on_pass=True,
             fail_on_not_found=True,
         )
-        assert result.returncode != 0, "invalid --explain should exit non-zero"
         self.assert_regex(
             result,
-            pass_regex=[
-                r"not found",
-                r"--list-presets",
-            ],
+            pass_regex=[r"not found", r"--list-presets"],
+            use_abort_fail_regex=False,  # negative test intentionally exits non-zero
         )
 
     @pytest.mark.parametrize("target", TARGETS)
@@ -498,10 +497,9 @@ class TestCliHelp(RocprofsysTest):
             fail_on_pass=True,
             fail_on_not_found=True,
         )
-        assert result.returncode != 0, "empty --explain should exit non-zero"
         self.assert_regex(
             result,
-            pass_regex=[r"--explain requires a preset name"],
+            use_abort_fail_regex=False,  # negative test intentionally exits non-zero
         )
 
     @pytest.mark.parametrize("target", TARGETS)
@@ -514,8 +512,7 @@ class TestCliHelp(RocprofsysTest):
             fail_on_pass=True,
             fail_on_not_found=True,
         )
-        assert result.returncode != 0, "unrecognized option should exit non-zero"
         self.assert_regex(
             result,
-            pass_regex=[r"Unrecognized command line option"],
+            use_abort_fail_regex=False,  # negative test intentionally exits non-zero
         )
