@@ -1275,10 +1275,10 @@ constexpr uint32_t ATOMIC_SIZE = 8;
 constexpr uint32_t CONST_FILL_SIZE = 5;
 constexpr uint32_t TIMESTAMP_SIZE = 3;
 constexpr uint32_t GCR_SIZE = 5;
-constexpr uint32_t GCR_GFX1250_SIZE = 6;
-constexpr uint32_t COPY_LINEAR_WAITSIGNAL_GFX1250_SIZE = 19;
-constexpr uint32_t FENCE_64B_GFX1250_SIZE = 5;
-constexpr uint32_t POLL_MEM_64B_GFX1250_SIZE = 8;
+constexpr uint32_t GCR_GFX11_PLUS_SIZE = 6;
+constexpr uint32_t COPY_LINEAR_WAITSIGNAL_GFX11_PLUS_SIZE = 19;
+constexpr uint32_t FENCE_64B_GFX11_PLUS_SIZE = 5;
+constexpr uint32_t POLL_MEM_64B_GFX11_PLUS_SIZE = 8;
 constexpr uint32_t COPY_LINEAR_BROADCAST_FLAG = 1u << 27;
 // NOP_BASE_SIZE intentionally omitted — NOP is handled inline.
 } // namespace sdma
@@ -1367,9 +1367,9 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
       break;
     }
     case sdma::OP_COPY: {
-      if (uses_gfx1250_sdma_packets() && sub_op == sdma::SUBOP_COPY_LINEAR &&
+      if (uses_gfx11_plus_sdma_packets() && sub_op == sdma::SUBOP_COPY_LINEAR &&
           (header & ((1u << 30) | (1u << 31)))) {
-        if (rpos + sdma::COPY_LINEAR_WAITSIGNAL_GFX1250_SIZE > wpos) {
+        if (rpos + sdma::COPY_LINEAR_WAITSIGNAL_GFX11_PLUS_SIZE > wpos) {
           rpos = wpos;
           continue;
         }
@@ -1443,7 +1443,7 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
             l2->invalidate_range(signal_addr, sizeof(int64_t));
         }
 
-        pkt_dwords = sdma::COPY_LINEAR_WAITSIGNAL_GFX1250_SIZE;
+        pkt_dwords = sdma::COPY_LINEAR_WAITSIGNAL_GFX11_PLUS_SIZE;
         break;
       }
 
@@ -1461,9 +1461,9 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
       if (!src_ptr || !dst_ptr) {
         return stop_and_retry_current_packet();
       }
-      // GFX12.5 COPY_LINEAR uses bit 28 for NPD metadata. The two-destination
+      // GFX11+ COPY_LINEAR uses bit 28 for NPD metadata. The two-destination
       // broadcast form is marked by bit 27 and extends the packet with DW7/DW8.
-      bool is_broadcast_copy = uses_gfx1250_sdma_packets()
+      bool is_broadcast_copy = uses_gfx11_plus_sdma_packets()
                                    ? (header & sdma::COPY_LINEAR_BROADCAST_FLAG) != 0
                                    : (header & (1u << 28)) != 0;
       if (is_broadcast_copy) {
@@ -1488,8 +1488,8 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
       break;
     }
     case sdma::OP_FENCE: {
-      if (uses_gfx1250_sdma_packets() && sub_op == sdma::SUBOP_FENCE_64B) {
-        if (rpos + sdma::FENCE_64B_GFX1250_SIZE > wpos) {
+      if (uses_gfx11_plus_sdma_packets() && sub_op == sdma::SUBOP_FENCE_64B) {
+        if (rpos + sdma::FENCE_64B_GFX11_PLUS_SIZE > wpos) {
           rpos = wpos;
           continue;
         }
@@ -1503,7 +1503,7 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
           for (auto *l2 : l2_caches_)
             l2->invalidate_range(addr_va, sizeof(uint64_t));
         }
-        pkt_dwords = sdma::FENCE_64B_GFX1250_SIZE;
+        pkt_dwords = sdma::FENCE_64B_GFX11_PLUS_SIZE;
         break;
       }
 
@@ -1526,8 +1526,8 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
       break;
     }
     case sdma::OP_POLL_REGMEM: {
-      if (uses_gfx1250_sdma_packets() && sub_op == sdma::SUBOP_POLL_MEM_64B) {
-        if (rpos + sdma::POLL_MEM_64B_GFX1250_SIZE > wpos) {
+      if (uses_gfx11_plus_sdma_packets() && sub_op == sdma::SUBOP_POLL_MEM_64B) {
+        if (rpos + sdma::POLL_MEM_64B_GFX11_PLUS_SIZE > wpos) {
           rpos = wpos;
           continue;
         }
@@ -1546,7 +1546,7 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
             return stop_and_retry_current_packet();
           }
         }
-        pkt_dwords = sdma::POLL_MEM_64B_GFX1250_SIZE;
+        pkt_dwords = sdma::POLL_MEM_64B_GFX11_PLUS_SIZE;
         break;
       }
 
@@ -1672,7 +1672,7 @@ void CommandProcessor::process_sdma_ring(HwQueue &queue, uint64_t read_idx, uint
         else
           l2->invalidate_all();
       }
-      pkt_dwords = uses_gfx1250_sdma_packets() ? sdma::GCR_GFX1250_SIZE : sdma::GCR_SIZE;
+      pkt_dwords = uses_gfx11_plus_sdma_packets() ? sdma::GCR_GFX11_PLUS_SIZE : sdma::GCR_SIZE;
       break;
     }
     case sdma::OP_HDP_FLUSH:
