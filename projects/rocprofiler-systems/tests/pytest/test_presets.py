@@ -410,15 +410,19 @@ class TestPresetArgEdgeCases(RocprofsysTest):
 
     def test_empty_is_noop(self, target):
         """An empty --preset= value is ignored: no preset loaded, no warning, app runs."""
+        # Use a runtime-computed sentinel: the launcher's "Executing '...'" line
+        # echoes the unexpanded command (literal "$((2+3))"), so only the
+        # actually-executed shell can produce "NOOP_5_OK". This prevents the
+        # assertion from matching the launcher's command echo instead of real output.
         result = self.run_test(
             "baseline",
             target=target,
-            run_args=["--preset=", "-v", "2", "--", "echo", "ROCPROFSYS_NOOP_OK"],
+            run_args=["--preset=", "--", "sh", "-c", "echo NOOP_$((2+3))_OK"],
             fail_on_not_found=True,
         )
         self.assert_regex(
             result,
-            pass_regex=[r"ROCPROFSYS_NOOP_OK"],
+            pass_regex=[r"NOOP_5_OK"],
             fail_regex=[r"Could not load preset", r"Failed to parse preset"],
         )
 
