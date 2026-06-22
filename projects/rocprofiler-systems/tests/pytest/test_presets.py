@@ -5,7 +5,7 @@
 Preset, domain flag, and export-config CLI tests for the rocprof-sys-sample and rocprof-sys-run launchers.
 
 These tests are parametrized over both exes, so each preset/domain/export-config
-case is exercised against both front-ends. Mirrors rocprof-sys-preset-tests.cmake for pytest.
+case is exercised against both front-ends.
 """
 
 from __future__ import annotations
