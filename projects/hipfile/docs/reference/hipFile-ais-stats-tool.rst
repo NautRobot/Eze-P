@@ -8,7 +8,7 @@ hipFile ais-stats tool
 
 The ``ais-stats`` tool is used to generate a report of I/O statistics of a running hipFile application.
 
-The statistics gathered include the read size and write size for fastpath and fallback, the read bandwidth and write bandwidth for fastpath and fallback, the read latency and write latency for fastpath and fallback, and the read error count and write error count for fastpath and fallback.
+The statistics gathered include the read size and write size for fastpath and fallback, the read bandwidth and write bandwidth for fastpath and fallback, the read latency and write latency for fastpath and fallback, the read error count and write error count for fastpath and fallback, and the unaligned read count and unaligned write count for fallback. Fastpath does not support unaligned I/O.
 
 Statistics are gathered and reported for each GPU.
 
