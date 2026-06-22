@@ -4,16 +4,21 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include <errno.h>
-#include <fenv.h>
-#include <signal.h>
-#include <string.h>
+// _GNU_SOURCE must be defined before any system header so that the glibc
+// extensions FE_NOMASK_ENV and fedisableexcept() are exposed by <cfenv>.
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <cfenv>
+#include <csignal>
 #include <cstdio>
-#include <iostream>
+#include <cstring>
 
 #include "suites/functional/fp_exception_shutdown.h"
 #include "common/common.h"
@@ -73,7 +78,7 @@ void FpExceptionShutdownTest::SetUp(void) {
   }
 
 #ifndef FE_NOMASK_ENV
-  std::cout << "[ SKIPPED ] FE_NOMASK_ENV not available on this platform\n";
+  fprintf(stdout, "[ SKIPPED ] FE_NOMASK_ENV not available on this platform\n");
   test_skipped_ = true;
 #endif
 }
@@ -181,7 +186,7 @@ pid_t FpExceptionShutdownTest::RunShutdownInChild(void) {
 
 void FpExceptionShutdownTest::TestShutdownSurvivesStrictFpEnv(void) {
   pid_t child = RunShutdownInChild();
-  ASSERT_GT(child, 0) << "fork() failed";
+  ASSERT_GT(child, 0) << "fork() failed: " << strerror(errno);
 
   int status = 0;
   int elapsed_ms = 0;
@@ -189,7 +194,9 @@ void FpExceptionShutdownTest::TestShutdownSurvivesStrictFpEnv(void) {
   while (elapsed_ms < kChildTimeoutMs) {
     reaped = waitpid(child, &status, WNOHANG);
     if (reaped == child) break;
-    if (reaped < 0) {
+    // waitpid() can return -1 with EINTR if interrupted by a signal; that is
+    // not a real failure, so keep polling. Only bail out on other errors.
+    if (reaped < 0 && errno != EINTR) {
       FAIL() << "waitpid() failed: " << strerror(errno);
     }
     usleep(kChildPollMs * 1000);
@@ -211,8 +218,8 @@ void FpExceptionShutdownTest::TestShutdownSurvivesStrictFpEnv(void) {
       // appear as PASSED in the gtest summary even when the precondition
       // was not met. Grep CI logs for the "[ SKIPPED ]" marker below to
       // distinguish a true pass from a skipped run.
-      std::cout << "[ SKIPPED ] precondition not met in child; see CHILD: "
-                   "stderr above\n";
+      fprintf(stdout, "[ SKIPPED ] precondition not met in child; see CHILD: "
+                      "stderr above\n");
       return;
     }
     EXPECT_EQ(kChildExitPass, code)
