@@ -18,8 +18,9 @@ from rocm_kpack.artifact_splitter import (
 )
 from rocm_kpack.artifact_utils import read_artifact_manifest, write_artifact_manifest
 from rocm_kpack.database_handlers import MIOpenHandler, RocBLASHandler
+from rocm_kpack.elf.kpack_transform import HIPF_MAGIC, HIPK_MAGIC
 from rocm_kpack.tools.split_artifacts import batch_split, parse_artifact_name
-from rocm_kpack.tools.verify_artifacts import ArtifactVerifier
+from rocm_kpack.tools.verify_artifacts import ArtifactVerifier, FatBinaryInspection
 
 
 class TestArtifactSplitterIntegration:
@@ -1090,4 +1091,140 @@ class TestArtifactSplitterIntegration:
         )
         assert "gfx906" in result_unfiltered, (
             "gfx906 should be in unfiltered results"
+        )
+
+    def test_gpu_targets_rejects_generic_when_all_fat_binary_kernels_filtered(
+        self, toolchain, tmp_path
+    ):
+        """
+        Test that split() fails instead of emitting a raw generic artifact when
+        gpu_targets filters out every code object from detected fat binaries.
+        """
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+
+        prefix = "math-libs/rocWMMA/stage"
+        write_artifact_manifest(input_dir, [prefix])
+
+        lib_dir = input_dir / prefix / "lib"
+        lib_dir.mkdir(parents=True)
+        fat_binary = lib_dir / "librocwmma.so"
+        fat_binary.write_text("placeholder")
+
+        mock_unbundled = type(
+            "MockUnbundled",
+            (),
+            {
+                "target_list": [("hipv4-amdgcn-amd-amdhsa--gfx906", "gfx906.hsaco")],
+                "dest_dir": tmp_path / "unbundled",
+                "__enter__": lambda s: s,
+                "__exit__": lambda s, *a: None,
+            },
+        )()
+        mock_unbundled.dest_dir.mkdir()
+
+        with patch(
+            "rocm_kpack.artifact_splitter.is_fat_binary", return_value=True
+        ), patch("rocm_kpack.artifact_splitter.BundledBinary") as MockBinary:
+            MockBinary.return_value.unbundle.return_value = mock_unbundled
+
+            splitter = ArtifactSplitter(
+                artifact_prefix="rocwmma_test",
+                toolchain=toolchain,
+                database_handlers=[],
+                verbose=True,
+                gpu_targets=["gfx1100"],
+            )
+
+            with pytest.raises(
+                RuntimeError,
+                match="no device code objects matched --gpu-targets",
+            ):
+                splitter.split(input_dir, tmp_path / "output")
+
+    def test_verifier_rejects_raw_generic_executable_fat_binary(
+        self, toolchain, tmp_path
+    ):
+        """
+        Test that verification scans generic executables, not only shared
+        libraries, and rejects raw HIPF fat binaries.
+        """
+        artifacts_dir = tmp_path / "artifacts"
+        generic_dir = artifacts_dir / "rocwmma_test_generic"
+        generic_dir.mkdir(parents=True)
+
+        prefix = "math-libs/rocWMMA/stage"
+        write_artifact_manifest(generic_dir, [prefix])
+
+        bin_dir = generic_dir / prefix / "bin"
+        bin_dir.mkdir(parents=True)
+        vector_iterator_test = bin_dir / "vector_iterator_test"
+        vector_iterator_test.write_text("placeholder")
+
+        def inspect_generic_file(self, binary_path):
+            if binary_path.name != "vector_iterator_test":
+                return None, False
+            return (
+                FatBinaryInspection(
+                    binary_format="ELF",
+                    fatbin_section=".hip_fatbin",
+                    section_state="PROGBITS",
+                    has_kpack_ref=False,
+                    hipf_magic=HIPF_MAGIC,
+                    hipk_magic=HIPK_MAGIC,
+                    wrapper_magics=[HIPF_MAGIC],
+                ),
+                True,
+            )
+
+        with patch.object(
+            ArtifactVerifier,
+            "_inspect_fat_binary_conversion",
+            inspect_generic_file,
+        ):
+            verifier = ArtifactVerifier(artifacts_dir, toolchain, verbose=False)
+
+            assert verifier.run_all_checks() is False
+
+        fat_binary_result = next(
+            result
+            for result in verifier.results
+            if result.check_name == "Fat Binary Conversion"
+        )
+        assert fat_binary_result.passed is False
+        assert any(
+            "vector_iterator_test" in detail for detail in fat_binary_result.details
+        )
+        assert any("HIPF" in detail for detail in fat_binary_result.details)
+
+    def test_verifier_rejects_unreadable_generic_binary(self, toolchain, tmp_path):
+        """
+        Test that a file with ELF magic that cannot be parsed does not get
+        classified as a host-only binary.
+        """
+        artifacts_dir = tmp_path / "artifacts"
+        generic_dir = artifacts_dir / "rocwmma_test_generic"
+        generic_dir.mkdir(parents=True)
+
+        prefix = "math-libs/rocWMMA/stage"
+        write_artifact_manifest(generic_dir, [prefix])
+
+        bin_dir = generic_dir / prefix / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "truncated_test").write_bytes(b"\x7fELF")
+
+        verifier = ArtifactVerifier(artifacts_dir, toolchain, verbose=False)
+
+        assert verifier.run_all_checks() is False
+
+        fat_binary_result = next(
+            result
+            for result in verifier.results
+            if result.check_name == "Fat Binary Conversion"
+        )
+        assert fat_binary_result.passed is False
+        assert any("truncated_test" in detail for detail in fat_binary_result.details)
+        assert any(
+            "failed to inspect ELF binary" in detail
+            for detail in fat_binary_result.details
         )
