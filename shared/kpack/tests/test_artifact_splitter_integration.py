@@ -18,9 +18,8 @@ from rocm_kpack.artifact_splitter import (
 )
 from rocm_kpack.artifact_utils import read_artifact_manifest, write_artifact_manifest
 from rocm_kpack.database_handlers import MIOpenHandler, RocBLASHandler
-from rocm_kpack.elf.kpack_transform import HIPF_MAGIC, HIPK_MAGIC
 from rocm_kpack.tools.split_artifacts import batch_split, parse_artifact_name
-from rocm_kpack.tools.verify_artifacts import ArtifactVerifier, FatBinaryInspection
+from rocm_kpack.tools.verify_artifacts import ArtifactVerifier
 
 
 class TestArtifactSplitterIntegration:
@@ -1143,11 +1142,11 @@ class TestArtifactSplitterIntegration:
                 splitter.split(input_dir, tmp_path / "output")
 
     def test_verifier_rejects_raw_generic_executable_fat_binary(
-        self, toolchain, tmp_path
+        self, test_assets_dir, toolchain, tmp_path
     ):
         """
         Test that verification scans generic executables, not only shared
-        libraries, and rejects raw HIPF fat binaries.
+        libraries, and rejects raw untransformed HIPF fat binaries.
         """
         artifacts_dir = tmp_path / "artifacts"
         generic_dir = artifacts_dir / "rocwmma_test_generic"
@@ -1159,32 +1158,22 @@ class TestArtifactSplitterIntegration:
         bin_dir = generic_dir / prefix / "bin"
         bin_dir.mkdir(parents=True)
         vector_iterator_test = bin_dir / "vector_iterator_test"
-        vector_iterator_test.write_text("placeholder")
-
-        def inspect_generic_file(self, binary_path):
-            if binary_path.name != "vector_iterator_test":
-                return None, False
-            return (
-                FatBinaryInspection(
-                    binary_format="ELF",
-                    fatbin_section=".hip_fatbin",
-                    section_state="PROGBITS",
-                    has_kpack_ref=False,
-                    hipf_magic=HIPF_MAGIC,
-                    hipk_magic=HIPK_MAGIC,
-                    wrapper_magics=[HIPF_MAGIC],
-                ),
-                True,
+        raw_fat_binary = (
+            test_assets_dir
+            / "bundled_binaries/linux/cov5/test_kernel_single.exe"
+        )
+        with open(raw_fat_binary, "rb") as f:
+            assert f.read(4) == b"\x7fELF", (
+                "test_kernel_single.exe must be materialized by Git LFS"
             )
+        shutil.copy2(
+            raw_fat_binary,
+            vector_iterator_test,
+        )
 
-        with patch.object(
-            ArtifactVerifier,
-            "_inspect_fat_binary_conversion",
-            inspect_generic_file,
-        ):
-            verifier = ArtifactVerifier(artifacts_dir, toolchain, verbose=False)
+        verifier = ArtifactVerifier(artifacts_dir, toolchain, verbose=False)
 
-            assert verifier.run_all_checks() is False
+        assert verifier.run_all_checks() is False
 
         fat_binary_result = next(
             result
@@ -1192,10 +1181,11 @@ class TestArtifactSplitterIntegration:
             if result.check_name == "Fat Binary Conversion"
         )
         assert fat_binary_result.passed is False
-        assert any(
-            "vector_iterator_test" in detail for detail in fat_binary_result.details
-        )
-        assert any("HIPF" in detail for detail in fat_binary_result.details)
+        details = "\n".join(fat_binary_result.details)
+        assert "math-libs/rocWMMA/stage/bin/vector_iterator_test" in details
+        assert "still has PROGBITS .hip_fatbin" in details
+        assert "missing .rocm_kpack_ref marker" in details
+        assert "HIPF" in details
 
     def test_verifier_rejects_unreadable_generic_binary(self, toolchain, tmp_path):
         """
