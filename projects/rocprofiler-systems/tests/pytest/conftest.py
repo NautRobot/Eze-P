@@ -344,6 +344,7 @@ def pytest_configure(config: pytest.Config) -> None:
         "unit_tests",
         "hip_stream",
         "presets",
+        "cli_help",
         "hpc",
         "hip",
         "scratch_memory",
