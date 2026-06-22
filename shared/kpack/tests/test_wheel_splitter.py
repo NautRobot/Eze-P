@@ -9,6 +9,8 @@ split pipeline.
 import hashlib
 import os
 import shutil
+import stat
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -29,6 +31,7 @@ from rocm_kpack.wheel_splitter import (
     generate_record,
     generate_wheel_file,
     parse_wheel_identity,
+    zip_wheel,
 )
 
 # =============================================================================
@@ -705,6 +708,73 @@ class TestGenerateRecord:
         test_line = [l for l in lines if "test.py" in l][0]
         assert f"sha256={expected_hash}" in test_line
         assert f",{len(test_content)}" in test_line
+
+
+class TestWheelArchivePermissions:
+    def test_extract_and_repack_preserves_exact_executable_mode(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        from rocm_kpack.binutils import Toolchain
+
+        input_wheel = tmp_path / "input.whl"
+        executable_path = "torch/bin/torch_shm_manager"
+        plain_path = "torch/__init__.py"
+        extracted_root = input_wheel.parent / (input_wheel.stem + ".tmp_extract")
+        chmod_calls: dict[str, int] = {}
+        path_type = type(tmp_path)
+        original_chmod = path_type.chmod
+
+        def recording_chmod(self: Path, mode: int) -> None:
+            chmod_calls[self.relative_to(extracted_root).as_posix()] = mode
+            if os.name != "nt":
+                original_chmod(self, mode)
+
+        with zipfile.ZipFile(input_wheel, "w") as zf:
+            executable_info = zipfile.ZipInfo(executable_path)
+            executable_info.external_attr = (stat.S_IFREG | 0o751) << 16
+            zf.writestr(executable_info, b"#!/bin/sh\n")
+
+            plain_info = zipfile.ZipInfo(plain_path)
+            plain_info.external_attr = (stat.S_IFREG | 0o640) << 16
+            zf.writestr(plain_info, b"# torch\n")
+
+        monkeypatch.setattr(path_type, "chmod", recording_chmod)
+
+        splitter = WheelSplitter(
+            device_package_prefix="amd-torch-device",
+            overlay_root="torch/",
+            toolchain=Toolchain(),
+        )
+        extracted_dir, is_temporary = splitter._resolve_input(input_wheel)
+        assert is_temporary
+
+        try:
+            extracted_executable = extracted_dir / executable_path
+            if os.name != "nt":
+                assert stat.S_IMODE(extracted_executable.stat().st_mode) == 0o751
+                assert (
+                    stat.S_IMODE((extracted_dir / plain_path).stat().st_mode) == 0o640
+                )
+
+            output_wheel = tmp_path / "output.whl"
+            zip_wheel(extracted_dir, output_wheel)
+        finally:
+            shutil.rmtree(extracted_dir)
+
+        assert chmod_calls[executable_path] == 0o751
+        assert chmod_calls[plain_path] == 0o640
+
+        if os.name == "nt":
+            return
+
+        with zipfile.ZipFile(output_wheel, "r") as zf:
+            output_executable_mode = stat.S_IMODE(
+                zf.getinfo(executable_path).external_attr >> 16
+            )
+            output_plain_mode = stat.S_IMODE(zf.getinfo(plain_path).external_attr >> 16)
+
+        assert output_executable_mode == 0o751
+        assert output_plain_mode == 0o640
 
 
 class TestKpackSearchPattern:
