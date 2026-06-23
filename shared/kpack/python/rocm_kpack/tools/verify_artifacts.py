@@ -552,6 +552,10 @@ class ArtifactVerifier:
         except ValueError as e:
             return [], str(e)
 
+        logical_size = getattr(section, "virtual_size", None)
+        if logical_size is not None:
+            section_data = section_data[:logical_size]
+
         if len(section_data) % wrapper_size != 0:
             return (
                 [],
