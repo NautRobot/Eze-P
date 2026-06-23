@@ -9,6 +9,7 @@ This module provides functionality to split TheRock build artifacts into:
 """
 
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional, Set
@@ -35,9 +36,16 @@ def strip_target_features(target: str) -> str:
     return target[:colon_pos] if colon_pos >= 0 else target
 
 
+# Known LLVM AMDGPU target features that ride on a base arch, in either the
+# colon form (gfx942:xnack+) or the Tensile kernel-filename hyphen form
+# (gfx90a-xnack-). Normalizing the hyphen form to colon lets one colon-split
+# drop every feature variant regardless of how many features are present.
+_HYPHEN_FEATURE_RE = re.compile(r"-(xnack|sramecc)")
+
+
 def base_arch(arch: str) -> str:
-    """Strip features in colon or Tensile hyphen form (e.g. 'gfx90a-xnack-' -> 'gfx90a')."""
-    return strip_target_features(arch.replace("-xnack", ":xnack"))
+    """Strip known feature suffixes in colon or hyphen form (e.g. 'gfx90a-xnack-' -> 'gfx90a')."""
+    return strip_target_features(_HYPHEN_FEATURE_RE.sub(r":\1", arch))
 
 
 @dataclass

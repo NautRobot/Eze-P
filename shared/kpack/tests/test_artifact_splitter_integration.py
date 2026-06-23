@@ -15,11 +15,39 @@ from rocm_kpack.artifact_splitter import (
     ArtifactSplitter,
     FileClassificationVisitor,
     ExtractedKernel,
+    base_arch,
 )
 from rocm_kpack.artifact_utils import read_artifact_manifest, write_artifact_manifest
 from rocm_kpack.database_handlers import MIOpenHandler, RocBLASHandler
 from rocm_kpack.tools.split_artifacts import batch_split, parse_artifact_name
 from rocm_kpack.tools.verify_artifacts import ArtifactVerifier
+
+
+class TestBaseArch:
+    """Unit tests for base_arch() feature-suffix normalization."""
+
+    @pytest.mark.parametrize(
+        "arch,expected",
+        [
+            # Bare base arch is unchanged.
+            ("gfx90a", "gfx90a"),
+            ("gfx942", "gfx942"),
+            # Tensile hyphen form (kernel-database filenames).
+            ("gfx90a-xnack-", "gfx90a"),
+            ("gfx90a-xnack+", "gfx90a"),
+            # ELF colon form (--gpu-targets / bundle ids).
+            ("gfx942:xnack+", "gfx942"),
+            ("gfx942:sramecc+:xnack-", "gfx942"),
+            # sramecc must also collapse, in both forms (review request: do not
+            # assume xnack is the only feature).
+            ("gfx90a-sramecc-", "gfx90a"),
+            ("gfx90a-sramecc+", "gfx90a"),
+            # Multiple hyphen-form features in one id.
+            ("gfx90a-sramecc+-xnack-", "gfx90a"),
+        ],
+    )
+    def test_strips_known_features(self, arch, expected):
+        assert base_arch(arch) == expected
 
 
 class TestArtifactSplitterIntegration:
