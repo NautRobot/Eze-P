@@ -1639,27 +1639,6 @@ def run(app_args, args, **kwargs):
     if not args.output_format:
         args.output_format = ["rocpd"]
 
-    # OMPT is a rocpd-only trace: it is written to the rocpd database and exported to
-    # other formats via `rocpd convert`; the direct csv/json/pftrace/otf2 emitters do
-    # not contain OMPT records. If OMPT tracing is enabled (explicitly or via
-    # --sys-trace/--runtime-trace) but rocpd was not requested, add it so OMPT data is
-    # not silently dropped, and warn the user.
-    ompt_enabled = (
-        bool(getattr(args, "ompt_trace", None)) or args.sys_trace or args.runtime_trace
-    )
-    if ompt_enabled and "rocpd" not in args.output_format:
-        warning(
-            "--ompt-trace: OMPT data is only emitted to the 'rocpd' output format; "
-            "the requested output format(s) {fmts} will not contain OMPT records. "
-            "Adding 'rocpd' to --output-format -- use `rocpd convert` to export OMPT "
-            "to csv/pftrace/otf2.".format(fmts=", ".join(args.output_format))
-        )
-        args.output_format.append("rocpd")
-
-    update_env(
-        "ROCPROF_OUTPUT_FORMAT", ",".join(args.output_format), append=True, join_char=","
-    )
-
     if args.kokkos_trace:
         update_env("KOKKOS_TOOLS_LIBS", ROCPROF_KOKKOSP_LIBRARY, append=True)
         for itr in (
@@ -1700,6 +1679,25 @@ def run(app_args, args, **kwargs):
             "rocjpeg_trace",
         ):
             setattrifnone(args, itr, True)
+
+    # OMPT is a rocpd-only trace: it is written to the rocpd database and exported to
+    # other formats via `rocpd convert`; the direct csv/json/pftrace/otf2 emitters do
+    # not contain OMPT records. This runs after the --sys-trace/--runtime-trace folds
+    # have resolved args.ompt_trace, which honors an explicit --ompt-trace=false. If
+    # OMPT tracing is effectively enabled but rocpd was not requested, add it so OMPT
+    # data is not silently dropped, and warn the user.
+    if bool(getattr(args, "ompt_trace", None)) and "rocpd" not in args.output_format:
+        warning(
+            "--ompt-trace: OMPT data is only emitted to the 'rocpd' output format; "
+            "the requested output format(s) {fmts} will not contain OMPT records. "
+            "Adding 'rocpd' to --output-format -- use `rocpd convert` to export OMPT "
+            "to csv/pftrace/otf2.".format(fmts=", ".join(args.output_format))
+        )
+        args.output_format.append("rocpd")
+
+    update_env(
+        "ROCPROF_OUTPUT_FORMAT", ",".join(args.output_format), append=True, join_char=","
+    )
 
     if args.hip_trace:
         for itr in ("compiler", "runtime"):
