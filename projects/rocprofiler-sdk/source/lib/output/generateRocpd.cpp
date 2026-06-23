@@ -1884,14 +1884,12 @@ write_rocpd(
                 }
                 else
                 {
-                    // Samples are named via their track. A category-named track would
-                    // collapse every instant OMPT event to "OMPT", so name OMPT sample
-                    // tracks by operation to preserve identity (matching OMPT regions).
-                    auto track_name_id = (itr.kind == ROCPROFILER_BUFFER_TRACING_OMPT)
-                                             ? string_entries.at(name)
-                                             : string_entries.at(category);
-                    auto track_id =
-                        get_track_id(db, node_id, this_pid, itr.thread_id, track_name_id, "{}");
+                    // OMPT instant samples are named by operation (not the "OMPT"
+                    // category) so each event keeps its identity on its own track.
+                    const auto& track_name =
+                        (itr.kind == ROCPROFILER_BUFFER_TRACING_OMPT) ? name : category;
+                    auto track_id = get_track_id(
+                        db, node_id, this_pid, itr.thread_id, string_entries.at(track_name), "{}");
 
                     get_insert_statement(db,
                                          "rocpd_sample{{uuid}}",

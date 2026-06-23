@@ -225,10 +225,10 @@ rocprofiler_add_integration_validate_test(
     FIXTURES_REQUIRED rocprofv3-test-ompt-all
     DISABLED "${IS_DISABLED}")
 
-# --sys-trace implicit OMPT: profiling with --sys-trace (no explicit --ompt-trace)
-# and a non-rocpd --output-format must still implicitly enable OMPT and auto-add the
-# rocpd output so OMPT records are captured. Uses --output-format csv to exercise the
-# auto-add path. Runs on the host workload so it is not gated on target-offload support.
+# --sys-trace implicit OMPT: profiling with --sys-trace (no explicit --ompt-trace) and a
+# non-rocpd --output-format must still implicitly enable OMPT and auto-add the rocpd
+# output so OMPT records are captured. Uses --output-format csv to exercise the auto-add
+# path. Runs on the host workload so it is not gated on target-offload support.
 set(ompt-sys-trace-output-dir ${CMAKE_CURRENT_BINARY_DIR}/openmp-host-sys-trace)
 rocprofiler_add_integration_execute_test(
     rocprofv3-test-ompt-sys-trace
