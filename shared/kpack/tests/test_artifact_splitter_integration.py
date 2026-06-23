@@ -53,6 +53,10 @@ class TestArtifactSplitterIntegration:
         binary_path.parent.mkdir(parents=True)
         return artifacts_dir, prefix, binary_path
 
+    @staticmethod
+    def _details_text(details: list[str]) -> str:
+        return "\n".join(details).replace("\\", "/")
+
     @pytest.fixture
     def create_test_artifact(self, tmp_path):
         """Create a test artifact directory structure."""
@@ -1221,7 +1225,7 @@ class TestArtifactSplitterIntegration:
             if result.check_name == "Fat Binary Conversion"
         )
         assert fat_binary_result.passed is False
-        details = "\n".join(fat_binary_result.details)
+        details = self._details_text(fat_binary_result.details)
         assert f"{prefix}/{binary_relpath}" in details
         assert "still has PROGBITS .hip_fatbin" in details
         assert "missing .rocm_kpack_ref marker" in details
@@ -1256,7 +1260,7 @@ class TestArtifactSplitterIntegration:
             for result in verifier.results
             if result.check_name == "Fat Binary Conversion"
         )
-        details = "\n".join(fat_binary_result.details)
+        details = self._details_text(fat_binary_result.details)
         assert "lib/libtest_multi_wrapper.so" in details
         assert "ELF" in details
         assert "NOBITS" in details
@@ -1306,7 +1310,7 @@ class TestArtifactSplitterIntegration:
             if result.check_name == "Fat Binary Conversion"
         )
         assert fat_binary_result.passed is False
-        details = "\n".join(fat_binary_result.details)
+        details = self._details_text(fat_binary_result.details)
         assert f"{prefix}/bin/vector_iterator_test" in details
         assert "1 wrapper(s) still use HIPF magic" in details
         assert "still has PROGBITS .hip_fatbin" not in details
@@ -1336,7 +1340,7 @@ class TestArtifactSplitterIntegration:
             if result.check_name == "Fat Binary Conversion"
         )
         assert fat_binary_result.passed is False
-        details = "\n".join(fat_binary_result.details)
+        details = self._details_text(fat_binary_result.details)
         assert f"{prefix}/bin/vector_iterator_test.exe" in details
         assert "still has unstripped" in details
         assert ".hip_fat" in details
@@ -1372,7 +1376,7 @@ class TestArtifactSplitterIntegration:
             for result in verifier.results
             if result.check_name == "Fat Binary Conversion"
         )
-        details = "\n".join(fat_binary_result.details)
+        details = self._details_text(fat_binary_result.details)
         assert "bin/vector_iterator_test.exe" in details
         assert "COFF" in details
 
@@ -1416,7 +1420,7 @@ class TestArtifactSplitterIntegration:
             if result.check_name == "Fat Binary Conversion"
         )
         assert fat_binary_result.passed is False
-        details = "\n".join(fat_binary_result.details)
+        details = self._details_text(fat_binary_result.details)
         assert f"{prefix}/bin/vector_iterator_test.exe" in details
         assert "1 wrapper(s) still use HIPF magic" in details
         assert "missing .kpackrf marker" not in details
