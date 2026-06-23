@@ -436,6 +436,13 @@ class ThunkLoader {
     bool DestroyThunkInstance();
     bool CheckThunkAbi();
     bool IsDXG() const { return is_dxg_; }
+    bool IsWinDxg() const {
+#if defined(_WIN32)
+      return is_dxg_;
+#else
+      return false;
+#endif
+    }
     bool IsDTIF() const { return is_dtif_; }
     bool IsSharedLibraryLoaded() const { return is_loaded_; }
     void* ThunkHandle() const { return thunk_handle; }
