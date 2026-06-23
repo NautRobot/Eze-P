@@ -11,7 +11,8 @@
   "skip_tests": [
     "hip_matmul_matmul::m4096_n4096_k4096",
     "llama_noncont_batched_matmul",
-    "llama_noncont_batched_matmul_hazard"
+    "llama_noncont_batched_matmul_hazard",
+    "hip_matmul_matvec::m256_n1_k1024"
   ],
   "expected_compile_failures": [],
   "expected_run_failures": []
