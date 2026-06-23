@@ -36,15 +36,7 @@ def strip_target_features(target: str) -> str:
 
 
 def base_arch(arch: str) -> str:
-    """Reduce an architecture id to its bare base, dropping feature suffixes.
-
-    Handles both the ELF bundle/colon form ('gfx942:xnack+') and the
-    Tensile-style hyphen form found in kernel-database filenames
-    ('gfx90a-xnack-'). The bare base arch is the unit of artifact sharding
-    and of --gpu-targets matching, so xnack+/- variants of an in-scope base
-    arch must collapse onto it rather than be treated as distinct targets.
-    """
-    # Normalize the hyphen feature form to the colon form, then strip features.
+    """Strip features in colon or Tensile hyphen form (e.g. 'gfx90a-xnack-' -> 'gfx90a')."""
     return strip_target_features(arch.replace("-xnack", ":xnack"))
 
 
@@ -116,14 +108,9 @@ class FileClassificationVisitor:
         for handler in self.database_handlers:
             arch = handler.detect(file_path, prefix_path)
             if arch:
-                # Collapse feature variants onto the bare base arch. detect()
-                # returns the Tensile hyphen form for kernel objects (e.g.
-                # 'gfx90a-xnack-'), while gpu_targets and the per-arch shard key
-                # are bare ('gfx90a'). Without this, an xnack-suffixed kernel
-                # whose base arch IS in gpu_targets fails the membership check
-                # below and is dropped from both the generic and per-arch
-                # artifacts, even though no separate 'gfx90a-xnack-' build job
-                # exists to emit it (see ROCM-25535).
+                # detect() returns the Tensile hyphen form ('gfx90a-xnack-');
+                # collapse onto the bare base arch used by gpu_targets and the
+                # shard key so xnack variants are not dropped (ROCM-25535).
                 arch = base_arch(arch)
                 if self.gpu_targets is not None and arch not in self.gpu_targets:
                     if self.verbose:

@@ -1002,14 +1002,9 @@ class TestArtifactSplitterIntegration:
         """
         Regression test for ROCM-25535.
 
-        Tensile kernel filenames encode xnack feature variants with a hyphen
-        (e.g. ``TensileLibrary_lazy_gfx90a-xnack-.hsaco``), so the database
-        handler reports the arch as ``gfx90a-xnack-``. ``--gpu-targets`` (and the
-        per-arch shard key) use the bare base arch ``gfx90a``. Before the fix,
-        the hyphen-form arch failed the gpu_targets membership check and the
-        kernel object was dropped from BOTH the per-arch and the generic
-        artifacts, even though no separate ``gfx90a-xnack-`` build job exists to
-        emit it. The xnack variants must collapse onto the bare base shard.
+        Tensile encodes xnack variants with a hyphen (gfx90a-xnack-), but
+        gpu_targets and the shard key are the bare base arch (gfx90a). The
+        variants must collapse onto the base shard instead of being dropped.
         """
         input_dir = tmp_path / "test_artifact"
         input_dir.mkdir()
