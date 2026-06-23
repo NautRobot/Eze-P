@@ -86,8 +86,9 @@ I/O statistics
 Use ``ais-stats`` to display runtime hipFile I/O statistics. These stats help
 determine whether requests are using the fastpath or fallback path.
 
-Set ``HIPFILE_STATS_LEVEL`` to ``1`` or ``2`` before running ``ais-stats``.
-For usage details and examples, see :doc:`/reference/hipFile-ais-stats-tool`.
+Set ``HIPFILE_STATS_LEVEL`` to ``1`` (default) or ``2`` before running
+``ais-stats``.  For usage details and examples, see
+:doc:`/reference/hipFile-ais-stats-tool`.
 
 Performance baseline
 ====================
