@@ -80,6 +80,8 @@ rm -f "${COV_DIR}"/*.profraw
 echo "==> Running Register.ProcessIsolatedRegisterTests"
 LLVM_PROFILE_FILE="${COV_DIR}/rccl_tests_%p_%m.profraw" \
   UT_VERBOSE=1 \
+  NCCL_DEBUG=INFO \
+  NCCL_DEBUG_SUBSYS=REG,P2P \
   "${BIN}" --gtest_filter="Register.ProcessIsolatedRegisterTests" "$@" || true
 
 # ---------------------------------------------------------------------------
