@@ -1,5 +1,5 @@
 /*************************************************************************
- * Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
+ * Copyright (c) 2025-2026 Advanced Micro Devices, Inc. All rights reserved.
  *
  * See LICENSE.txt for license information
  ************************************************************************/
@@ -8,6 +8,8 @@
 #include <rccl/rccl.h>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
+#include <vector>
 
 #include "common/ErrCode.hpp"
 #include "common/ProcessIsolatedTestRunner.hpp"
@@ -173,6 +175,148 @@ static void testVariableSizeBuffers(bool expectNonNull) {
 }
 
 /**
+ * @brief Regression test for NCCL GH#1859 / v2.29.2-1 fix:
+ *        "Fixes crash that can happen when calling p2p and then collectives
+ *         while using the same user buffer."
+ *
+ * Root cause: in p2p.cc the NCCL_IPC_COLLECTIVE branch allocates
+ * devPeerRmtAddrs but only copies hostPeerRmtAddrs → devPeerRmtAddrs when
+ * needUpdate==true.  If P2P ran first on the same regRecord, needUpdate is
+ * already false by the time the collective resolves addresses, so
+ * devPeerRmtAddrs is left zeroed and the GPU kernel dereferences a null
+ * remote pointer → illegal memory access / crash.
+ *
+ * Sequence that triggers the bug (requires ≥ 2 intra-node GPUs):
+ *   1. ncclCommInitAll across 2 ranks (one per GPU).
+ *   2. ncclCommRegister the same device buffer on each rank
+ *      (NCCL_LOCAL_REGISTER=1 ensures real IPC registration).
+ *   3. ncclSend / ncclRecv group call on the registered buffer → sync.
+ *      (populates hostPeerRmtAddrs; leaves devPeerRmtAddrs NULL for the
+ *       collective branch because only the P2P branch ran.)
+ *   4. ncclAllReduce group call on the same registered buffer → sync.
+ *      (buggy: allocates devPeerRmtAddrs, skips memcpy, crashes;
+ *       fixed:  allocates devPeerRmtAddrs and always copies on first alloc.)
+ *   5. Verify ncclSuccess and correct AllReduce output.
+ *
+ * Skipped when fewer than 2 GPUs are visible (intra-node IPC path requires
+ * at least 2 ranks on the same node).
+ */
+static void testP2pThenCollectiveSameBuffer()
+{
+    // Need at least 2 GPUs for an intra-node IPC communicator.
+    int numDevices = 0;
+    HIPCALL(hipGetDeviceCount(&numDevices));
+    if (numDevices < 2) {
+        GTEST_SKIP() << "This test requires at least 2 GPU devices (detected "
+                     << numDevices << ").";
+        return;
+    }
+    const int numRanks = 2;
+
+    // --- Communicator setup ---
+    std::vector<ncclComm_t> comms(numRanks, nullptr);
+    NCCLCHECK(ncclCommInitAll(comms.data(), numRanks, nullptr));
+
+    // --- Per-rank resources ---
+    const size_t numElements = 1024;                        // 4 KB of float
+    const size_t bufBytes    = numElements * sizeof(float);
+
+    std::vector<hipStream_t> streams(numRanks);
+    std::vector<void*>       devBufs(numRanks, nullptr);    // device buffers
+    std::vector<void*>       regHandles(numRanks, nullptr); // ncclCommRegister handles
+    std::vector<void*>       devOut(numRanks, nullptr);     // separate output for AllReduce
+
+    for (int r = 0; r < numRanks; r++) {
+        HIPCALL(hipSetDevice(r));
+        HIPCALL(hipStreamCreate(&streams[r]));
+
+        // Input buffer: filled with rank+1 so AllReduce sum = numRanks*(numRanks+1)/2 per element.
+        HIPCALL(hipMalloc(&devBufs[r], bufBytes));
+        std::vector<float> hostIn(numElements, static_cast<float>(r + 1));
+        HIPCALL(hipMemcpy(devBufs[r], hostIn.data(), bufBytes, hipMemcpyHostToDevice));
+
+        // Separate output buffer for AllReduce (out-of-place keeps the test readable).
+        HIPCALL(hipMalloc(&devOut[r], bufBytes));
+        HIPCALL(hipMemset(devOut[r], 0, bufBytes));
+
+        // Register the input buffer — this is the buffer that will be used for
+        // both the P2P and the subsequent AllReduce.
+        NCCLCHECK(ncclCommRegister(comms[r], devBufs[r], bufBytes, &regHandles[r]));
+        EXPECT_NE(regHandles[r], nullptr)
+            << "Rank " << r << ": ncclCommRegister returned NULL handle "
+               "(is NCCL_LOCAL_REGISTER=1 set?).";
+    }
+
+    // --- Step 1: P2P send/recv on the registered buffer ---
+    // Rank 0 sends devBufs[0] → rank 1.  Rank 1 receives into devBufs[1]
+    // (overwriting it, which is fine — we only care about the AllReduce result).
+    // This populates regRecord->regIpcAddrs.hostPeerRmtAddrs for the P2P path
+    // but leaves the NCCL_IPC_COLLECTIVE devPeerRmtAddrs uninitialised.
+    NCCLCHECK(ncclGroupStart());
+    HIPCALL(hipSetDevice(0));
+    NCCLCHECK(ncclSend(devBufs[0], numElements, ncclFloat, /*peer=*/1, comms[0], streams[0]));
+    HIPCALL(hipSetDevice(1));
+    NCCLCHECK(ncclRecv(devBufs[1], numElements, ncclFloat, /*peer=*/0, comms[1], streams[1]));
+    NCCLCHECK(ncclGroupEnd());
+
+    for (int r = 0; r < numRanks; r++) {
+        HIPCALL(hipSetDevice(r));
+        HIPCALL(hipStreamSynchronize(streams[r]));
+    }
+
+    // Reset the output buffers before the AllReduce so we can verify the result.
+    for (int r = 0; r < numRanks; r++) {
+        HIPCALL(hipSetDevice(r));
+        HIPCALL(hipMemset(devOut[r], 0, bufBytes));
+    }
+
+    // --- Step 2: AllReduce on the *same* registered buffer (bug trigger) ---
+    // Without the fix this crashes with an illegal memory access because
+    // devPeerRmtAddrs is allocated but not populated (skipped memcpy).
+    // With the fix devPeerRmtAddrs is populated on first allocation regardless
+    // of needUpdate, so the GPU kernel receives valid remote addresses.
+    NCCLCHECK(ncclGroupStart());
+    for (int r = 0; r < numRanks; r++) {
+        HIPCALL(hipSetDevice(r));
+        NCCLCHECK(ncclAllReduce(devBufs[r], devOut[r], numElements,
+                                ncclFloat, ncclSum, comms[r], streams[r]));
+    }
+    NCCLCHECK(ncclGroupEnd());
+
+    for (int r = 0; r < numRanks; r++) {
+        HIPCALL(hipSetDevice(r));
+        HIPCALL(hipStreamSynchronize(streams[r]));
+    }
+
+    // --- Verify AllReduce result ---
+    // After the P2P, devBufs[0] still holds 1.0f (rank 0 sent but did not
+    // overwrite its own buffer) and devBufs[1] now holds 1.0f (received from
+    // rank 0).  Sum across both ranks = 2.0f per element.
+    const float expectedSum = static_cast<float>(numRanks); // 1.0f * numRanks
+    for (int r = 0; r < numRanks; r++) {
+        HIPCALL(hipSetDevice(r));
+        std::vector<float> hostOut(numElements, -1.0f);
+        HIPCALL(hipMemcpy(hostOut.data(), devOut[r], bufBytes, hipMemcpyDeviceToHost));
+        for (size_t i = 0; i < numElements; i++) {
+            EXPECT_FLOAT_EQ(hostOut[i], expectedSum)
+                << "Rank " << r << " element [" << i << "]: "
+                << "expected " << expectedSum << " got " << hostOut[i];
+            if (hostOut[i] != expectedSum) break; // report first mismatch only
+        }
+    }
+
+    // --- Cleanup ---
+    for (int r = 0; r < numRanks; r++) {
+        HIPCALL(hipSetDevice(r));
+        NCCLCHECK(ncclCommDeregister(comms[r], regHandles[r]));
+        HIPCALL(hipFree(devBufs[r]));
+        HIPCALL(hipFree(devOut[r]));
+        HIPCALL(hipStreamDestroy(streams[r]));
+        NCCLCHECK(ncclCommDestroy(comms[r]));
+    }
+}
+
+/**
  * @brief Test deregistering NULL handle (should succeed as no-op)
  */
 static void testDeregisterNullHandle() {
@@ -241,7 +385,15 @@ TEST(Register, ProcessIsolatedRegisterTests)
             []() { testVariableSizeBuffers(true); }),
 
         // DeregisterNullHandle test (no enable/disable variants needed)
-        ProcessIsolatedTestRunner::TestConfig("DeregisterNullHandle", testDeregisterNullHandle)
+        ProcessIsolatedTestRunner::TestConfig("DeregisterNullHandle", testDeregisterNullHandle),
+
+        // Regression test: NCCL GH#1859 — p2p followed by collective on the same
+        // registered user buffer must not crash (requires ≥ 2 GPUs).
+        ProcessIsolatedTestRunner::TestConfig(
+            "P2pThenCollective_SameBuffer", testP2pThenCollectiveSameBuffer)
+            .withEnvironment({{"NCCL_LOCAL_REGISTER", "1"}})
+            .withNumGpus(2)
+            .withTimeout(std::chrono::seconds(120))
     );
 }
 
