@@ -100,7 +100,6 @@ echo "==> Merging ${#PROFRAW_FILES[@]} profraw file(s) -> ${PROFDATA}"
 # ---------------------------------------------------------------------------
 SOURCES=(
   "${BUILD_DIR}/hipify/src/transport/p2p_tmp.cc"
-  "${RCCL_ROOT}/test/RegisterTests.cpp"
 )
 
 # Optional: scope both the annotated terminal output and the HTML report to a
