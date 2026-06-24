@@ -32,7 +32,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RCCL_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-BUILD_DIR="${BUILD_DIR:-${RCCL_ROOT}/build/release}"
+BUILD_DIR="${BUILD_DIR:-${RCCL_ROOT}/build/debug}"
 BIN="${BUILD_DIR}/test/rccl-UnitTests"
 COV_DIR="${BUILD_DIR}/test/coverage-register-p2p"
 HTML_DIR="${HTML_DIR:-${COV_DIR}/html}"
