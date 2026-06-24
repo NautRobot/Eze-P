@@ -120,7 +120,7 @@ races. Some examples:
 1. A wave issues a global load into a VGPR, then reads that VGPR before issuing
    `s_waitcnt vmcnt(0)`. The load may not have completed, so the read value is
    undefined.
-2. One wave in a workgroup writes to an LDS address. Another wave reads from
+1. One wave in a workgroup writes to an LDS address. Another wave reads from
    the same address without an intervening `s_barrier`. The read may see stale
    data because the write may not have completed from the reader's perspective.
 
@@ -142,11 +142,11 @@ Every in-flight memory operation has an **event** that goes through the
 following lifecycle:
 
 1. **ACTIVE** — the operation is in flight.
-2. **WAVE_COMPLETE** — `s_waitcnt` has retired the event for the owning wave.
+1. **WAVE_COMPLETE** — `s_waitcnt` has retired the event for the owning wave.
    This means the event is no longer in flight from the perspective of the wave
    that issued the operation, but is still in flight from the perspective of
    other waves in the same workgroup.
-3. **RETIRED** — `s_barrier` has synchronized all waves. The event is fully
+1. **RETIRED** — `s_barrier` has synchronized all waves. The event is fully
    retired and, from the perspective of all threads in all wavefronts, the
    operation is complete.
 
@@ -189,18 +189,18 @@ regardless of the order the waves execute in:
    Coarse-grained write counts (one counter per 16-byte chunk) for the affected
    region are incremented.
 
-2. **Wave 0 executes `s_waitcnt lgkmcnt(0)`.** This drains wave 0's lgkmcnt
+1. **Wave 0 executes `s_waitcnt lgkmcnt(0)`.** This drains wave 0's lgkmcnt
    counter. The write event transitions from **ACTIVE** to **WAVE_COMPLETE**. It
    is now safe for wave 0 to access those bytes, but the event remains in the
    live write list — other waves have not synchronized yet.
 
-3. **Wave 1 executes `ds_write_b32`.** A separate event is allocated for wave
+1. **Wave 1 executes `ds_write_b32`.** A separate event is allocated for wave
    1's write (lane 63 writes bytes 508–511 for `tile[127]`). Status: **ACTIVE**.
 
-4. **Wave 1 executes `s_waitcnt lgkmcnt(0)`.** Wave 1's event transitions to
+1. **Wave 1 executes `s_waitcnt lgkmcnt(0)`.** Wave 1's event transitions to
    **WAVE_COMPLETE**.
 
-5. **Wave 0 executes `ds_read_b32`.** Lane 0 reads `tile[127 - 0]` = bytes
+1. **Wave 0 executes `ds_read_b32`.** Lane 0 reads `tile[127 - 0]` = bytes
    508–511, the address wave 1 wrote. The detector validates that no live writes
    overlap:
 
@@ -211,7 +211,7 @@ regardless of the order the waves execute in:
      wave (0) differs from the owning wave (1).
    - **Race reported.**
 
-6. **What `s_barrier` would fix.** If an `s_barrier` had appeared between steps
+1. **What `s_barrier` would fix.** If an `s_barrier` had appeared between steps
    4 and 5, the detector would flush all **WAVE_COMPLETE** events to
    **RETIRED**: they are removed from the live write list and the chunk-level
    write counts are decremented back to zero. The subsequent read validation

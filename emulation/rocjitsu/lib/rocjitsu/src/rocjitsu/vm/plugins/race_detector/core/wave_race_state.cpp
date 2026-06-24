@@ -65,7 +65,6 @@ void WaveRaceState::registerEventWithIntervals(uint64_t pc, MemoryEventType type
     }
   }
 
-  // TODO(claude) are there instructions to move from scalar registers to global / LDS memory?
   auto eventId = detector->allocateEventId(waveId, pc, type, std::move(regIds), execMask, byteMask,
                                            std::move(ldsIntervals));
   for (uint32_t reg : detector->events().registers(eventId)) {
