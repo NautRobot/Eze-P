@@ -199,7 +199,12 @@ static void testVariableSizeBuffers(bool expectNonNull) {
  *   5. Verify ncclSuccess and correct AllReduce output.
  *
  * Skipped when fewer than 2 GPUs are visible (intra-node IPC path requires
- * at least 2 ranks on the same node).
+ * at least 2 ranks on the same node) or when the two GPUs cannot do direct
+ * GPU-to-GPU P2P.  The GH#1859 fix lives in ipcRegisterBuffer, which is only
+ * reached when the collective takes the direct-P2P/IPC transport.  On systems
+ * where the GPUs are not P2P-capable (e.g. PCIE-only consumer cards) RCCL
+ * falls back to the SHM transport, ipcRegisterBuffer is never called, and the
+ * test would pass without exercising the fixed code path at all.
  */
 static void testP2pThenCollectiveSameBuffer()
 {
@@ -212,6 +217,24 @@ static void testP2pThenCollectiveSameBuffer()
         return;
     }
     const int numRanks = 2;
+
+    // The IPC registration path (ipcRegisterBuffer, where the GH#1859 fix
+    // lives) is only reached when the collective uses the direct-P2P/IPC
+    // transport.  If the two GPUs cannot access each other's memory directly,
+    // RCCL falls back to SHM and the registration code is never exercised, so
+    // skip rather than report a misleading pass.
+    int canAccess01 = 0;
+    int canAccess10 = 0;
+    HIPCALL(hipDeviceCanAccessPeer(&canAccess01, 0, 1));
+    HIPCALL(hipDeviceCanAccessPeer(&canAccess10, 1, 0));
+    if (!canAccess01 || !canAccess10) {
+        GTEST_SKIP() << "This test requires direct GPU-to-GPU P2P access between "
+                        "devices 0 and 1 (canAccessPeer 0->1=" << canAccess01
+                     << ", 1->0=" << canAccess10
+                     << ").  Without it the collective falls back to the SHM "
+                        "transport and ipcRegisterBuffer is never exercised.";
+        return;
+    }
 
     // --- Communicator setup ---
     std::vector<ncclComm_t> comms(numRanks, nullptr);
