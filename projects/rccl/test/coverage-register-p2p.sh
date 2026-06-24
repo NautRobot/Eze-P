@@ -34,6 +34,7 @@ RCCL_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 BUILD_DIR="${BUILD_DIR:-${RCCL_ROOT}/build/debug}"
 BIN="${BUILD_DIR}/test/rccl-UnitTests"
+LIB="${BUILD_DIR}/librccl.so"
 COV_DIR="${BUILD_DIR}/test/coverage-register-p2p"
 HTML_DIR="${HTML_DIR:-${COV_DIR}/html}"
 PROFDATA="${COV_DIR}/merged.profdata"
@@ -47,7 +48,12 @@ if [[ ! -x "${COV_TOOL}" ]];      then COV_TOOL="$(command -v llvm-cov)";       
 
 if [[ ! -x "${BIN}" ]]; then
   echo "error: ${BIN} not found." >&2
-  echo "       Build with: cmake -DBUILD_TESTS=ON -DENABLE_CODE_COVERAGE=ON ..." >&2
+  echo "       Build with: ./install.sh -l -t -c --debug-fast -j \$(nproc)" >&2
+  exit 1
+fi
+if [[ ! -f "${LIB}" ]]; then
+  echo "error: ${LIB} not found." >&2
+  echo "       p2p.cc coverage lives in librccl.so — build with -DENABLE_CODE_COVERAGE=ON" >&2
   exit 1
 fi
 
@@ -92,11 +98,10 @@ echo "==> Merging ${#PROFRAW_FILES[@]} profraw file(s) -> ${PROFDATA}"
 # 3. Source files to include in the coverage report.
 #
 # p2p_tmp.cc is the hipified version of src/transport/p2p.cc — it is what
-# is actually compiled and instrumented, and it contains ipcRegisterBuffer
-# where the NCCL GH#1859 bug (and its fix) live.
-#
-# RegisterTests.cpp is compiled directly (not hipified) and shows which
-# test-side branches executed.
+# is actually compiled and instrumented into librccl.so, and it contains
+# ipcRegisterBuffer where the NCCL GH#1859 bug (and its fix) live.
+# librccl.so is loaded as a second -object so llvm-cov can resolve coverage
+# for code that runs inside the library rather than the test binary itself.
 # ---------------------------------------------------------------------------
 SOURCES=(
   "${BUILD_DIR}/hipify/src/transport/p2p_tmp.cc"
@@ -117,6 +122,7 @@ fi
 echo ""
 echo "==> Coverage summary"
 "${COV_TOOL}" report "${BIN}" \
+  -object "${LIB}" \
   -instr-profile="${PROFDATA}" \
   --show-branch-summary \
   --show-region-summary \
@@ -129,6 +135,7 @@ if [[ -n "${FUNC:-}" ]]; then
   echo ""
   echo "==> Annotated source for ${FUNC}"
   "${COV_TOOL}" show "${BIN}" \
+    -object "${LIB}" \
     -instr-profile="${PROFDATA}" \
     --name="${FUNC}" \
     --show-branches=count \
@@ -146,6 +153,7 @@ mkdir -p "${HTML_DIR}"
 echo ""
 echo "==> Writing HTML report to ${HTML_DIR}"
 "${COV_TOOL}" show "${BIN}" \
+  -object "${LIB}" \
   -instr-profile="${PROFDATA}" \
   -format=html \
   -output-dir="${HTML_DIR}" \
