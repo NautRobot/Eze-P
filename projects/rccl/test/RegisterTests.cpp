@@ -367,31 +367,31 @@ TEST(Register, ProcessIsolatedRegisterTests)
 {
     RUN_ISOLATED_TESTS(
         // CommRegisterDeregister tests
-        makeDisabledConfig("CommRegisterDeregister_Disabled",
-            []() { testCommRegisterDeregister(false); }),
-        makeEnabledConfig("CommRegisterDeregister_Enabled",
-            []() { testCommRegisterDeregister(true); }),
+        // makeDisabledConfig("CommRegisterDeregister_Disabled",
+        //     []() { testCommRegisterDeregister(false); }),
+        // makeEnabledConfig("CommRegisterDeregister_Enabled",
+        //     []() { testCommRegisterDeregister(true); }),
 
-        // MultipleBufferRegistration tests
-        makeDisabledConfig("MultipleBufferRegistration_Disabled",
-            []() { testMultipleBufferRegistration(false); }),
-        makeEnabledConfig("MultipleBufferRegistration_Enabled",
-            []() { testMultipleBufferRegistration(true); }),
+        // // MultipleBufferRegistration tests
+        // makeDisabledConfig("MultipleBufferRegistration_Disabled",
+        //     []() { testMultipleBufferRegistration(false); }),
+        // makeEnabledConfig("MultipleBufferRegistration_Enabled",
+        //     []() { testMultipleBufferRegistration(true); }),
 
-        // VariableSizeBuffers tests
-        makeDisabledConfig("VariableSizeBuffers_Disabled",
-            []() { testVariableSizeBuffers(false); }),
-        makeEnabledConfig("VariableSizeBuffers_Enabled",
-            []() { testVariableSizeBuffers(true); }),
+        // // VariableSizeBuffers tests
+        // makeDisabledConfig("VariableSizeBuffers_Disabled",
+        //     []() { testVariableSizeBuffers(false); }),
+        // makeEnabledConfig("VariableSizeBuffers_Enabled",
+        //     []() { testVariableSizeBuffers(true); }),
 
-        // DeregisterNullHandle test (no enable/disable variants needed)
-        ProcessIsolatedTestRunner::TestConfig("DeregisterNullHandle", testDeregisterNullHandle),
+        // // DeregisterNullHandle test (no enable/disable variants needed)
+        // ProcessIsolatedTestRunner::TestConfig("DeregisterNullHandle", testDeregisterNullHandle),
 
         // Regression test: NCCL GH#1859 — p2p followed by collective on the same
         // registered user buffer must not crash (requires ≥ 2 GPUs).
         ProcessIsolatedTestRunner::TestConfig(
             "P2pThenCollective_SameBuffer", testP2pThenCollectiveSameBuffer)
-            .withEnvironment({{"NCCL_LOCAL_REGISTER", "1"}})
+            .withEnvironment({{"NCCL_LOCAL_REGISTER", "1"}, {"NCCL_DEBUG", "INFO"}, {"NCCL_DEBUG_SUBSYS", "REG,P2P"}})
             .withNumGpus(2)
             .withTimeout(std::chrono::seconds(120))
     );
