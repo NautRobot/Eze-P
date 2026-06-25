@@ -130,6 +130,7 @@ if [[ "${COVERAGE:-0}" == "1" ]]; then
     echo "    Open: ${HTML_DIR}/index.html"
 
     tar "--directory=${COV_DIR}/.." -zcf ~/p2pcoll-coverage.tar.gz coverage-p2pcoll
+    echo "    HTML tar file at ~/p2pcoll-coverage.tar.gz"
 else
   echo "==> Running ${BIN}"
   env "${RUN_ENV[@]}" "${BIN}"
