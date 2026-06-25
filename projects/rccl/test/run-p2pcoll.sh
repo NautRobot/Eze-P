@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Build and run the standalone p2pcoll reproducer against build/debug/librccl.so.
 #
-# p2pcoll exercises the NCCL GH#1859 sequence (CommInitAll -> CommRegister ->
+# p2pcoll exercises the NCCL GH#1859 sequence (ncclCommInitRank -> CommRegister ->
 # Send/Recv -> AllReduce on the same registered buffer) as a plain program, so
 # RCCL's NCCL_DEBUG=INFO trace is visible (the unit-test harness swallows it).
+# Each rank runs in its own forked child process (fork+ncclCommInitRank) so that
+# comm->directMode is false and the IPC registration path is reachable.
 #
 # Assumes a librccl.so already built WITH coverage in build/debug
 # (configure with -DENABLE_CODE_COVERAGE=ON). The coverage instrumentation in
@@ -81,19 +83,29 @@ if [[ "${COVERAGE:-0}" == "1" ]]; then
   mkdir -p "${COV_DIR}"
   rm -f "${COV_DIR}"/*.profraw
 
+  # %p expands to the PID of each process that writes a profraw file.
+  # The parent writes one, and each forked rank child writes its own.
+  # Do NOT use %m (module signature) alongside %p: the combination can
+  # produce filenames that the glob below misses when the DSO and the
+  # binary have different module hashes.
   echo "==> Running ${BIN} (coverage)"
   env "${RUN_ENV[@]}" \
-      LLVM_PROFILE_FILE="${COV_DIR}/p2pcoll_%p_%m.profraw" \
+      LLVM_PROFILE_FILE="${COV_DIR}/p2pcoll_%p.profraw" \
       "${BIN}" || true
 
   PROFRAW_FILES=( "${COV_DIR}"/*.profraw )
+  if [[ ${#PROFRAW_FILES[@]} -eq 0 || ! -f "${PROFRAW_FILES[0]}" ]]; then
+    echo "error: no .profraw files found in ${COV_DIR}" >&2
+    exit 1
+  fi
   echo "==> Merging ${#PROFRAW_FILES[@]} profraw file(s) -> ${PROFDATA}"
   "${PROFDATA_TOOL}" merge -sparse "${PROFRAW_FILES[@]}" -o "${PROFDATA}"
 
   echo ""
   echo "==> ipcRegisterBuffer coverage in p2p.cc"
-  "${COV_TOOL}" report "${BIN}" \
-    -object "${LIB}" \
+  # librccl.so is the instrumented object; the test binary is uninstrumented.
+  # Pass the library as the primary argument and omit the binary.
+  "${COV_TOOL}" report "${LIB}" \
     -instr-profile="${PROFDATA}" \
     --name=ipcRegisterBuffer \
     "${BUILD_DIR}/hipify/src/transport/p2p_tmp.cc"
