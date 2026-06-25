@@ -52,6 +52,14 @@ RUN_ENV=(
   NCCL_LOCAL_REGISTER=1
   NCCL_DEBUG=INFO
   NCCL_DEBUG_SUBSYS=REG,P2P
+  # Force NCCL_PROTO_SIMPLE for P2P operations.
+  # addP2pToPlan (enqueue.cc) selects LL protocol when
+  #   bytes <= nChannels * NCCL_P2P_LL_THRESHOLD  (default 8192)
+  # The IPC registration path (ncclRegisterP2pIpcBuffer -> ipcRegisterBuffer)
+  # is only taken when protocol == NCCL_PROTO_SIMPLE, so without this env var
+  # small payloads silently bypass it.  Setting the threshold to 0 disables LL
+  # unconditionally, guaranteeing SIMPLE is chosen regardless of payload size.
+  NCCL_P2P_LL_THRESHOLD=0
   "LD_LIBRARY_PATH=${BUILD_DIR}:/opt/rocm/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 )
 

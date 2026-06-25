@@ -22,6 +22,19 @@
  * Note: the IPC registration path is only reached when the two GPUs have direct
  * GPU-to-GPU P2P. On PCIE-only hardware RCCL falls back to the SHM transport and
  * ipcRegisterBuffer is never called.
+ *
+ * Protocol selection (enqueue.cc addP2pToPlan):
+ *   protoLL &= bytes <= nChannels * NCCL_P2P_LL_THRESHOLD   (default 8192)
+ *   protocol = protoLL ? NCCL_PROTO_LL : NCCL_PROTO_SIMPLE
+ *
+ * ncclRegisterP2pIpcBuffer (and therefore ipcRegisterBuffer) is only called when
+ * protocol == NCCL_PROTO_SIMPLE.  A small payload (e.g. 1024 floats = 4096 bytes)
+ * stays below the 8192-byte LL threshold and always selects LL, bypassing the
+ * IPC registration branch entirely.  We must use a payload that exceeds
+ * nChannels * 8192.  ne = 16*1024 floats (65536 bytes) is well above the
+ * threshold for any plausible channel count.  We also set NCCL_P2P_LL_THRESHOLD=0
+ * in run-p2pcoll.sh to make the intent explicit and guard against future
+ * threshold changes.
  */
 
 #include <rccl/rccl.h>
@@ -52,7 +65,12 @@
 int main()
 {
     const int    n     = 2;
-    const size_t ne    = 1024;
+    // Must exceed nChannels * NCCL_P2P_LL_THRESHOLD (default 8192 bytes) so that
+    // addP2pToPlan selects NCCL_PROTO_SIMPLE rather than NCCL_PROTO_LL.  Only
+    // with SIMPLE does it enter the ncclRegisterP2pIpcBuffer branch that leads
+    // to ipcRegisterBuffer.  16k floats = 65536 bytes is safely above any
+    // realistic channel-count multiple of the 8192-byte threshold.
+    const size_t ne    = 16 * 1024;
     const size_t bytes = ne * sizeof(float);
 
     int numDevices = 0;
@@ -117,8 +135,9 @@ int main()
         HC(hipStreamSynchronize(s[r]));
     }
 
-    // Verify the AllReduce result: in[0]=1.0, in[1] received 1.0 from rank 0,
-    // so the sum is 2.0 per element on every rank.
+    // Verify the AllReduce result: in[0]=1.0, in[1] received 1.0 from rank 0
+    // (P2P send clobbers in[1] with rank-0's value of 1.0), so the sum is
+    // 1.0 + 1.0 = 2.0 per element on every rank.
     const float expected = static_cast<float>(n);  // 1.0f * n
     bool        ok       = true;
     for (int r = 0; r < n; r++) {
