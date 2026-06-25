@@ -241,7 +241,12 @@ static void testP2pThenCollectiveSameBuffer()
     NCCLCHECK(ncclCommInitAll(comms.data(), numRanks, nullptr));
 
     // --- Per-rank resources ---
-    const size_t numElements = 1024;                        // 4 KB of float
+    // Must exceed nChannels * NCCL_P2P_LL_THRESHOLD (default 8192 bytes) so
+    // that addP2pToPlan selects NCCL_PROTO_SIMPLE. Only with SIMPLE does it
+    // enter the ncclRegisterP2pIpcBuffer branch that leads to ipcRegisterBuffer
+    // (lines 1188-1222, where the GH#1859 fix lives). 16k floats = 65536 bytes
+    // is above the threshold for any plausible channel count.
+    const size_t numElements = 16 * 1024;                  // 64 KB of float
     const size_t bufBytes    = numElements * sizeof(float);
 
     std::vector<hipStream_t> streams(numRanks);
@@ -414,7 +419,11 @@ TEST(Register, ProcessIsolatedRegisterTests)
         // registered user buffer must not crash (requires ≥ 2 GPUs).
         ProcessIsolatedTestRunner::TestConfig(
             "P2pThenCollective_SameBuffer", testP2pThenCollectiveSameBuffer)
-            .withEnvironment({{"NCCL_LOCAL_REGISTER", "1"}, {"NCCL_DEBUG", "INFO"}, {"NCCL_DEBUG_SUBSYS", "REG,P2P"}})
+            .withEnvironment({{"NCCL_LOCAL_REGISTER", "1"},
+                              {"NCCL_P2P_LL_THRESHOLD", "0"},
+                              {"NCCL_LEGACY_CUDA_REGISTER", "1"},
+                              {"NCCL_DEBUG", "INFO"},
+                              {"NCCL_DEBUG_SUBSYS", "REG,P2P"}})
             .withNumGpus(2)
             .withTimeout(std::chrono::seconds(120))
     );
