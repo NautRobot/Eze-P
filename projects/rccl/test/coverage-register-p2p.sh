@@ -97,19 +97,6 @@ fi
 echo "==> Merging ${#PROFRAW_FILES[@]} profraw file(s) -> ${PROFDATA}"
 "${PROFDATA_TOOL}" merge -sparse "${PROFRAW_FILES[@]}" -o "${PROFDATA}"
 
-# ---------------------------------------------------------------------------
-# 3. Source files to include in the coverage report.
-#
-# p2p_tmp.cc is the hipified version of src/transport/p2p.cc — it is what
-# is actually compiled and instrumented into librccl.so, and it contains
-# ipcRegisterBuffer where the NCCL GH#1859 bug (and its fix) live.
-# librccl.so is loaded as a second -object so llvm-cov can resolve coverage
-# for code that runs inside the library rather than the test binary itself.
-# ---------------------------------------------------------------------------
-SOURCES=(
-  "${BUILD_DIR}/hipify/src/transport/p2p_tmp.cc"
-)
-
 # Optional: scope both the annotated terminal output and the HTML report to a
 # single function.  Exact match against the mangled or unmangled symbol name.
 # Set via environment, e.g.: FUNC=ipcRegisterBuffer ./coverage-register-p2p.sh
@@ -129,8 +116,7 @@ echo "==> Coverage summary"
   -instr-profile="${PROFDATA}" \
   --show-branch-summary \
   --show-region-summary \
-  "${NAME_FLAGS[@]}" \
-  "${SOURCES[@]}"
+  "${NAME_FLAGS[@]}"
 
 # When scoped to a specific function, also print the annotated source with
 # inline branch counts so hit/miss is immediately visible in the terminal.
@@ -141,8 +127,7 @@ if [[ -n "${FUNC:-}" ]]; then
     -object "${LIB}" \
     -instr-profile="${PROFDATA}" \
     --name="${FUNC}" \
-    --show-branches=count \
-    "${SOURCES[@]}"
+    --show-branches=count
 fi
 
 # ---------------------------------------------------------------------------
@@ -165,7 +150,6 @@ echo "==> Writing HTML report to ${HTML_DIR}"
   -show-branches=count \
   --show-region-summary \
   --show-branch-summary \
-  "${NAME_FLAGS[@]}" \
-  "${SOURCES[@]}"
+  "${NAME_FLAGS[@]}"
 
 echo "    Open: ${HTML_DIR}/index.html"
