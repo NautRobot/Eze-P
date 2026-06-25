@@ -190,8 +190,10 @@ static void testVariableSizeBuffers(bool expectNonNull) {
  * devPeerRmtAddrs is left zeroed and the GPU kernel dereferences a null
  * remote pointer → illegal memory access / crash.
  *
- * Sequence that triggers the bug (requires ≥ 2 intra-node GPUs):
- *   1. ncclCommInitAll across 2 ranks (one per GPU).
+ * Sequence that triggers the bug (requires ≥ 2 intra-node GPUs), run with
+ * one forked process per rank (see below):
+ *   1. ncclCommInitRank in each rank's own process (one GPU per rank), using
+ *      a shared ncclUniqueId.
  *   2. ncclCommRegister the same device buffer on each rank
  *      (NCCL_LOCAL_REGISTER=1 ensures real IPC registration).
  *   3. ncclSend / ncclRecv group call on the registered buffer → sync.
@@ -278,39 +280,6 @@ enum P2pCollChildExit {
 // Runs entirely inside a forked child process — first HIP/NCCL call is here.
 static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
 {
-    // Need at least 2 GPUs for an intra-node IPC communicator.
-    int numDevices = 0;
-    HIPCALL(hipGetDeviceCount(&numDevices));
-    if (numDevices < 2) {
-        GTEST_SKIP() << "This test requires at least 2 GPU devices (detected "
-                     << numDevices << ").";
-        return;
-    }
-    const int numRanks = 2;
-
-    // The IPC registration path (ipcRegisterBuffer, where the GH#1859 fix
-    // lives) is only reached when the collective uses the direct-P2P/IPC
-    // transport.  If the two GPUs cannot access each other's memory directly,
-    // RCCL falls back to SHM and the registration code is never exercised, so
-    // skip rather than report a misleading pass.
-    int canAccess01 = 0;
-    int canAccess10 = 0;
-    HIPCALL(hipDeviceCanAccessPeer(&canAccess01, 0, 1));
-    HIPCALL(hipDeviceCanAccessPeer(&canAccess10, 1, 0));
-    if (!canAccess01 || !canAccess10) {
-        GTEST_SKIP() << "This test requires direct GPU-to-GPU P2P access between "
-                        "devices 0 and 1 (canAccessPeer 0->1=" << canAccess01
-                     << ", 1->0=" << canAccess10
-                     << ").  Without it the collective falls back to the SHM "
-                        "transport and ipcRegisterBuffer is never exercised.";
-        return;
-    }
-
-    // --- Communicator setup ---
-    std::vector<ncclComm_t> comms(numRanks, nullptr);
-    NCCLCHECK(ncclCommInitAll(comms.data(), numRanks, nullptr));
-
-    // --- Per-rank resources ---
     // Must exceed nChannels * NCCL_P2P_LL_THRESHOLD (default 8192 bytes) so
     // that addP2pToPlan selects NCCL_PROTO_SIMPLE. Only with SIMPLE does it
     // enter the ncclRegisterP2pIpcBuffer branch that leads to ipcRegisterBuffer
