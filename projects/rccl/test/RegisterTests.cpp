@@ -6,6 +6,8 @@
 
 #include <gtest/gtest.h>
 #include <rccl/rccl.h>
+#include <atomic>
+#include <new>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -231,9 +233,16 @@ static void testVariableSizeBuffers(bool expectNonNull) {
 
 // Shared-memory bootstrap written by rank-0's child before the others proceed.
 namespace {
+// Bootstrap state published by rank 0's child to the other ranks.
+enum class P2pCollState : int {
+    NotReady = 0,  // rank 0 has not yet published the unique ID
+    Ready    = 1,  // unique ID is valid and ready to be read
+    Skip     = -1, // rank 0 hit a skip/fatal precondition; others should skip
+};
+
 struct P2pCollShared {
     ncclUniqueId id;
-    volatile int state;  // 0 = not ready, 1 = ready, -1 = skip/fatal in rank 0
+    std::atomic<P2pCollState> state;
 };
 
 // Child-process error handling: print and return a non-zero code rather than
@@ -281,7 +290,7 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
         CHILD_HC(hipGetDeviceCount(&numDevices));
         if (numDevices < nranks) {
             printf("Requires %d GPUs (detected %d).\n", nranks, numDevices);
-            shared->state = -1;
+            shared->state.store(P2pCollState::Skip, std::memory_order_release);
             return CHILD_SKIP;
         }
 
@@ -295,19 +304,22 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
             printf("No direct P2P (canAccessPeer 0->1=%d 1->0=%d): SHM transport "
                    "would be used, ipcRegisterBuffer NOT exercised.\n",
                    canAccess01, canAccess10);
-            shared->state = -1;
+            shared->state.store(P2pCollState::Skip, std::memory_order_release);
             return CHILD_SKIP;
         }
 
-        // Generate the unique ID and publish it to the other children.
+        // Generate the unique ID and publish it to the other children.  The
+        // release store ensures the id write above is visible before the flag.
         CHILD_NC(ncclGetUniqueId(&shared->id));
-        __sync_synchronize();
-        shared->state = 1;
+        shared->state.store(P2pCollState::Ready, std::memory_order_release);
     } else {
-        // Wait for rank 0 to publish the ID (or signal skip/error).
-        while (shared->state == 0) { /* spin */ }
-        __sync_synchronize();
-        if (shared->state < 0) return CHILD_SKIP;  // rank 0 reported skip/error
+        // Wait for rank 0 to publish the ID (or signal skip/error).  The
+        // acquire load pairs with rank 0's release store so that, once we
+        // observe a non-NotReady state, the id write is visible to us.
+        P2pCollState st;
+        while ((st = shared->state.load(std::memory_order_acquire)) ==
+               P2pCollState::NotReady) { /* spin */ }
+        if (st == P2pCollState::Skip) return CHILD_SKIP;  // rank 0 reported skip/error
     }
 
     ncclUniqueId id = shared->id;
@@ -413,7 +425,10 @@ static void testP2pThenCollectiveSameBuffer()
         nullptr, sizeof(P2pCollShared),
         PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0));
     ASSERT_NE(shared, MAP_FAILED) << "mmap for shared bootstrap failed";
-    shared->state = 0;
+    // Construct the atomic in place in the shared region before forking so all
+    // children operate on the same object.  MAP_ANONYMOUS zeroes the page, but
+    // the atomic is initialised explicitly for clarity and correctness.
+    new (&shared->state) std::atomic<P2pCollState>(P2pCollState::NotReady);
 
     std::vector<pid_t> pids(numRanks, -1);
     for (int r = 0; r < numRanks; r++) {
