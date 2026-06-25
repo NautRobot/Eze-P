@@ -227,18 +227,6 @@ static void testVariableSizeBuffers(bool expectNonNull) {
  * The ProcessIsolatedTestRunner re-execs each test into its own process but
  * cannot split a single test across one-process-per-rank, so the fork() is
  * done here inside the test body.
- *
- * --- Why the parent must not touch HIP/NCCL before fork() ---
- *
- * The HIP/HSA runtime is not fork-safe: any HIP or NCCL call in the parent
- * (e.g. hipGetDeviceCount, ncclGetUniqueId) initialises the runtime, and the
- * forked children then inherit broken internal state (locks, file descriptors,
- * memory mappings) that causes hipHostMalloc to fail on the first allocation
- * inside ncclCommInitRank.  So this function does NO HIP or NCCL work in the
- * parent: every HIP/NCCL call happens inside a child process on a clean
- * runtime.  Rank-0's child generates the ncclUniqueId and publishes it to the
- * other children through a mmap(MAP_SHARED|MAP_ANONYMOUS) region set up before
- * any fork().
  */
 
 // Shared-memory bootstrap written by rank-0's child before the others proceed.

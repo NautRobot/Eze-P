@@ -1187,8 +1187,6 @@ static ncclResult_t ipcRegisterBuffer(ncclComm* comm, const void* userbuff, size
 
     if (*regBufFlag) {
       if (needUpdate) {
-      // Comment out the line above and uncomment this one to trigger the AICOMRCCL-1100 bug
-      // if (needUpdate && type == NCCL_IPC_COLLECTIVE) {
         cudaStream_t hostStream, deviceStream;
         NCCLCHECKGOTO(ncclStrongStreamAcquire(ncclCudaGraphNone(comm->config.graphUsageMode), &comm->sharedRes->hostStream, /*concurrent=*/false, &hostStream), ret, fail);
         NCCLCHECKGOTO(ncclStrongStreamAcquire(ncclCudaGraphNone(comm->config.graphUsageMode), &comm->sharedRes->deviceStream, /*concurrent=*/false, &deviceStream), ret, fail);
