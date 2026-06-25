@@ -73,6 +73,7 @@ RUN_ENV=(
 
 if [[ "${COVERAGE:-0}" == "1" ]]; then
   COV_DIR="${BUILD_DIR}/test/coverage-p2pcoll"
+  HTML_DIR="${COV_DIR}/html"
   PROFDATA="${COV_DIR}/merged.profdata"
   LLVM_BIN="/opt/rocm/llvm/bin"
   PROFDATA_TOOL="${LLVM_BIN}/llvm-profdata"
@@ -109,6 +110,26 @@ if [[ "${COVERAGE:-0}" == "1" ]]; then
     -instr-profile="${PROFDATA}" \
     --name=ipcRegisterBuffer \
     "${BUILD_DIR}/hipify/src/transport/p2p_tmp.cc"
+
+
+    mkdir -p "${HTML_DIR}"
+    echo ""
+    echo "==> Writing HTML report to ${HTML_DIR}"
+    "${COV_TOOL}" show "${BIN}" \
+      -object "${LIB}" \
+      -instr-profile="${PROFDATA}" \
+      -format=html \
+      -output-dir="${HTML_DIR}" \
+      -show-line-counts-or-regions \
+      -show-regions \
+      -show-branches=count \
+      --show-region-summary \
+      --show-branch-summary \
+      "${NAME_FLAGS[@]}"
+
+    echo "    Open: ${HTML_DIR}/index.html"
+
+    tar "--directory=${COV_DIR}/.." -zcf ~/p2pcoll-coverage.tar.gz coverage-p2pcoll
 else
   echo "==> Running ${BIN}"
   env "${RUN_ENV[@]}" "${BIN}"
