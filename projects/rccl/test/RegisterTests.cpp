@@ -349,6 +349,18 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
         return CHILD_FAIL;
     }
 
+    // Also register the AllReduce *output* buffer.  ncclRegisterCollBuffers
+    // calls ncclRegFind on the recvbuff for RING/TREE and bails out via
+    // `goto exit` (skipping the NCCL_IPC_COLLECTIVE ipcRegisterBuffer path)
+    // if it is not registered — which would mean the bug is never exercised.
+    void* regHandleOut = nullptr;
+    CHILD_NC(ncclCommRegister(comm, devOut, bufBytes, &regHandleOut));
+    if (regHandleOut == nullptr) {
+        printf("[rank %d] ncclCommRegister (output) returned NULL handle "
+               "(is NCCL_LOCAL_REGISTER=1 set?).\n", rank);
+        return CHILD_FAIL;
+    }
+
     // --- Step 1: P2P send/recv on the registered buffer ---
     // Rank 0 sends devBuf -> rank 1; rank 1 receives into its devBuf.  This
     // populates regRecord->regIpcAddrs.hostPeerRmtAddrs for the P2P path but
@@ -360,10 +372,17 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
     CHILD_HC(hipStreamSynchronize(stream));
 
     // --- Step 2: AllReduce on the *same* registered buffer (bug trigger) ---
-    // Without the fix this crashes with an illegal memory access because
-    // devPeerRmtAddrs is allocated but not populated (skipped memcpy).
+    // The collective registers its *recvbuff* for NCCL_IPC_COLLECTIVE.  By using
+    // devBuf (already IPC-registered during the P2P) as the recvbuff, the
+    // collective hits the *reuse* branch in ipcRegisterBuffer, which leaves
+    // needUpdate=false and therefore skips the devPeerRmtAddrs memcpy.  Without
+    // the fix this crashes with an illegal memory access because devPeerRmtAddrs
+    // is allocated but never populated.  RING in-place AllReduce
+    // (sendbuff==recvbuff) is skipped by the registration path, so this must be
+    // out-of-place: seed devOut from devBuf and reduce devOut -> devBuf.
+    CHILD_HC(hipMemcpy(devOut, devBuf, bufBytes, hipMemcpyDeviceToDevice));
     CHILD_NC(ncclGroupStart());
-    CHILD_NC(ncclAllReduce(devBuf, devOut, numElements, ncclFloat, ncclSum, comm, stream));
+    CHILD_NC(ncclAllReduce(devOut, devBuf, numElements, ncclFloat, ncclSum, comm, stream));
     CHILD_NC(ncclGroupEnd());
     CHILD_HC(hipStreamSynchronize(stream));
 
@@ -372,7 +391,7 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
     // rank 1 received 1.0f from rank 0), so the sum is numRanks per element.
     const float expectedSum = static_cast<float>(nranks);
     std::vector<float> hostOut(numElements, -1.0f);
-    CHILD_HC(hipMemcpy(hostOut.data(), devOut, bufBytes, hipMemcpyDeviceToHost));
+    CHILD_HC(hipMemcpy(hostOut.data(), devBuf, bufBytes, hipMemcpyDeviceToHost));
     int rc = CHILD_OK;
     for (size_t i = 0; i < numElements; i++) {
         if (hostOut[i] != expectedSum) {
@@ -384,6 +403,7 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
     }
 
     CHILD_NC(ncclCommDeregister(comm, regHandle));
+    CHILD_NC(ncclCommDeregister(comm, regHandleOut));
     CHILD_HC(hipFree(devBuf));
     CHILD_HC(hipFree(devOut));
     CHILD_HC(hipStreamDestroy(stream));
