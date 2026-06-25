@@ -11,6 +11,10 @@
 #include <cstring>
 #include <vector>
 
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include "common/ErrCode.hpp"
 #include "common/ProcessIsolatedTestRunner.hpp"
 #include "StandaloneUtils.hpp"
@@ -205,8 +209,74 @@ static void testVariableSizeBuffers(bool expectNonNull) {
  * where the GPUs are not P2P-capable (e.g. PCIE-only consumer cards) RCCL
  * falls back to the SHM transport, ipcRegisterBuffer is never called, and the
  * test would pass without exercising the fixed code path at all.
+ *
+ * --- Why fork() + ncclCommInitRank instead of ncclCommInitAll ---
+ *
+ * comm->directMode is set true by ncclTransportCheckP2pType whenever any two
+ * local ranks share the same pid.  ipcRegisterBuffer's legacy IPC path then
+ * hits:
+ *     if (comm->directMode || !ncclParamLegacyCudaRegister()) goto fail;
+ * and bypasses the fixed code path entirely.  ncclCommInitAll runs all ranks
+ * in one process, so directMode is always true and the GH#1859 fix is never
+ * exercised.  We therefore fork() one child process per rank and use
+ * ncclCommInitRank with a shared ncclUniqueId; each rank is its own process,
+ * directMode stays false, and ipcRegisterBuffer is reachable.
+ *
+ * The ProcessIsolatedTestRunner re-execs each test into its own process but
+ * cannot split a single test across one-process-per-rank, so the fork() is
+ * done here inside the test body.
+ *
+ * --- Why the parent must not touch HIP/NCCL before fork() ---
+ *
+ * The HIP/HSA runtime is not fork-safe: any HIP or NCCL call in the parent
+ * (e.g. hipGetDeviceCount, ncclGetUniqueId) initialises the runtime, and the
+ * forked children then inherit broken internal state (locks, file descriptors,
+ * memory mappings) that causes hipHostMalloc to fail on the first allocation
+ * inside ncclCommInitRank.  So this function does NO HIP or NCCL work in the
+ * parent: every HIP/NCCL call happens inside a child process on a clean
+ * runtime.  Rank-0's child generates the ncclUniqueId and publishes it to the
+ * other children through a mmap(MAP_SHARED|MAP_ANONYMOUS) region set up before
+ * any fork().
  */
-static void testP2pThenCollectiveSameBuffer()
+
+// Shared-memory bootstrap written by rank-0's child before the others proceed.
+namespace {
+struct P2pCollShared {
+    ncclUniqueId id;
+    volatile int state;  // 0 = not ready, 1 = ready, -1 = skip/fatal in rank 0
+};
+
+// Child-process error handling: print and return a non-zero code rather than
+// using GTest assertions (which do not propagate across fork()).
+#define CHILD_HC(x)                                                          \
+    do {                                                                     \
+        hipError_t _e = (x);                                                 \
+        if (_e != hipSuccess) {                                              \
+            printf("[rank %d] HIP error %d (%s) @ %s:%d\n", rank, _e,        \
+                   hipGetErrorString(_e), __FILE__, __LINE__);               \
+            return 1;                                                        \
+        }                                                                    \
+    } while (0)
+
+#define CHILD_NC(x)                                                          \
+    do {                                                                     \
+        ncclResult_t _e = (x);                                               \
+        if (_e != ncclSuccess) {                                             \
+            printf("[rank %d] NCCL error %d (%s) @ %s:%d\n", rank, _e,       \
+                   ncclGetErrorString(_e), __FILE__, __LINE__);              \
+            return 1;                                                        \
+        }                                                                    \
+    } while (0)
+
+// Child exit codes communicated back to the parent test body.
+enum P2pCollChildExit {
+    CHILD_OK   = 0,  // ran the full sequence, result correct
+    CHILD_FAIL = 1,  // a HIP/NCCL error or a wrong AllReduce result
+    CHILD_SKIP = 2,  // preconditions not met (too few GPUs / no direct P2P)
+};
+
+// Runs entirely inside a forked child process — first HIP/NCCL call is here.
+static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
 {
     // Need at least 2 GPUs for an intra-node IPC communicator.
     int numDevices = 0;
@@ -249,98 +319,165 @@ static void testP2pThenCollectiveSameBuffer()
     const size_t numElements = 16 * 1024;                  // 64 KB of float
     const size_t bufBytes    = numElements * sizeof(float);
 
-    std::vector<hipStream_t> streams(numRanks);
-    std::vector<void*>       devBufs(numRanks, nullptr);    // device buffers
-    std::vector<void*>       regHandles(numRanks, nullptr); // ncclCommRegister handles
-    std::vector<void*>       devOut(numRanks, nullptr);     // separate output for AllReduce
+    if (rank == 0) {
+        int numDevices = 0;
+        CHILD_HC(hipGetDeviceCount(&numDevices));
+        if (numDevices < nranks) {
+            printf("Requires %d GPUs (detected %d).\n", nranks, numDevices);
+            shared->state = -1;
+            return CHILD_SKIP;
+        }
 
-    for (int r = 0; r < numRanks; r++) {
-        HIPCALL(hipSetDevice(r));
-        HIPCALL(hipStreamCreate(&streams[r]));
+        // The IPC registration path is only reached with direct GPU-to-GPU P2P;
+        // without it RCCL falls back to SHM and ipcRegisterBuffer is never
+        // exercised, so skip rather than report a misleading pass.
+        int canAccess01 = 0, canAccess10 = 0;
+        CHILD_HC(hipDeviceCanAccessPeer(&canAccess01, 0, 1));
+        CHILD_HC(hipDeviceCanAccessPeer(&canAccess10, 1, 0));
+        if (!canAccess01 || !canAccess10) {
+            printf("No direct P2P (canAccessPeer 0->1=%d 1->0=%d): SHM transport "
+                   "would be used, ipcRegisterBuffer NOT exercised.\n",
+                   canAccess01, canAccess10);
+            shared->state = -1;
+            return CHILD_SKIP;
+        }
 
-        // Input buffer: filled with rank+1 so AllReduce sum = numRanks*(numRanks+1)/2 per element.
-        HIPCALL(hipMalloc(&devBufs[r], bufBytes));
-        std::vector<float> hostIn(numElements, static_cast<float>(r + 1));
-        HIPCALL(hipMemcpy(devBufs[r], hostIn.data(), bufBytes, hipMemcpyHostToDevice));
+        // Generate the unique ID and publish it to the other children.
+        CHILD_NC(ncclGetUniqueId(&shared->id));
+        __sync_synchronize();
+        shared->state = 1;
+    } else {
+        // Wait for rank 0 to publish the ID (or signal skip/error).
+        while (shared->state == 0) { /* spin */ }
+        __sync_synchronize();
+        if (shared->state < 0) return CHILD_SKIP;  // rank 0 reported skip/error
+    }
 
-        // Separate output buffer for AllReduce (out-of-place keeps the test readable).
-        HIPCALL(hipMalloc(&devOut[r], bufBytes));
-        HIPCALL(hipMemset(devOut[r], 0, bufBytes));
+    ncclUniqueId id = shared->id;
 
-        // Register the input buffer — this is the buffer that will be used for
-        // both the P2P and the subsequent AllReduce.
-        NCCLCHECK(ncclCommRegister(comms[r], devBufs[r], bufBytes, &regHandles[r]));
-        EXPECT_NE(regHandles[r], nullptr)
-            << "Rank " << r << ": ncclCommRegister returned NULL handle "
-               "(is NCCL_LOCAL_REGISTER=1 set?).";
+    CHILD_HC(hipSetDevice(rank));
+
+    ncclComm_t comm;
+    CHILD_NC(ncclCommInitRank(&comm, nranks, id, rank));
+
+    hipStream_t stream;
+    CHILD_HC(hipStreamCreate(&stream));
+
+    // Input buffer filled with rank+1; separate out-of-place output buffer.
+    void *devBuf = nullptr, *devOut = nullptr;
+    CHILD_HC(hipMalloc(&devBuf, bufBytes));
+    CHILD_HC(hipMalloc(&devOut, bufBytes));
+    std::vector<float> hostIn(numElements, static_cast<float>(rank + 1));
+    CHILD_HC(hipMemcpy(devBuf, hostIn.data(), bufBytes, hipMemcpyHostToDevice));
+    CHILD_HC(hipMemset(devOut, 0, bufBytes));
+
+    // Register the input buffer — used for both the P2P and the AllReduce.
+    void* regHandle = nullptr;
+    CHILD_NC(ncclCommRegister(comm, devBuf, bufBytes, &regHandle));
+    if (regHandle == nullptr) {
+        printf("[rank %d] ncclCommRegister returned NULL handle "
+               "(is NCCL_LOCAL_REGISTER=1 set?).\n", rank);
+        return CHILD_FAIL;
     }
 
     // --- Step 1: P2P send/recv on the registered buffer ---
-    // Rank 0 sends devBufs[0] → rank 1.  Rank 1 receives into devBufs[1]
-    // (overwriting it, which is fine — we only care about the AllReduce result).
-    // This populates regRecord->regIpcAddrs.hostPeerRmtAddrs for the P2P path
-    // but leaves the NCCL_IPC_COLLECTIVE devPeerRmtAddrs uninitialised.
-    NCCLCHECK(ncclGroupStart());
-    HIPCALL(hipSetDevice(0));
-    NCCLCHECK(ncclSend(devBufs[0], numElements, ncclFloat, /*peer=*/1, comms[0], streams[0]));
-    HIPCALL(hipSetDevice(1));
-    NCCLCHECK(ncclRecv(devBufs[1], numElements, ncclFloat, /*peer=*/0, comms[1], streams[1]));
-    NCCLCHECK(ncclGroupEnd());
-
-    for (int r = 0; r < numRanks; r++) {
-        HIPCALL(hipSetDevice(r));
-        HIPCALL(hipStreamSynchronize(streams[r]));
-    }
-
-    // Reset the output buffers before the AllReduce so we can verify the result.
-    for (int r = 0; r < numRanks; r++) {
-        HIPCALL(hipSetDevice(r));
-        HIPCALL(hipMemset(devOut[r], 0, bufBytes));
-    }
+    // Rank 0 sends devBuf -> rank 1; rank 1 receives into its devBuf.  This
+    // populates regRecord->regIpcAddrs.hostPeerRmtAddrs for the P2P path but
+    // leaves the NCCL_IPC_COLLECTIVE devPeerRmtAddrs uninitialised.
+    CHILD_NC(ncclGroupStart());
+    if (rank == 0) CHILD_NC(ncclSend(devBuf, numElements, ncclFloat, 1, comm, stream));
+    if (rank == 1) CHILD_NC(ncclRecv(devBuf, numElements, ncclFloat, 0, comm, stream));
+    CHILD_NC(ncclGroupEnd());
+    CHILD_HC(hipStreamSynchronize(stream));
 
     // --- Step 2: AllReduce on the *same* registered buffer (bug trigger) ---
     // Without the fix this crashes with an illegal memory access because
     // devPeerRmtAddrs is allocated but not populated (skipped memcpy).
-    // With the fix devPeerRmtAddrs is populated on first allocation regardless
-    // of needUpdate, so the GPU kernel receives valid remote addresses.
-    NCCLCHECK(ncclGroupStart());
-    for (int r = 0; r < numRanks; r++) {
-        HIPCALL(hipSetDevice(r));
-        NCCLCHECK(ncclAllReduce(devBufs[r], devOut[r], numElements,
-                                ncclFloat, ncclSum, comms[r], streams[r]));
-    }
-    NCCLCHECK(ncclGroupEnd());
-
-    for (int r = 0; r < numRanks; r++) {
-        HIPCALL(hipSetDevice(r));
-        HIPCALL(hipStreamSynchronize(streams[r]));
-    }
+    CHILD_NC(ncclGroupStart());
+    CHILD_NC(ncclAllReduce(devBuf, devOut, numElements, ncclFloat, ncclSum, comm, stream));
+    CHILD_NC(ncclGroupEnd());
+    CHILD_HC(hipStreamSynchronize(stream));
 
     // --- Verify AllReduce result ---
-    // After the P2P, devBufs[0] still holds 1.0f (rank 0 sent but did not
-    // overwrite its own buffer) and devBufs[1] now holds 1.0f (received from
-    // rank 0).  Sum across both ranks = 2.0f per element.
-    const float expectedSum = static_cast<float>(numRanks); // 1.0f * numRanks
-    for (int r = 0; r < numRanks; r++) {
-        HIPCALL(hipSetDevice(r));
-        std::vector<float> hostOut(numElements, -1.0f);
-        HIPCALL(hipMemcpy(hostOut.data(), devOut[r], bufBytes, hipMemcpyDeviceToHost));
-        for (size_t i = 0; i < numElements; i++) {
-            EXPECT_FLOAT_EQ(hostOut[i], expectedSum)
-                << "Rank " << r << " element [" << i << "]: "
-                << "expected " << expectedSum << " got " << hostOut[i];
-            if (hostOut[i] != expectedSum) break; // report first mismatch only
+    // After the P2P both ranks hold 1.0f in devBuf (rank 0 kept its own value,
+    // rank 1 received 1.0f from rank 0), so the sum is numRanks per element.
+    const float expectedSum = static_cast<float>(nranks);
+    std::vector<float> hostOut(numElements, -1.0f);
+    CHILD_HC(hipMemcpy(hostOut.data(), devOut, bufBytes, hipMemcpyDeviceToHost));
+    int rc = CHILD_OK;
+    for (size_t i = 0; i < numElements; i++) {
+        if (hostOut[i] != expectedSum) {
+            printf("[rank %d] MISMATCH elem %zu: expected %f got %f\n",
+                   rank, i, expectedSum, hostOut[i]);
+            rc = CHILD_FAIL;
+            break;
         }
     }
 
-    // --- Cleanup ---
+    CHILD_NC(ncclCommDeregister(comm, regHandle));
+    CHILD_HC(hipFree(devBuf));
+    CHILD_HC(hipFree(devOut));
+    CHILD_HC(hipStreamDestroy(stream));
+    CHILD_NC(ncclCommDestroy(comm));
+
+    return rc;
+}
+} // namespace
+
+static void testP2pThenCollectiveSameBuffer()
+{
+    const int numRanks = 2;
+
+    // Set up shared memory BEFORE fork and BEFORE any HIP/NCCL call.  The
+    // HIP/HSA runtime is not fork-safe, so the parent does no HIP/NCCL work at
+    // all — rank-0's child generates the ncclUniqueId here and signals the
+    // others through this MAP_SHARED region.
+    P2pCollShared* shared = static_cast<P2pCollShared*>(mmap(
+        nullptr, sizeof(P2pCollShared),
+        PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0));
+    ASSERT_NE(shared, MAP_FAILED) << "mmap for shared bootstrap failed";
+    shared->state = 0;
+
+    std::vector<pid_t> pids(numRanks, -1);
     for (int r = 0; r < numRanks; r++) {
-        HIPCALL(hipSetDevice(r));
-        NCCLCHECK(ncclCommDeregister(comms[r], regHandles[r]));
-        HIPCALL(hipFree(devBufs[r]));
-        HIPCALL(hipFree(devOut[r]));
-        HIPCALL(hipStreamDestroy(streams[r]));
-        NCCLCHECK(ncclCommDestroy(comms[r]));
+        pids[r] = fork();
+        ASSERT_GE(pids[r], 0) << "fork() failed for rank " << r;
+        if (pids[r] == 0) {
+            // Child: first HIP/NCCL calls happen here, on a clean runtime.
+            int rc = p2pCollRunRank(r, numRanks, shared);
+            _exit(rc);
+        }
+    }
+
+    // Parent: reap children and translate their exit codes into the GTest
+    // result.  No HIP/NCCL calls here.
+    bool anySkip = false;
+    bool anyFail = false;
+    for (int r = 0; r < numRanks; r++) {
+        int status = 0;
+        waitpid(pids[r], &status, 0);
+        if (WIFEXITED(status)) {
+            int code = WEXITSTATUS(status);
+            if (code == CHILD_SKIP) {
+                anySkip = true;
+            } else if (code != CHILD_OK) {
+                anyFail = true;
+                ADD_FAILURE() << "Rank " << r << " child exited with failure code "
+                              << code << ".";
+            }
+        } else {
+            anyFail = true;
+            ADD_FAILURE() << "Rank " << r << " child terminated abnormally "
+                          << "(status " << status << ") — likely the GH#1859 "
+                          << "crash (illegal memory access in the collective).";
+        }
+    }
+
+    munmap(shared, sizeof(P2pCollShared));
+
+    if (anySkip && !anyFail) {
+        GTEST_SKIP() << "Test requires " << numRanks << " GPUs with direct "
+                        "GPU-to-GPU P2P access; preconditions not met.";
     }
 }
 
