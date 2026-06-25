@@ -60,6 +60,12 @@ RUN_ENV=(
   # small payloads silently bypass it.  Setting the threshold to 0 disables LL
   # unconditionally, guaranteeing SIMPLE is chosen regardless of payload size.
   NCCL_P2P_LL_THRESHOLD=0
+  # Allow legacy cudaIpcGetMemHandle registration for hipMalloc'd buffers.
+  # ipcRegisterBuffer's non-cuMem path (else if legacyIpcCap) calls
+  # ncclParamLegacyCudaRegister() and goto fail if it is 0 (the default),
+  # which leaves *regBufFlag=0 and bypasses lines 1188-1222 entirely.
+  # NCCL_CUMEM_ENABLE=1 + cuMem allocations would be the alternative path.
+  NCCL_LEGACY_CUDA_REGISTER=1
   "LD_LIBRARY_PATH=${BUILD_DIR}:/opt/rocm/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 )
 
