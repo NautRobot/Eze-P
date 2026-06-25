@@ -8,6 +8,10 @@ Full documentation for amd_smi_lib is available at [https://rocm.docs.amd.com/pr
 
 ### Added
 
+- **Added NIC processor discovery and information API surface**.  
+  - New C APIs: `amdsmi_get_nic_processor_handles()`, `amdsmi_get_nic_device_bdf()`, `amdsmi_get_nic_fw_info()`, `amdsmi_get_nic_port_statistics()`, and `amdsmi_get_nic_vendor_statistics()`.
+  - `amdsmi_get_nic_processor_handles()` enumerates NIC processors by socket; the BDF, firmware, and port/vendor statistics getters are reserved and currently return `AMDSMI_STATUS_NOT_YET_IMPLEMENTED`.
+
 - **Exposed APU metrics through the CLI and Python interface**.  
   - `amd-smi metric` now surfaces APU-specific data under `--usage`, `--power`, `--clock`, `--temperature`, `--fan`, `--voltage`, and `--throttle` when APU metrics are available.
   - `amd-smi monitor` provides APU temperature and clock fallbacks when standard dGPU sensors report N/A.
