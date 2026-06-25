@@ -6,7 +6,7 @@
 
 /*
  * Standalone reproducer for the NCCL GH#1859 sequence:
- *   ncclCommInitAll -> ncclCommRegister -> ncclSend/ncclRecv -> ncclAllReduce
+ *   ncclCommInitRank -> ncclCommRegister -> ncclSend/ncclRecv -> ncclAllReduce
  * all on the same registered user buffer.
  *
  * This mirrors the Register.ProcessIsolatedRegisterTests/P2pThenCollective_SameBuffer
@@ -18,10 +18,15 @@
  *
  * Drive it with:
  *   NCCL_LOCAL_REGISTER=1 NCCL_DEBUG=INFO NCCL_DEBUG_SUBSYS=REG,P2P ./p2pcoll
+ * or use test/run-p2pcoll.sh which sets all required env vars.
  *
- * Note: the IPC registration path is only reached when the two GPUs have direct
- * GPU-to-GPU P2P. On PCIE-only hardware RCCL falls back to the SHM transport and
- * ipcRegisterBuffer is never called.
+ * IMPORTANT - each rank must run in its own process.
+ * ncclTransportCheckP2pType sets comm->directMode=true when any two local ranks
+ * share the same pid. ipcRegisterBuffer then hits:
+ *   if (comm->directMode || !ncclParamLegacyCudaRegister()) goto fail;
+ * and returns *regBufFlag=0, bypassing the IPC registration path entirely.
+ * We therefore fork() one child per rank and use ncclCommInitRank with a
+ * shared bootstrap address, mirroring what ProcessIsolatedTestRunner does.
  *
  * Protocol selection (enqueue.cc addP2pToPlan):
  *   protoLL &= bytes <= nChannels * NCCL_P2P_LL_THRESHOLD   (default 8192)
@@ -35,19 +40,26 @@
  * threshold for any plausible channel count.  We also set NCCL_P2P_LL_THRESHOLD=0
  * in run-p2pcoll.sh to make the intent explicit and guard against future
  * threshold changes.
+ *
+ * Note: the IPC registration path is only reached when the two GPUs have direct
+ * GPU-to-GPU P2P. On PCIE-only hardware RCCL falls back to the SHM transport and
+ * ipcRegisterBuffer is never called.
  */
 
 #include <rccl/rccl.h>
 #include <hip/hip_runtime.h>
 #include <cstdio>
+#include <cstring>
 #include <vector>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define HC(x)                                                            \
     do {                                                                 \
         hipError_t e = (x);                                              \
         if (e != hipSuccess) {                                           \
-            printf("HIP error %d (%s) @ %s:%d\n", e, hipGetErrorString(e), \
-                   __FILE__, __LINE__);                                  \
+            printf("[rank %d] HIP error %d (%s) @ %s:%d\n", rank, e,   \
+                   hipGetErrorString(e), __FILE__, __LINE__);            \
             return 1;                                                    \
         }                                                                \
     } while (0)
@@ -56,112 +68,133 @@
     do {                                                                 \
         ncclResult_t e = (x);                                            \
         if (e != ncclSuccess) {                                          \
-            printf("NCCL error %d (%s) @ %s:%d\n", e,                    \
-                   ncclGetErrorString(e), __FILE__, __LINE__);          \
+            printf("[rank %d] NCCL error %d (%s) @ %s:%d\n", rank, e,  \
+                   ncclGetErrorString(e), __FILE__, __LINE__);           \
             return 1;                                                    \
         }                                                                \
     } while (0)
 
-int main()
+static int run_rank(int rank, int nranks, const char* id_str)
 {
-    const int    n     = 2;
-    // Must exceed nChannels * NCCL_P2P_LL_THRESHOLD (default 8192 bytes) so that
-    // addP2pToPlan selects NCCL_PROTO_SIMPLE rather than NCCL_PROTO_LL.  Only
-    // with SIMPLE does it enter the ncclRegisterP2pIpcBuffer branch that leads
-    // to ipcRegisterBuffer.  16k floats = 65536 bytes is safely above any
-    // realistic channel-count multiple of the 8192-byte threshold.
-    const size_t ne    = 16 * 1024;
+    const size_t ne    = 16 * 1024;  // see protocol-selection note in file header
     const size_t bytes = ne * sizeof(float);
 
+    HC(hipSetDevice(rank));
+
+    // Report direct-P2P capability on rank 0.
+    if (rank == 0) {
+        int canAccess01 = 0, canAccess10 = 0;
+        HC(hipDeviceCanAccessPeer(&canAccess01, 0, 1));
+        HC(hipDeviceCanAccessPeer(&canAccess10, 1, 0));
+        printf("hipDeviceCanAccessPeer 0->1=%d 1->0=%d%s\n", canAccess01, canAccess10,
+               (canAccess01 && canAccess10)
+                   ? ""
+                   : "  (no direct P2P: collective will use SHM, ipcRegisterBuffer NOT exercised)");
+    }
+
+    ncclUniqueId id;
+    memcpy(&id, id_str, sizeof(id));
+
+    ncclComm_t comm;
+    NC(ncclCommInitRank(&comm, nranks, id, rank));
+
+    hipStream_t s;
+    HC(hipStreamCreate(&s));
+
+    void *in, *out;
+    HC(hipMalloc(&in,  bytes));
+    HC(hipMalloc(&out, bytes));
+
+    std::vector<float> hi(ne, static_cast<float>(rank + 1));
+    HC(hipMemcpy(in, hi.data(), bytes, hipMemcpyHostToDevice));
+    HC(hipMemset(out, 0, bytes));
+
+    void* h = nullptr;
+    NC(ncclCommRegister(comm, in, bytes, &h));
+    printf("[rank %d] reg handle %p\n", rank, h);
+
+    printf("[rank %d] === P2P phase ===\n", rank);
+    NC(ncclGroupStart());
+    if (rank == 0) NC(ncclSend(in, ne, ncclFloat, 1, comm, s));
+    if (rank == 1) NC(ncclRecv(in, ne, ncclFloat, 0, comm, s));
+    NC(ncclGroupEnd());
+    HC(hipStreamSynchronize(s));
+
+    printf("[rank %d] === AllReduce phase ===\n", rank);
+    NC(ncclGroupStart());
+    NC(ncclAllReduce(in, out, ne, ncclFloat, ncclSum, comm, s));
+    NC(ncclGroupEnd());
+    HC(hipStreamSynchronize(s));
+
+    // After the P2P send, in[1] == 1.0 (received from rank 0), so both ranks
+    // have in[r] == 1.0. The AllReduce sum is 1.0 + 1.0 = 2.0.
+    const float expected = static_cast<float>(nranks);
+    bool ok = true;
+    std::vector<float> host(ne, -1.0f);
+    HC(hipMemcpy(host.data(), out, bytes, hipMemcpyDeviceToHost));
+    for (size_t i = 0; i < ne; i++) {
+        if (host[i] != expected) {
+            printf("[rank %d] MISMATCH elem %zu: expected %f got %f\n",
+                   rank, i, expected, host[i]);
+            ok = false;
+            break;
+        }
+    }
+    printf("[rank %d] === done (result %s) ===\n", rank, ok ? "OK" : "WRONG");
+
+    NC(ncclCommDeregister(comm, h));
+    HC(hipFree(in));
+    HC(hipFree(out));
+    HC(hipStreamDestroy(s));
+    NC(ncclCommDestroy(comm));
+
+    return ok ? 0 : 1;
+}
+
+int main()
+{
+    const int n = 2;
+
     int numDevices = 0;
-    HC(hipGetDeviceCount(&numDevices));
+    hipGetDeviceCount(&numDevices);
     if (numDevices < n) {
         printf("This reproducer requires at least %d GPUs (detected %d).\n", n, numDevices);
         return 0;
     }
 
-    // Report direct-P2P capability between the two GPUs. If either direction is
-    // 0, RCCL will fall back to SHM and ipcRegisterBuffer will not be exercised.
-    int canAccess01 = 0, canAccess10 = 0;
-    HC(hipDeviceCanAccessPeer(&canAccess01, 0, 1));
-    HC(hipDeviceCanAccessPeer(&canAccess10, 1, 0));
-    printf("hipDeviceCanAccessPeer 0->1=%d 1->0=%d%s\n", canAccess01, canAccess10,
-           (canAccess01 && canAccess10)
-               ? ""
-               : "  (no direct P2P: collective will use SHM, ipcRegisterBuffer NOT exercised)");
+    // Generate the unique ID in the parent so all children share it.
+    ncclUniqueId id;
+    ncclGetUniqueId(&id);
+    // Pass it to children as a raw byte string via a shared pipe-free approach:
+    // simply embed it in a char array and let each child inherit it via fork().
+    char id_buf[sizeof(id)];
+    memcpy(id_buf, &id, sizeof(id));
 
-    std::vector<ncclComm_t> comms(n);
-    NC(ncclCommInitAll(comms.data(), n, nullptr));
-
-    std::vector<hipStream_t> s(n);
-    std::vector<void*>       in(n), out(n), h(n);
-
+    // Fork one child per rank. Each child runs in its own process so that
+    // comm->directMode is false (directMode is set when two local ranks share
+    // the same pid, which would block the IPC registration path).
+    pid_t pids[n];
     for (int r = 0; r < n; r++) {
-        HC(hipSetDevice(r));
-        HC(hipStreamCreate(&s[r]));
-
-        HC(hipMalloc(&in[r], bytes));
-        std::vector<float> hi(ne, static_cast<float>(r + 1));
-        HC(hipMemcpy(in[r], hi.data(), bytes, hipMemcpyHostToDevice));
-
-        HC(hipMalloc(&out[r], bytes));
-        HC(hipMemset(out[r], 0, bytes));
-
-        NC(ncclCommRegister(comms[r], in[r], bytes, &h[r]));
-        printf("rank %d reg handle %p\n", r, h[r]);
-    }
-
-    printf("=== P2P phase ===\n");
-    NC(ncclGroupStart());
-    HC(hipSetDevice(0));
-    NC(ncclSend(in[0], ne, ncclFloat, 1, comms[0], s[0]));
-    HC(hipSetDevice(1));
-    NC(ncclRecv(in[1], ne, ncclFloat, 0, comms[1], s[1]));
-    NC(ncclGroupEnd());
-    for (int r = 0; r < n; r++) {
-        HC(hipSetDevice(r));
-        HC(hipStreamSynchronize(s[r]));
-    }
-
-    printf("=== AllReduce phase ===\n");
-    NC(ncclGroupStart());
-    for (int r = 0; r < n; r++) {
-        HC(hipSetDevice(r));
-        NC(ncclAllReduce(in[r], out[r], ne, ncclFloat, ncclSum, comms[r], s[r]));
-    }
-    NC(ncclGroupEnd());
-    for (int r = 0; r < n; r++) {
-        HC(hipSetDevice(r));
-        HC(hipStreamSynchronize(s[r]));
-    }
-
-    // Verify the AllReduce result: in[0]=1.0, in[1] received 1.0 from rank 0
-    // (P2P send clobbers in[1] with rank-0's value of 1.0), so the sum is
-    // 1.0 + 1.0 = 2.0 per element on every rank.
-    const float expected = static_cast<float>(n);  // 1.0f * n
-    bool        ok       = true;
-    for (int r = 0; r < n; r++) {
-        HC(hipSetDevice(r));
-        std::vector<float> host(ne, -1.0f);
-        HC(hipMemcpy(host.data(), out[r], bytes, hipMemcpyDeviceToHost));
-        for (size_t i = 0; i < ne; i++) {
-            if (host[i] != expected) {
-                printf("MISMATCH rank %d elem %zu: expected %f got %f\n", r, i, expected, host[i]);
-                ok = false;
-                break;
-            }
+        pids[r] = fork();
+        if (pids[r] < 0) {
+            perror("fork");
+            return 1;
+        }
+        if (pids[r] == 0) {
+            // Child: run this rank and exit with its return code.
+            int rc = run_rank(r, n, id_buf);
+            _exit(rc);
         }
     }
-    printf("=== done (result %s) ===\n", ok ? "OK" : "WRONG");
 
+    // Parent: wait for all children and report overall result.
+    int overall = 0;
     for (int r = 0; r < n; r++) {
-        HC(hipSetDevice(r));
-        NC(ncclCommDeregister(comms[r], h[r]));
-        HC(hipFree(in[r]));
-        HC(hipFree(out[r]));
-        HC(hipStreamDestroy(s[r]));
-        NC(ncclCommDestroy(comms[r]));
+        int status = 0;
+        waitpid(pids[r], &status, 0);
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+            overall = 1;
     }
-
-    return ok ? 0 : 1;
+    printf("=== overall result: %s ===\n", overall == 0 ? "OK" : "WRONG");
+    return overall;
 }
