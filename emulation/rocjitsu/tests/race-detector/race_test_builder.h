@@ -114,7 +114,7 @@ public:
   /// Barrier: flush all waves' WAVE_COMPLETE events (simulates s_barrier).
   void barrier() {
     for (auto *w : waves_) {
-      w->flushWaveCompleteMemoryEvents();
+      w->flushBarrierPendingLdsEvents();
     }
   }
 
