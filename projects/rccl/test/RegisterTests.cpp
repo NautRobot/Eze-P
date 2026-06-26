@@ -338,7 +338,7 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
             printf("Unsupported GPU architecture '%s' for the P2P+collective "
                    "user-buffer registration test (requires gfx942 or gfx950).\n",
                    unsupportedArch);
-            shared->state = -1;
+            shared->state.store(P2pCollState::Skip, std::memory_order_release);
             return CHILD_SKIP;
         }
 
