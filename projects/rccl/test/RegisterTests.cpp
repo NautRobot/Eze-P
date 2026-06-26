@@ -31,6 +31,42 @@ static bool hasGpuAvailable() {
     return (err == hipSuccess && numDevices >= 1);
 }
 
+// The GH#1859 user-buffer IPC registration path that this test exercises only
+// behaves as intended on the CDNA datacenter GPUs (gfx942 / gfx950 families).
+// On other architectures (e.g. the RDNA gfx11xx consumer parts) the IPC /
+// collective registration machinery differs and the test cannot meaningfully
+// reproduce the defect, so we skip rather than report a misleading pass/fail.
+static bool isArchSupportedForP2pCollTest(const char* gcnArchName) {
+    // gcnArchName looks like "gfx942:sramecc+:xnack-"; compare the gfxNNN prefix.
+    static const char* kSupportedArchs[] = {"gfx942", "gfx950"};
+    for (const char* arch : kSupportedArchs) {
+        if (strncmp(gcnArchName, arch, strlen(arch)) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Queries every visible device and returns true only if all of them are a
+// supported architecture for the P2P+collective registration test.
+static bool allDevicesSupportP2pCollTest(int numDevices, char* unsupportedArchOut,
+                                         size_t outLen) {
+    for (int dev = 0; dev < numDevices; dev++) {
+        hipDeviceProp_t prop;
+        if (hipGetDeviceProperties(&prop, dev) != hipSuccess) {
+            return false;
+        }
+        if (!isArchSupportedForP2pCollTest(prop.gcnArchName)) {
+            if (unsupportedArchOut && outLen > 0) {
+                strncpy(unsupportedArchOut, prop.gcnArchName, outLen - 1);
+                unsupportedArchOut[outLen - 1] = '\0';
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
 // Macro to skip test if no GPU is available
 #define SKIP_IF_NO_GPU() \
     do { \
@@ -294,6 +330,18 @@ static int p2pCollRunRank(int rank, int nranks, P2pCollShared* shared)
             return CHILD_SKIP;
         }
 
+        // The GH#1859 defect only reproduces on the CDNA datacenter GPUs
+        // (gfx942 / gfx950).  On other architectures (e.g. RDNA gfx11xx) the
+        // registration path differs and the test is meaningless, so skip.
+        char unsupportedArch[256] = {0};
+        if (!allDevicesSupportP2pCollTest(nranks, unsupportedArch, sizeof(unsupportedArch))) {
+            printf("Unsupported GPU architecture '%s' for the P2P+collective "
+                   "user-buffer registration test (requires gfx942 or gfx950).\n",
+                   unsupportedArch);
+            shared->state = -1;
+            return CHILD_SKIP;
+        }
+
         // The IPC registration path is only reached with direct GPU-to-GPU P2P;
         // without it RCCL falls back to SHM and ipcRegisterBuffer is never
         // exercised, so skip rather than report a misleading pass.
@@ -468,8 +516,9 @@ static void testP2pThenCollectiveSameBuffer()
     munmap(shared, sizeof(P2pCollShared));
 
     if (anySkip && !anyFail) {
-        GTEST_SKIP() << "Test requires " << numRanks << " GPUs with direct "
-                        "GPU-to-GPU P2P access; preconditions not met.";
+        GTEST_SKIP() << "Test requires " << numRanks << " supported GPUs "
+                        "(gfx942 / gfx950) with direct GPU-to-GPU P2P access; "
+                        "preconditions not met.";
     }
 }
 
