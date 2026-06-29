@@ -641,8 +641,8 @@ TEST(Register, ProcessIsolatedRegisterTests)
                               {"NCCL_DEBUG", "INFO"},
                               {"NCCL_DEBUG_SUBSYS", "REG,P2P"}})
             .withNumGpus(2)
-            .withTimeout(std::chrono::seconds(120))
-        
+            .withTimeout(std::chrono::seconds(120)),
+
         // Force the non-sym path (NCCL_CUMEM_ENABLE=0 => symmetricSupport=false) so the
         // non-symmetric register/teardown is exercised; NCCL_LOCAL_REGISTER=1 ensures the register path runs.
         ProcessIsolatedTestRunner::TestConfig("WindowRegisterSingleRankNonSymTeardown", testWindowRegisterSingleRankNonSymTeardown)
