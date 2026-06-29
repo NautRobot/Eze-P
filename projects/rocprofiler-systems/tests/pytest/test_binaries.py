@@ -18,6 +18,15 @@ pytestmark = [
     pytest.mark.ci_enable,  # TODO: Deprecate once TheRock switches to CTest
 ]
 
+
+def get_sleep_cmd() -> str:
+    """Return the path to sleep, or skip the test if it isn't on PATH."""
+    sleep_cmd = shutil.which("sleep")
+    if not sleep_cmd:
+        pytest.skip("sleep command not found")
+    return sleep_cmd
+
+
 # ============================================================================
 # Avail format consistency data
 # ============================================================================
@@ -824,14 +833,128 @@ class TestRocprofilerSystemsAvail(RocprofsysTest):
 # ============================================================================
 
 
+def kitchen_sink_args(
+    *,
+    empty_cfg,
+    output_dir,
+    output_subdir: str,
+    trace_file: str,
+    tmpdir,
+    sleep_cmd: str,
+    run_only: bool = False,
+) -> list[str]:
+    """Shared arg list for the run/sample kitchen-sink tests.
+
+    Most flags are the same for both launchers. Pass run_only=True for the
+    rocprof-sys-run extras (-S and --fork). Callers just change the output
+    subdir and trace-file name.
+    """
+    args = [
+        "--monochrome",
+        "--debug=false",
+        "-v",
+        "1",
+        "-c",
+        str(empty_cfg),
+        "-o",
+        str(output_dir),
+        output_subdir,
+        "-TPHD",
+    ]
+    if run_only:
+        args += ["-S", "cputime", "realtime"]
+    args += [
+        "--trace-wait=1.0e-12",
+        "--trace-duration=5.0",
+        "--wait=1.0",
+        "--duration=3.0",
+        f"--trace-file={trace_file}",
+        "--trace-buffer-size=100",
+        "--trace-fill-policy=ring_buffer",
+        "--profile-format",
+        "console",
+        "json",
+        "text",
+        "--process-freq",
+        "1000",
+        "--process-wait",
+        "0.0",
+        "--process-duration",
+        "10",
+        "--cpus",
+        "0-4",
+        "--gpus",
+        "0",
+        "-f",
+        "1000",
+        "--sampling-wait",
+        "1.0",
+        "--sampling-duration",
+        "10",
+        "-t",
+        "0-3",
+        "--sample-cputime",
+        "1000",
+        "1.0",
+        "0-3",
+        "--sample-realtime",
+        "10",
+        "0.5",
+        "0-3",
+        "-I",
+        "all",
+        "-E",
+        "mutex-locks",
+        "rw-locks",
+        "spin-locks",
+        "-C",
+        "perf::INSTRUCTIONS",
+        "-G",
+        "GRBM_COUNT",
+        "--inlines",
+        "--hsa-interrupt",
+        "0",
+        "--use-causal=false",
+        "--use-kokkosp",
+        "--tmpdir",
+        str(tmpdir),
+        "--timemory-components",
+        "wall_clock",
+        "cpu_clock",
+        "peak_rss",
+        "page_rss",
+        "--ci",
+        "--num-threads-hint=4",
+        "--sampling-allocator-size=32",
+        "--dl-verbose=3",
+        "--perfetto-annotations=off",
+        "--perfetto-backend",
+        "inprocess",
+        "--kokkosp-kernel-logger",
+        "--kokkosp-name-length-max=1024",
+        '--kokkosp-prefix="[kokkos]"',
+        "--merge-perfetto-files",
+        "--use-pid",
+        "false",
+        "--time-output",
+        "off",
+        "--thread-pool-size",
+        "0",
+    ]
+    if run_only:
+        args += ["--fork"]
+    args += ["--", sleep_cmd, "5"]
+    return args
+
+
 @pytest.mark.sys_run
+@pytest.mark.timeout(45)
 @pytest.mark.class_name("rocprofiler-systems-run")
 class TestRocprofilerSystemsRun(RocprofsysTest):
     """Tests for rocprof-sys-run binary."""
 
     target = "rocprof-sys-run"
 
-    @pytest.mark.timeout(45)
     def test_help(self):
         """Test rocprof-sys-run --help output."""
         result = self.run_test(
@@ -843,15 +966,10 @@ class TestRocprofilerSystemsRun(RocprofsysTest):
 
         self.assert_regex(result)
 
-    @pytest.mark.timeout(45)
     def test_args(self, test_output_dir):
         """Test rocprof-sys-run with comprehensive arguments."""
-        # Check if sleep command exists
-        sleep_cmd = shutil.which("sleep")
-        if not sleep_cmd:
-            pytest.skip("sleep command not found")
+        sleep_cmd = get_sleep_cmd()
 
-        # Create empty config file
         config_dir = test_output_dir / "config"
         config_dir.mkdir(parents=True, exist_ok=True)
         empty_cfg = config_dir / "empty.cfg"
@@ -861,101 +979,15 @@ class TestRocprofilerSystemsRun(RocprofsysTest):
         tmpdir = tmpdir.resolve()
         tmpdir.mkdir(parents=True, exist_ok=True)
 
-        args = [
-            "--monochrome",
-            "--debug=false",
-            "-v",
-            "1",
-            "-c",
-            str(empty_cfg),
-            "-o",
-            str(test_output_dir),
-            "run-args-output/",
-            "-TPHD",
-            "-S",
-            "cputime",
-            "realtime",
-            "--trace-wait=1.0e-12",
-            "--trace-duration=5.0",
-            "--wait=1.0",
-            "--duration=3.0",
-            "--trace-file=perfetto-run-args-trace.proto",
-            "--trace-buffer-size=100",
-            "--trace-fill-policy=ring_buffer",
-            "--profile-format",
-            "console",
-            "json",
-            "text",
-            "--process-freq",
-            "1000",
-            "--process-wait",
-            "0.0",
-            "--process-duration",
-            "10",
-            "--cpus",
-            "0-4",
-            "--gpus",
-            "0",
-            "-f",
-            "1000",
-            "--sampling-wait",
-            "1.0",
-            "--sampling-duration",
-            "10",
-            "-t",
-            "0-3",
-            "--sample-cputime",
-            "1000",
-            "1.0",
-            "0-3",
-            "--sample-realtime",
-            "10",
-            "0.5",
-            "0-3",
-            "-I",
-            "all",
-            "-E",
-            "mutex-locks",
-            "rw-locks",
-            "spin-locks",
-            "-C",
-            "perf::INSTRUCTIONS",
-            "-G",
-            "GRBM_COUNT",
-            "--inlines",
-            "--hsa-interrupt",
-            "0",
-            "--use-causal=false",
-            "--use-kokkosp",
-            "--tmpdir",
-            str(tmpdir),
-            "--timemory-components",
-            "wall_clock",
-            "cpu_clock",
-            "peak_rss",
-            "page_rss",
-            "--ci",
-            "--num-threads-hint=4",
-            "--sampling-allocator-size=32",
-            "--dl-verbose=3",
-            "--perfetto-annotations=off",
-            "--perfetto-backend",
-            "inprocess",
-            "--kokkosp-kernel-logger",
-            "--kokkosp-name-length-max=1024",
-            '--kokkosp-prefix="[kokkos]"',
-            "--merge-perfetto-files",
-            "--use-pid",
-            "false",
-            "--time-output",
-            "off",
-            "--thread-pool-size",
-            "0",
-            "--fork",
-            "--",
-            sleep_cmd,
-            "5",
-        ]
+        args = kitchen_sink_args(
+            empty_cfg=empty_cfg,
+            output_dir=test_output_dir,
+            output_subdir="run-args-output/",
+            trace_file="perfetto-run-args-trace.proto",
+            tmpdir=tmpdir,
+            sleep_cmd=sleep_cmd,
+            run_only=True,
+        )
 
         result = self.run_test(
             "baseline",
@@ -966,20 +998,19 @@ class TestRocprofilerSystemsRun(RocprofsysTest):
         self.assert_regex(result)
 
 
+@pytest.mark.sampling
+@pytest.mark.timeout(45)
 @pytest.mark.class_name("rocprofiler-systems-sample")
 class TestRocprofilerSystemsSample(RocprofsysTest):
     """Tests for rocprof-sys-sample binary."""
 
     target = "rocprof-sys-sample"
 
-    @pytest.mark.timeout(45)
     def test_args(self, test_output_dir):
         """Kitchen-sink: many combined rocprof-sys-sample flags in one command.
         This test validates the comprehensive set of rocprof-sys-sample flags and their combinations.
         """
-        sleep_cmd = shutil.which("sleep")
-        if not sleep_cmd:
-            pytest.skip("sleep command not found")
+        sleep_cmd = get_sleep_cmd()
 
         config_dir = test_output_dir / "config"
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -989,97 +1020,14 @@ class TestRocprofilerSystemsSample(RocprofsysTest):
         tmpdir = (test_output_dir / "tmpdir").resolve()
         tmpdir.mkdir(parents=True, exist_ok=True)
 
-        args = [
-            "--monochrome",
-            "--debug=false",
-            "-v",
-            "1",
-            "-c",
-            str(empty_cfg),
-            "-o",
-            str(test_output_dir),
-            "sample-args-output/",
-            "-TPHD",
-            "--trace-wait=1.0e-12",
-            "--trace-duration=5.0",
-            "--wait=1.0",
-            "--duration=3.0",
-            "--trace-file=perfetto-sample-args-trace.proto",
-            "--trace-buffer-size=100",
-            "--trace-fill-policy=ring_buffer",
-            "--profile-format",
-            "console",
-            "json",
-            "text",
-            "--process-freq",
-            "1000",
-            "--process-wait",
-            "0.0",
-            "--process-duration",
-            "10",
-            "--cpus",
-            "0-4",
-            "--gpus",
-            "0",
-            "-f",
-            "1000",
-            "--sampling-wait",
-            "1.0",
-            "--sampling-duration",
-            "10",
-            "-t",
-            "0-3",
-            "--sample-cputime",
-            "1000",
-            "1.0",
-            "0-3",
-            "--sample-realtime",
-            "10",
-            "0.5",
-            "0-3",
-            "-I",
-            "all",
-            "-E",
-            "mutex-locks",
-            "rw-locks",
-            "spin-locks",
-            "-C",
-            "perf::INSTRUCTIONS",
-            "-G",
-            "GRBM_COUNT",
-            "--inlines",
-            "--hsa-interrupt",
-            "0",
-            "--use-causal=false",
-            "--use-kokkosp",
-            "--tmpdir",
-            str(tmpdir),
-            "--timemory-components",
-            "wall_clock",
-            "cpu_clock",
-            "peak_rss",
-            "page_rss",
-            "--ci",
-            "--num-threads-hint=4",
-            "--sampling-allocator-size=32",
-            "--dl-verbose=3",
-            "--perfetto-annotations=off",
-            "--perfetto-backend",
-            "inprocess",
-            "--kokkosp-kernel-logger",
-            "--kokkosp-name-length-max=1024",
-            '--kokkosp-prefix="[kokkos]"',
-            "--merge-perfetto-files",
-            "--use-pid",
-            "false",
-            "--time-output",
-            "off",
-            "--thread-pool-size",
-            "0",
-            "--",
-            sleep_cmd,
-            "5",
-        ]
+        args = kitchen_sink_args(
+            empty_cfg=empty_cfg,
+            output_dir=test_output_dir,
+            output_subdir="sample-args-output/",
+            trace_file="perfetto-sample-args-trace.proto",
+            tmpdir=tmpdir,
+            sleep_cmd=sleep_cmd,
+        )
 
         result = self.run_test(
             "baseline",
@@ -1093,16 +1041,13 @@ class TestRocprofilerSystemsSample(RocprofsysTest):
             fail_regex=[r"Unrecognized command line option"],
         )
 
-    @pytest.mark.timeout(45)
     def test_args_rejects_s_flag(self):
         """Negative: a run-only flag (-S) is rejected by the sample parser.
 
         Documents the intentional exclusion from the kitchen-sink and proves the
         parser does not silently accept rocprof-sys-run-only options.
         """
-        sleep_cmd = shutil.which("sleep")
-        if not sleep_cmd:
-            pytest.skip("sleep command not found")
+        sleep_cmd = get_sleep_cmd()
 
         result = self.run_test(
             "baseline",
@@ -1117,7 +1062,6 @@ class TestRocprofilerSystemsSample(RocprofsysTest):
             use_abort_fail_regex=False,  # negative test intentionally exits non-zero
         )
 
-    @pytest.mark.timeout(45)
     def test_args_stops_at_separator(self):
         """The ``--`` separator must split tool options from the program to run.
 
@@ -1127,9 +1071,7 @@ class TestRocprofilerSystemsSample(RocprofsysTest):
         If it worked correctly, everything after ``--`` is treated as the program
         to launch (``sleep 1``) and the run succeeds with no parser error.
         """
-        sleep_cmd = shutil.which("sleep")
-        if not sleep_cmd:
-            pytest.skip("sleep command not found")
+        sleep_cmd = get_sleep_cmd()
 
         result = self.run_test(
             "baseline",
