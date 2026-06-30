@@ -221,15 +221,18 @@ tool_init(rocprofiler_client_finalize_t /* fini_func */, void* /* tool_data */)
 
     ROCPROFILER_CALL(rocprofiler_start_context(tracing_ctx), "context start");
 
-    // tool_init runs before the application initializes the HSA runtime. Starting
-    // the device thread trace context here exercises the deferred-start path: the
-    // request is cached and automatically replayed once HSA is registered. The
-    // trace then runs device-wide until the dispatch callback stops it (or
-    // tool_fini), and finalize() asserts data was collected.
+    // tool_init runs before hsa_init: start here to exercise the deferred-start path.
     if(const char* var = std::getenv("ATT_START_BEFORE_HSA_INIT"); var && atoi(var))
     {
         ROCPROFILER_CALL(rocprofiler_start_context(agent_ctx),
                          "starting device thread trace context before hsa_init");
+    }
+
+    // Cancel the deferred start before hsa_init; the dispatch callback starts it later.
+    if(const char* var = std::getenv("ATT_STOP_BEFORE_HSA_INIT"); var && atoi(var))
+    {
+        ROCPROFILER_CALL(rocprofiler_stop_context(agent_ctx),
+                         "stopping device thread trace context before hsa_init");
     }
 
     // no errors

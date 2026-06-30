@@ -34,8 +34,7 @@ rocprofiler_add_integration_execute_test(
     LABELS "integration-tests"
     PRELOAD "$<TARGET_FILE:thread-trace-agent-tool>")
 
-# Starts the device thread trace context before hsa_init() to verify the start request is
-# cached, replayed once HSA is registered, and trace data collected.
+# Start before hsa_init(): verifies the request is cached and replayed once HSA registers.
 rocprofiler_add_integration_execute_test(
     thread-trace-api-agent-before-hsa-init-test
     TARGET thread-trace-test-app
@@ -43,6 +42,15 @@ rocprofiler_add_integration_execute_test(
     LABELS "integration-tests"
     PRELOAD "$<TARGET_FILE:thread-trace-agent-tool>"
     ENVIRONMENT "ATT_START_BEFORE_HSA_INIT=1")
+
+# Start+stop before hsa_init(): verifies the cached request is dropped and not replayed.
+rocprofiler_add_integration_execute_test(
+    thread-trace-api-agent-start-stop-before-hsa-init-test
+    TARGET thread-trace-test-app
+    TIMEOUT 10
+    LABELS "integration-tests"
+    PRELOAD "$<TARGET_FILE:thread-trace-agent-tool>"
+    ENVIRONMENT "ATT_START_BEFORE_HSA_INIT=1;ATT_STOP_BEFORE_HSA_INIT=1")
 
 # Feature introduced in ROCm 7.1, however some pre-release CI builds for 7.1 dont have
 # this feature in aqlprofile. Disable the next tests for ROCm < 7.2.
