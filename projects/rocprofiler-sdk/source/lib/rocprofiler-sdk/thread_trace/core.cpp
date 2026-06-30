@@ -74,6 +74,17 @@ struct cbdata_t
 // operations so we can gate new traces while one is active.
 common::Synchronized<std::optional<int64_t>> client;
 
+// Tracks whether the HSA runtime has been registered with rocprofiler. Thread
+// trace cannot touch HSA (queues, memory pools, packet buffers) before this is
+// true, so start requests issued earlier are cached in the active-context array
+// and replayed from initialize() once HSA becomes available.
+std::atomic<bool>&
+hsa_inited()
+{
+    static std::atomic<bool> inited{false};
+    return inited;
+}
+
 hsa_status_t
 thread_trace_callback(uint32_t shader, void* buffer, uint64_t size, void* callback_data)
 {
@@ -472,6 +483,15 @@ DispatchThreadTracer::start_context()
 {
     using corr_id_map_t = hsa::queue_info_session_t::external_corr_id_map_t;
 
+    // The queue controller does not exist until HSA is registered. The request
+    // is already recorded in the active-context array, so defer here and let
+    // initialize() replay start_context() once HSA is available.
+    if(!hsa_inited().load())
+    {
+        ROCP_INFO << "Dispatch thread trace start requested before hsa_init; deferring";
+        return;
+    }
+
     CHECK_NOTNULL(hsa::get_queue_controller())->enable_serialization();
 
     // Only one thread should be attempting to enable/disable this context
@@ -561,6 +581,15 @@ DeviceThreadTracer::resource_deinit()
 void
 DeviceThreadTracer::start_context()
 {
+    // Before HSA is registered the per-agent resources do not exist yet. The
+    // request is already recorded in the active-context array, so simply return
+    // here; initialize() replays start_context() once HSA is available.
+    if(!hsa_inited().load())
+    {
+        ROCP_INFO << "Device thread trace start requested before hsa_init; deferring";
+        return;
+    }
+
     ROCP_INFO << "Start device thread trace context";
     std::unique_lock<std::mutex> lk(agent_mut);
 
@@ -616,6 +645,18 @@ initialize(HsaApiTable* table)
     {
         if(ctx->device_thread_trace) ctx->device_thread_trace->resource_init();
         if(ctx->dispatch_thread_trace) ctx->dispatch_thread_trace->resource_init();
+    }
+
+    // HSA resources now exist; allow start_context() to program the hardware.
+    hsa_inited().store(true);
+
+    // Replay any thread trace contexts that the user started before hsa_init().
+    // Those start_context() calls returned early (cached) above, so start them
+    // now that the per-agent resources have been constructed.
+    for(auto& ctx : context::get_active_contexts())
+    {
+        if(ctx->device_thread_trace) ctx->device_thread_trace->start_context();
+        if(ctx->dispatch_thread_trace) ctx->dispatch_thread_trace->start_context();
     }
 }
 
