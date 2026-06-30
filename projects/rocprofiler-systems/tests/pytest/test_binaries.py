@@ -13,10 +13,7 @@ import os
 import shutil
 from conftest import RocprofsysTest
 
-pytestmark = [
-    pytest.mark.rocprof_binary,
-    pytest.mark.ci_enable,  # TODO: Deprecate once TheRock switches to CTest
-]
+pytestmark = [pytest.mark.rocprof_binary]
 
 
 def get_sleep_cmd() -> str:
