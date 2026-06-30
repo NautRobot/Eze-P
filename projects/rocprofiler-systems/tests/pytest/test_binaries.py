@@ -1032,7 +1032,6 @@ class TestRocprofilerSystemsSample(RocprofsysTest):
             run_args=args,
             fail_on_not_found=True,
         )
-        # exit 0 is enforced by run_test; also assert no parser error was printed.
         self.assert_regex(
             result,
             fail_regex=[r"Unrecognized command line option"],
