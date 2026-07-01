@@ -88,6 +88,20 @@ dispatch_tracing_callback(rocprofiler_callback_tracing_record_t record,
     {
         if(dispatch_id == begin_dispatch)
         {
+            // A start cancelled before hsa_init must not be replayed, so the
+            // context must still be inactive here.
+            static const bool stop_before_init =
+                std::getenv("ATT_STOP_BEFORE_HSA_INIT")
+                    ? atoi(std::getenv("ATT_STOP_BEFORE_HSA_INIT")) != 0
+                    : false;
+            if(stop_before_init)
+            {
+                int is_active = -1;
+                ROCPROFILER_CALL(rocprofiler_context_is_active(agent_ctx, &is_active),
+                                 "context active query");
+                assert(is_active == 0 && "cancelled pre-hsa_init start must not be replayed");
+            }
+
             ROCPROFILER_CALL(rocprofiler_start_context(agent_ctx), "context start");
             callback_state->isprofiling.store(true);
         }
