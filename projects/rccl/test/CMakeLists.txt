@@ -181,6 +181,7 @@ if(BUILD_TESTS)
     VersionGateTests.cpp
     SendRecvTests.cpp
     StandaloneTests.cpp
+    DdaIpcTests.cpp
     TeardownStressTests.cpp
     _RecorderTests.cpp
     common/main.cpp
