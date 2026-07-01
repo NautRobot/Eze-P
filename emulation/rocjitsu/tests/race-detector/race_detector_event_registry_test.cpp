@@ -43,6 +43,6 @@ TEST(RaceDetector, EventRegistry_TrimmedWaveLocalEventsAreNotBarrierQueued) {
   EXPECT_GT(detector.events().trimmedCount(), 0);
   // If wave-local events were incorrectly queued for barrier retirement, this
   // would be non-empty. Flushing it after trimming would then touch stale ids.
-  EXPECT_TRUE(wave.getBarrierPendingLdsEvents().empty());
-  wave.flushBarrierPendingLdsEvents();
+  EXPECT_TRUE(wave.getBarrierPendingEvents().empty());
+  wave.flushBarrierPendingEvents();
 }

@@ -63,8 +63,8 @@ public:
   /// Dispatch a pending wait count produced by an s_waitcnt executor.
   void dispatch(PendingWaitCount waitCount);
 
-  /// Retire LDS events whose owning wave completed them before a workgroup barrier.
-  void flushBarrierPendingLdsEvents();
+  /// Retire non-trimmable events whose owning wave completed them before a workgroup barrier.
+  void flushBarrierPendingEvents();
 
   /// Check a full VGPR read for races. Calls the RaceHandler on violation.
   void checkVgprRead(int reg, int lane, uint8_t byteMask) const;
@@ -88,7 +88,7 @@ public:
 
   const std::vector<EventId> &getWaveMemoryEvents() const { return waveMemoryEvents; }
 
-  const std::vector<EventId> &getBarrierPendingLdsEvents() const { return barrierPendingLdsEvents; }
+  const std::vector<EventId> &getBarrierPendingEvents() const { return barrierPendingEvents; }
 
   RaceDetector *getDetector() { return detector; }
   const RaceDetector *getDetector() const { return detector; }
@@ -120,7 +120,7 @@ private:
   std::array<std::vector<int>, kNumEventTypes> regEventCount;
 
   std::vector<EventId> waveMemoryEvents;
-  std::vector<EventId> barrierPendingLdsEvents;
+  std::vector<EventId> barrierPendingEvents;
 
   WaveId waveId;
   RaceDetector *detector;

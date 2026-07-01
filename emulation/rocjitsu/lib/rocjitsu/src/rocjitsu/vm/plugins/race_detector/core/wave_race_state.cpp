@@ -141,16 +141,11 @@ template <typename Pred> void WaveRaceState::resolveWaitCnt(int limit, Pred isTa
       retired++;
       retireEventRegisters(eid);
       detector->markEventWaveComplete(eid);
-      // Non-LDS events are wave-local: once s_waitcnt completes them, the
-      // owning wave can safely use their results and no workgroup barrier is
-      // needed. EventRegistry is therefore allowed to trim those WAVE_COMPLETE
-      // events immediately. LDS events are different: a completed LDS access
-      // can still conflict with another wave until the workgroup reaches
-      // s_barrier, so only LDS-involved events belong in this barrier-retire
-      // queue. Queuing wave-local events here would leave stale EventIds after
-      // registry trimming, and a later barrier would try to retire invalid ids.
-      if (isLdsInvolved(detector->events().type(eid)))
-        barrierPendingLdsEvents.push_back(eid);
+      // Trimmable WAVE_COMPLETE events may be removed from the registry
+      // immediately. Only keep non-trimmable events for later barrier retire;
+      // otherwise a later barrier could try to retire stale EventIds.
+      if (!detector->events().isTrimmable(eid))
+        barrierPendingEvents.push_back(eid);
     } else {
       waveMemoryEvents[write++] = eid;
     }
@@ -172,12 +167,12 @@ void WaveRaceState::sWaitCntLgkmcnt(int lgkmcnt) {
   });
 }
 
-void WaveRaceState::flushBarrierPendingLdsEvents() {
+void WaveRaceState::flushBarrierPendingEvents() {
   ProfileScope ps(*profiler_, "removeEvents");
-  for (EventId eventId : barrierPendingLdsEvents) {
+  for (EventId eventId : barrierPendingEvents) {
     detector->retireEvent(eventId);
   }
-  barrierPendingLdsEvents.clear();
+  barrierPendingEvents.clear();
 }
 
 void WaveRaceState::checkVgprRead(int reg, int lane, uint8_t byteMask) const {
