@@ -142,7 +142,9 @@ std::optional<std::string> child_config_path() {
 }
 
 void *raw_mmap_syscall(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
-  // syscall(2) is the libc wrapper: on kernel errors it returns -1 and sets errno.
+  // syscall(2) is the libc wrapper, not a raw inline syscall instruction: on
+  // kernel errors it returns -1 and sets errno. For mmap(2), success returns
+  // the mapped address; for munmap(2), success returns exactly 0.
   long rc = syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
   if (rc == -1)
     return MAP_FAILED;
