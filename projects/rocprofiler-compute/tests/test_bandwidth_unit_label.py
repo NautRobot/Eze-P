@@ -18,7 +18,7 @@ class TestGuiBandwidthUnitFilter:
     """Verify create_sol_charts filters bandwidth rows by 'GB/s', not 'Gb/s'."""
 
     def _make_sol_df(self):
-        """Build a DataFrame matching the L2 Cache SOL panel (table_id=1701)."""
+        """Build a DataFrame matching the SoL bandwidth panel (table_id=1701)."""
         return pd.DataFrame({
             "Metric": [
                 "GPU L2 Util",
@@ -57,7 +57,7 @@ class TestGuiBandwidthUnitFilter:
 
 
 class TestTuiChartBandwidthLabel:
-    """Verify px_simple_bar uses 'GB/s' label for bandwidth chart (id=1701.2)."""
+    """Verify px_simple_bar uses 'GB/s' label for SoL bandwidth chart."""
 
     def _make_chart_df(self):
         """Build a minimal DataFrame for px_simple_bar.
