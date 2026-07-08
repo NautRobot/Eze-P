@@ -2,13 +2,11 @@
 # SPDX-License-Identifier:  MIT
 
 """
-Unit tests verifying that bandwidth labels use "GB/s" (gigabytes), not "Gb/s" (gigabits).
+Verify bandwidth labels use "GB/s" (gigabytes), not "Gb/s" (gigabits).
 
 The YAML metric definitions use "GB/s" and the underlying values are in gigabytes
 per second. The display layer must match.
 """
-
-from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
