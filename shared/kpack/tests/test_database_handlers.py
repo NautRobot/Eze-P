@@ -10,6 +10,7 @@ from rocm_kpack.database_handlers import (
     HipSparseLtHandler,
     AotritonHandler,
     MIOpenHandler,
+    HipKernelProviderRockeHandler,
     WHEEL_TYPE_PRESETS,
     get_database_handlers,
     list_available_handlers,
@@ -747,6 +748,137 @@ class TestMIOpenHandler:
         assert result is None
 
 
+class TestHipKernelProviderRockeHandler:
+    """Tests for HipKernelProviderRockeHandler detection logic."""
+
+    _ENGINE_DIR = "lib/hipdnn_plugins/engines/hip_kernel_provider/rocke"
+
+    @pytest.fixture
+    def handler(self):
+        return HipKernelProviderRockeHandler()
+
+    @pytest.fixture
+    def prefix_root(self, tmp_path):
+        """Create a temporary prefix root directory."""
+        root = tmp_path / "prefix"
+        root.mkdir()
+        return root
+
+    def test_name(self, handler):
+        assert handler.name() == "hipkernelprovider"
+
+    def test_detect_kpack(self, handler, prefix_root):
+        """rocKE per-arch kpack archive routes to its arch."""
+        file_path = prefix_root / f"{self._ENGINE_DIR}/gfx942/rocke_client_gfx942.kpack"
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result == "gfx942"
+
+    def test_detect_manifest_json(self, handler, prefix_root):
+        """The bundle manifest beside the kpack routes to the same arch."""
+        file_path = prefix_root / f"{self._ENGINE_DIR}/gfx942/rocke_client_gfx942.json"
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result == "gfx942"
+
+    def test_detect_deeply_nested_file(self, handler, prefix_root):
+        """Any file nested below the arch dir routes to that arch, not just
+        immediate children (directory-based match)."""
+        file_path = (
+            prefix_root / f"{self._ENGINE_DIR}/gfx942/sub/extra/blob.bin"
+        )
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result == "gfx942"
+
+    def test_detect_various_arches(self, handler, prefix_root):
+        test_cases = ["gfx90a", "gfx942", "gfx950", "gfx1151", "gfx1201"]
+        for arch in test_cases:
+            file_path = (
+                prefix_root / f"{self._ENGINE_DIR}/{arch}/rocke_client_{arch}.kpack"
+            )
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.touch()
+
+            result = handler.detect(file_path, prefix_root)
+            assert result == arch, f"Failed for {arch}"
+
+    def test_detect_xnack(self, handler, prefix_root):
+        """xnack arch variant is preserved as the bundle key."""
+        file_path = (
+            prefix_root
+            / f"{self._ENGINE_DIR}/gfx942-xnack+/rocke_client_gfx942-xnack+.kpack"
+        )
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result == "gfx942-xnack+"
+
+    def test_detect_alt_engine_subdir(self, handler, prefix_root):
+        """Future-proof: per-arch content under any subdir (not just rocke/)
+        routes by its arch directory -- e.g. heuristic model files."""
+        file_path = prefix_root / "lib/hip_kernel_provider/heuristics/gfx942/model.bin"
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result == "gfx942"
+
+    def test_reject_no_arch_dir_under_provider(self, handler, prefix_root):
+        """Provider content with no arch directory stays generic (None)."""
+        file_path = (
+            prefix_root
+            / "lib/hipdnn_plugins/engines/hip_kernel_provider/config/settings.json"
+        )
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result is None
+
+    def test_reject_rocke_without_provider_parent(self, handler, prefix_root):
+        """A rocke/<arch>/ path not under hip_kernel_provider does not match."""
+        file_path = prefix_root / "lib/rocke/gfx942/rocke_client_gfx942.kpack"
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result is None
+
+    def test_reject_non_arch_dir(self, handler, prefix_root):
+        """A non-gfx directory name is not a bundle key."""
+        file_path = prefix_root / f"{self._ENGINE_DIR}/common/shared.json"
+        file_path.parent.mkdir(parents=True)
+        file_path.touch()
+
+        result = handler.detect(file_path, prefix_root)
+        assert result is None
+
+    def test_reject_arch_dir_itself(self, handler, prefix_root):
+        """The arch directory with no file underneath does not match."""
+        dir_path = prefix_root / f"{self._ENGINE_DIR}/gfx942"
+        dir_path.mkdir(parents=True)
+
+        result = handler.detect(dir_path, prefix_root)
+        assert result is None
+
+    def test_reject_file_outside_prefix(self, handler, prefix_root):
+        """Files outside prefix root are a caller bug -- must raise."""
+        file_path = Path(
+            "/tmp/lib/hip_kernel_provider/rocke/gfx942/rocke_client_gfx942.kpack"
+        )
+
+        with pytest.raises(ValueError, match="is not under prefix_root"):
+            handler.detect(file_path, prefix_root)
+
+
 class TestDatabaseHandlerRegistry:
     """Tests for database handler registry functions."""
 
@@ -759,7 +891,8 @@ class TestDatabaseHandlerRegistry:
         assert "hipsparselt" in handlers
         assert "aotriton" in handlers
         assert "miopen" in handlers
-        assert len(handlers) == 5
+        assert "hipkernelprovider" in handlers
+        assert len(handlers) == 6
 
     def test_get_database_handlers_single(self):
         """Test getting a single handler by name."""
@@ -777,14 +910,22 @@ class TestDatabaseHandlerRegistry:
     def test_get_database_handlers_all(self):
         """Test getting all handlers."""
         handlers = get_database_handlers(
-            ["rocblas", "hipblaslt", "hipsparselt", "aotriton", "miopen"]
+            [
+                "rocblas",
+                "hipblaslt",
+                "hipsparselt",
+                "aotriton",
+                "miopen",
+                "hipkernelprovider",
+            ]
         )
-        assert len(handlers) == 5
+        assert len(handlers) == 6
         assert isinstance(handlers[0], RocBLASHandler)
         assert isinstance(handlers[1], HipBLASLtHandler)
         assert isinstance(handlers[2], HipSparseLtHandler)
         assert isinstance(handlers[3], AotritonHandler)
         assert isinstance(handlers[4], MIOpenHandler)
+        assert isinstance(handlers[5], HipKernelProviderRockeHandler)
 
     def test_wheel_type_preset(self):
         """Test that wheel type presets resolve to valid handlers."""

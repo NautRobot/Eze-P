@@ -280,6 +280,50 @@ class MIOpenHandler(DatabaseHandler):
         return None
 
 
+class HipKernelProviderRockeHandler(DatabaseHandler):
+    """Handler for hipKernelProvider per-architecture kernel content.
+
+    The hipKernelProvider engines lay out ISA-specific content with the
+    architecture as a directory component under the provider's install tree.
+    Today that is the rocKE engine's ahead-of-time kernel bundles -- a per-arch
+    kpack archive plus a JSON bundle manifest:
+        .../hip_kernel_provider/rocke/gfx942/rocke_client_gfx942.kpack
+        .../hip_kernel_provider/rocke/gfx942/rocke_client_gfx942.json
+        .../hip_kernel_provider/rocke/gfx950/rocke_client_gfx950.kpack
+
+    Detection keys on the arch *directory*, not on file names or extensions, so
+    future per-arch content (e.g. heuristic model files) routes automatically by
+    being dropped into an arch directory under hip_kernel_provider/ -- no handler
+    change needed. Unlike arch-neutral host content, this is ISA-specific, which
+    is why the hipkernelprovider artifact is split per-arch.
+    """
+
+    def name(self) -> str:
+        return "hipkernelprovider"
+
+    def detect(self, path: Path, prefix_root: Path) -> Optional[str]:
+        """
+        Detect per-arch hipKernelProvider content by its arch directory.
+
+        Pattern: */hip_kernel_provider/[.../]<arch>/[...]<file>. The first gfx
+        architecture directory under hip_kernel_provider/ is the bundle key;
+        everything beneath it routes to that arch.
+
+        Returns:
+            Bundle key (the gfx arch directory, e.g. 'gfx942') or None.
+        """
+        parts = Path(self._relative_path(path, prefix_root)).parts
+        try:
+            root = parts.index("hip_kernel_provider")
+        except ValueError:
+            return None
+        # First arch directory after the provider root that has a file beneath it.
+        for i in range(root + 1, len(parts) - 1):
+            if _GFX_ARCH_PATTERN.fullmatch(parts[i]):
+                return parts[i]
+        return None
+
+
 # Registry of available handlers
 AVAILABLE_HANDLERS = {
     "rocblas": RocBLASHandler,
@@ -287,6 +331,7 @@ AVAILABLE_HANDLERS = {
     "hipsparselt": HipSparseLtHandler,
     "aotriton": AotritonHandler,
     "miopen": MIOpenHandler,
+    "hipkernelprovider": HipKernelProviderRockeHandler,
 }
 
 
