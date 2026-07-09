@@ -1171,7 +1171,7 @@ static ncclResult_t addP2pToPlan(
       // Single-node asymmetric patterns (gather/scatter): use nChannelsMax to
       // fully utilize XGMI bandwidth when only one rank is the traffic hub.
       // Symmetric patterns (alltoall): stay at nChannelsMin to avoid contention.
-      bool asymmetric = planTotalTasks[0] <= 1 || planTotalTasks[1] <= 1;
+      bool asymmetric = planTotalTasks[0] == 0 || planTotalTasks[1] == 0;
       int nChStart = (comm->nNodes <= 1 && asymmetric) ? nChannelsMax : nChannelsMin;
       nChannels[dir] = std::min<int>(nChStart, divUp(bytes[dir], minPartSize));
       size_t partSize = std::max(minPartSize, divUp(bytes[dir], nChannels[dir]));
@@ -1250,7 +1250,7 @@ static ncclResult_t addP2pToPlan(
       // Single-node asymmetric patterns (gather/scatter): use nChannelsMax to
       // fully utilize XGMI bandwidth when only one rank is the traffic hub.
       // Symmetric patterns (alltoall): stay at nChannelsMin to avoid contention.
-      bool asymmetric = planTotalTasks[0] <= 1 || planTotalTasks[1] <= 1;
+      bool asymmetric = planTotalTasks[0] == 0 || planTotalTasks[1] == 0;
       int nChStart = (comm->nNodes <= 1 && asymmetric) ? nChannelsMax : nChannelsMin;
       nChannels[dir] = std::min<int>(nChStart, divUp(bytes[dir], minPartSize));
       size_t partSize = std::max(minPartSize, divUp(bytes[dir], nChannels[dir]));
