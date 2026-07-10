@@ -751,7 +751,7 @@ class TestMIOpenHandler:
 class TestHipKernelProviderRockeHandler:
     """Tests for HipKernelProviderRockeHandler detection logic."""
 
-    _ENGINE_DIR = "lib/hipdnn_plugins/engines/hip_kernel_provider/rocke"
+    _ENGINE_DIR = "lib/hipdnn_plugins/engines/arch_content/rocke"
 
     @pytest.fixture
     def handler(self):
@@ -821,36 +821,42 @@ class TestHipKernelProviderRockeHandler:
         result = handler.detect(file_path, prefix_root)
         assert result == "gfx942-xnack+"
 
-    def test_detect_alt_engine_subdir(self, handler, prefix_root):
-        """Future-proof: per-arch content under any subdir (not just rocke/)
-        routes by its arch directory -- e.g. heuristic model files."""
-        file_path = prefix_root / "lib/hip_kernel_provider/heuristics/gfx942/model.bin"
+    def test_detect_second_engine(self, handler, prefix_root):
+        """A different engine's per-arch content under arch_content/ routes with
+        no handler change (the anchor is the generic container, not the engine
+        name) -- e.g. a future aiter engine."""
+        file_path = (
+            prefix_root
+            / "lib/hipdnn_plugins/engines/arch_content/aiter/gfx942/kernels.kpack"
+        )
         file_path.parent.mkdir(parents=True)
         file_path.touch()
 
         result = handler.detect(file_path, prefix_root)
         assert result == "gfx942"
 
-    def test_reject_no_arch_dir_under_provider(self, handler, prefix_root):
-        """Provider content with no arch directory stays generic (None)."""
-        file_path = (
-            prefix_root
-            / "lib/hipdnn_plugins/engines/hip_kernel_provider/config/settings.json"
-        )
+    def test_reject_no_arch_dir_under_arch_content(self, handler, prefix_root):
+        """arch_content content with no arch directory stays generic (None)."""
+        file_path = prefix_root / f"{self._ENGINE_DIR}/config/settings.json"
         file_path.parent.mkdir(parents=True)
         file_path.touch()
 
         result = handler.detect(file_path, prefix_root)
         assert result is None
 
-    def test_reject_rocke_without_provider_parent(self, handler, prefix_root):
-        """A rocke/<arch>/ path not under hip_kernel_provider does not match."""
-        file_path = prefix_root / "lib/rocke/gfx942/rocke_client_gfx942.kpack"
-        file_path.parent.mkdir(parents=True)
-        file_path.touch()
-
-        result = handler.detect(file_path, prefix_root)
-        assert result is None
+    def test_reject_arch_dir_without_arch_content_parent(self, handler, prefix_root):
+        """An <arch>/ path not under an arch_content/ container does not match, so
+        unrelated arch-named dirs elsewhere in the tree stay generic. This
+        includes the rocKE authoring SDK tree (hip_kernel_provider/rocke/), which
+        ships generic rather than arch-split."""
+        for rel in (
+            "lib/hipdnn_plugins/engines/other/gfx942/blob.bin",
+            "bin/hip_kernel_provider/rocke/instances/gfx942/wmma_gemm.py",
+        ):
+            file_path = prefix_root / rel
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.touch()
+            assert handler.detect(file_path, prefix_root) is None, rel
 
     def test_reject_non_arch_dir(self, handler, prefix_root):
         """A non-gfx directory name is not a bundle key."""

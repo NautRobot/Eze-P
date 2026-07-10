@@ -283,19 +283,25 @@ class MIOpenHandler(DatabaseHandler):
 class HipKernelProviderRockeHandler(DatabaseHandler):
     """Handler for hipKernelProvider per-architecture kernel content.
 
-    The hipKernelProvider engines lay out ISA-specific content with the
-    architecture as a directory component under the provider's install tree.
-    Today that is the rocKE engine's ahead-of-time kernel bundles -- a per-arch
-    kpack archive plus a JSON bundle manifest:
-        .../hip_kernel_provider/rocke/gfx942/rocke_client_gfx942.kpack
-        .../hip_kernel_provider/rocke/gfx942/rocke_client_gfx942.json
-        .../hip_kernel_provider/rocke/gfx950/rocke_client_gfx950.kpack
+    The hipKernelProvider engines lay out ISA-specific content under a generic
+    ``arch_content`` container beside the engine plugin, with a per-engine subdir
+    and the architecture as a directory component beneath it:
+        .../hipdnn_plugins/engines/arch_content/rocke/gfx942/rocke_client_gfx942.kpack
+        .../hipdnn_plugins/engines/arch_content/rocke/gfx942/rocke_client_gfx942.json
+        .../hipdnn_plugins/engines/arch_content/rocke/gfx950/rocke_client_gfx950.kpack
+    Future engines get sibling subdirs (arch_content/aiter/<arch>/,
+    arch_content/asm/<arch>/, ...) and route with no handler change.
 
-    Detection keys on the arch *directory*, not on file names or extensions, so
-    future per-arch content (e.g. heuristic model files) routes automatically by
-    being dropped into an arch directory under hip_kernel_provider/ -- no handler
-    change needed. Unlike arch-neutral host content, this is ISA-specific, which
-    is why the hipkernelprovider artifact is split per-arch.
+    The container is ``arch_content`` (generic) rather than the engine name or a
+    ``hip_kernel_provider/`` directory: the latter collides with the
+    ``hip_kernel_provider`` plugin file in the same engines dir and shadows it
+    from hipDNN's plugin loader.
+
+    Detection keys on the arch *directory* under ``arch_content/``, not on file
+    names, extensions, or the engine subdir name, so any per-arch content routes
+    automatically by being dropped into an arch directory under ``arch_content/``
+    -- no handler change when engines are added. Unlike arch-neutral host
+    content, this is ISA-specific, which is why it is split per-arch.
     """
 
     def name(self) -> str:
@@ -305,8 +311,8 @@ class HipKernelProviderRockeHandler(DatabaseHandler):
         """
         Detect per-arch hipKernelProvider content by its arch directory.
 
-        Pattern: */hip_kernel_provider/[.../]<arch>/[...]<file>. The first gfx
-        architecture directory under hip_kernel_provider/ is the bundle key;
+        Pattern: */arch_content/[.../]<arch>/[...]<file>. The first gfx
+        architecture directory under the ``arch_content`` root is the bundle key;
         everything beneath it routes to that arch.
 
         Returns:
@@ -314,10 +320,10 @@ class HipKernelProviderRockeHandler(DatabaseHandler):
         """
         parts = Path(self._relative_path(path, prefix_root)).parts
         try:
-            root = parts.index("hip_kernel_provider")
+            root = parts.index("arch_content")
         except ValueError:
             return None
-        # First arch directory after the provider root that has a file beneath it.
+        # First arch directory after the arch_content root with a file beneath it.
         for i in range(root + 1, len(parts) - 1):
             if _GFX_ARCH_PATTERN.fullmatch(parts[i]):
                 return parts[i]
