@@ -179,12 +179,11 @@ def update_normal_unit_string(equation: str, normal_unit: str) -> str:
     if not equation:
         return ""
 
-    result = re.sub(
+    return re.sub(
         r"\((?P<PREFIX>\w*)\s+\+\s+(\$normUnit\))",
         rf"\g<PREFIX> {re.sub('_', ' ', normal_unit)}",
         str(equation),
     )
-    return result[:1].upper() + result[1:] if result else result
 
 
 def gen_counter_list(formula: str) -> tuple[bool, list[str]]:
