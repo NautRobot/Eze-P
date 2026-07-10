@@ -70,21 +70,68 @@ namespace RcclUnitTesting
   }
 
   // Large-message alltoallv is symmetric, same as alltoall.
+  // AllToAllV requires explicit sendcounts/recvcounts/displacements.
   TEST(P2pChannelScaling, AllToAllVLargeMessage)
   {
     TestBed testBed;
 
-    std::vector<ncclFunc_t>     const funcTypes       = {ncclCollAlltoAllv};
-    std::vector<ncclDataType_t> const dataTypes       = {ncclFloat32};
-    std::vector<ncclRedOp_t>    const redOps          = {ncclSum};
-    std::vector<int>            const roots           = {0};
-    std::vector<int>            const numElements     = {16 * 1024 * 1024};
-    std::vector<bool>           const inPlaceList     = {false};
-    std::vector<bool>           const managedMemList  = {false};
-    std::vector<bool>           const useHipGraphList = {false};
+    bool const inPlace       = false;
+    bool const useManagedMem = false;
+    bool const useHipGraph   = false;
 
-    testBed.RunSimpleSweep(funcTypes, dataTypes, redOps, roots, numElements,
-                           inPlaceList, managedMemList, useHipGraphList);
+    OptionalColArgs options;
+
+    bool isCorrect = true;
+    for (int totalRanks : testBed.ev.GetNumGpusList())
+    for (int isMultiProcess : testBed.ev.GetIsMultiProcessList())
+    {
+      int const numProcesses = isMultiProcess ? totalRanks : 1;
+      const std::vector<int>& gpuPriorityOrder = testBed.ev.GetGpuPriorityOrder();
+      testBed.InitComms(TestBed::GetDeviceIdsList(numProcesses, totalRanks, gpuPriorityOrder));
+
+      int const chunkSize = 65536;
+      std::vector<size_t> numInputElements(totalRanks, 0);
+      std::vector<size_t> numOutputElements(totalRanks, 0);
+
+      for (int s = 0; s < totalRanks; ++s)
+      for (int r = 0; r < totalRanks; ++r)
+      {
+        int numElements = (1 + s + r) * chunkSize;
+        options.sendcounts[s * totalRanks + r] = numElements;
+        options.recvcounts[r * totalRanks + s] = numElements;
+      }
+      for (int s = 0; s < totalRanks; ++s)
+      {
+        int totalSend = 0, totalRecv = 0;
+        for (int r = 0; r < totalRanks; ++r)
+        {
+          options.sdispls[s * totalRanks + r] = totalSend;
+          options.rdispls[s * totalRanks + r] = totalRecv;
+          totalSend += options.sendcounts[s * totalRanks + r];
+          totalRecv += options.recvcounts[s * totalRanks + r];
+        }
+        numInputElements[s]  = totalSend;
+        numOutputElements[s] = totalRecv;
+      }
+
+      for (int rank = 0; rank < totalRanks; ++rank)
+      {
+        testBed.SetCollectiveArgs(ncclCollAlltoAllv,
+                                  ncclFloat32,
+                                  numInputElements[rank],
+                                  numOutputElements[rank],
+                                  options,
+                                  -1,
+                                  0,
+                                  rank);
+      }
+      testBed.AllocateMem(inPlace, useManagedMem);
+      testBed.PrepareData();
+      testBed.ExecuteCollectives({}, useHipGraph);
+      testBed.ValidateResults(isCorrect);
+      testBed.DeallocateMem();
+      testBed.DestroyComms();
+    }
     testBed.Finalize();
   }
 
