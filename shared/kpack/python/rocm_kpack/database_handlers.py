@@ -297,11 +297,16 @@ class HipKernelProviderRockeHandler(DatabaseHandler):
     ``hip_kernel_provider`` plugin file in the same engines dir and shadows it
     from hipDNN's plugin loader.
 
-    Detection keys on the arch *directory* under ``arch_content/``, not on file
-    names, extensions, or the engine subdir name, so any per-arch content routes
-    automatically by being dropped into an arch directory under ``arch_content/``
-    -- no handler change when engines are added. Unlike arch-neutral host
-    content, this is ISA-specific, which is why it is split per-arch.
+    Detection anchors on the ``engines/arch_content`` directory sequence and
+    keys on the arch *directory* beneath it, not on file names, extensions, or
+    the engine subdir name. Requiring the ``engines`` parent (the hipDNN plugin
+    engines dir, where the producer installs this content) keeps the match from
+    capturing an unrelated ``arch_content`` dir elsewhere in the tree, and mirrors
+    TheRock's packaging include (``**/engines/arch_content/**``). Any per-arch
+    content routes automatically by being dropped into an arch directory under
+    ``engines/arch_content/`` -- no handler change when engines are added. Unlike
+    arch-neutral host content, this is ISA-specific, which is why it is split
+    per-arch.
     """
 
     def name(self) -> str:
@@ -311,17 +316,26 @@ class HipKernelProviderRockeHandler(DatabaseHandler):
         """
         Detect per-arch hipKernelProvider content by its arch directory.
 
-        Pattern: */arch_content/[.../]<arch>/[...]<file>. The first gfx
-        architecture directory under the ``arch_content`` root is the bundle key;
-        everything beneath it routes to that arch.
+        Pattern: */engines/arch_content/[.../]<arch>/[...]<file>. The first gfx
+        architecture directory under the ``engines/arch_content`` root is the
+        bundle key; everything beneath it routes to that arch. ``arch_content``
+        must sit directly under ``engines`` so an unrelated ``arch_content`` dir
+        elsewhere in the tree is not captured.
 
         Returns:
             Bundle key (the gfx arch directory, e.g. 'gfx942') or None.
         """
         parts = Path(self._relative_path(path, prefix_root)).parts
-        try:
-            root = parts.index("arch_content")
-        except ValueError:
+        # Anchor on the engines/arch_content container (see class docstring).
+        root = next(
+            (
+                i
+                for i in range(1, len(parts))
+                if parts[i] == "arch_content" and parts[i - 1] == "engines"
+            ),
+            None,
+        )
+        if root is None:
             return None
         # First arch directory after the arch_content root with a file beneath it.
         for i in range(root + 1, len(parts) - 1):

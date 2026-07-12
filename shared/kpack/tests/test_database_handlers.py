@@ -858,6 +858,19 @@ class TestHipKernelProviderRockeHandler:
             file_path.touch()
             assert handler.detect(file_path, prefix_root) is None, rel
 
+    def test_reject_arch_content_not_under_engines(self, handler, prefix_root):
+        """An arch_content dir not directly under an engines/ dir stays generic,
+        so an unrelated component's arch_content tree is never captured. The
+        producer always installs under hipdnn_plugins/engines/arch_content/."""
+        for rel in (
+            "share/some_component/arch_content/gfx942/data.bin",
+            "lib/arch_content/gfx942/rocke_client_gfx942.kpack",
+        ):
+            file_path = prefix_root / rel
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.touch()
+            assert handler.detect(file_path, prefix_root) is None, rel
+
     def test_reject_non_arch_dir(self, handler, prefix_root):
         """A non-gfx directory name is not a bundle key."""
         file_path = prefix_root / f"{self._ENGINE_DIR}/common/shared.json"
