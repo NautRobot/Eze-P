@@ -283,30 +283,13 @@ class MIOpenHandler(DatabaseHandler):
 class HipKernelProviderRockeHandler(DatabaseHandler):
     """Handler for hipKernelProvider per-architecture kernel content.
 
-    The hipKernelProvider engines lay out ISA-specific content under a generic
-    ``arch_content`` container beside the engine plugin, with a per-engine subdir
-    and the architecture as a directory component beneath it:
+    Engines install ISA-specific content under a generic ``arch_content``
+    container in the plugin engines dir, keyed by an arch directory:
         .../hipdnn_plugins/engines/arch_content/rocke/gfx942/rocke_client_gfx942.kpack
-        .../hipdnn_plugins/engines/arch_content/rocke/gfx942/rocke_client_gfx942.json
         .../hipdnn_plugins/engines/arch_content/rocke/gfx950/rocke_client_gfx950.kpack
-    Future engines get sibling subdirs (arch_content/aiter/<arch>/,
-    arch_content/asm/<arch>/, ...) and route with no handler change.
-
-    The container is ``arch_content`` (generic) rather than the engine name or a
-    ``hip_kernel_provider/`` directory: the latter collides with the
-    ``hip_kernel_provider`` plugin file in the same engines dir and shadows it
-    from hipDNN's plugin loader.
-
-    Detection anchors on the ``engines/arch_content`` directory sequence and
-    keys on the arch *directory* beneath it, not on file names, extensions, or
-    the engine subdir name. Requiring the ``engines`` parent (the hipDNN plugin
-    engines dir, where the producer installs this content) keeps the match from
-    capturing an unrelated ``arch_content`` dir elsewhere in the tree, and mirrors
-    TheRock's packaging include (``**/engines/arch_content/**``). Any per-arch
-    content routes automatically by being dropped into an arch directory under
-    ``engines/arch_content/`` -- no handler change when engines are added. Unlike
-    arch-neutral host content, this is ISA-specific, which is why it is split
-    per-arch.
+    The container is ``arch_content`` (not ``hip_kernel_provider/``, whose name
+    would collide with the plugin file and shadow it from hipDNN's loader), so
+    future engines drop under ``arch_content/<engine>/`` with no handler change.
     """
 
     def name(self) -> str:
@@ -314,19 +297,16 @@ class HipKernelProviderRockeHandler(DatabaseHandler):
 
     def detect(self, path: Path, prefix_root: Path) -> Optional[str]:
         """
-        Detect per-arch hipKernelProvider content by its arch directory.
+        Detect per-arch content by its arch directory.
 
-        Pattern: */engines/arch_content/[.../]<arch>/[...]<file>. The first gfx
-        architecture directory under the ``engines/arch_content`` root is the
-        bundle key; everything beneath it routes to that arch. ``arch_content``
-        must sit directly under ``engines`` so an unrelated ``arch_content`` dir
-        elsewhere in the tree is not captured.
+        Pattern: */engines/arch_content/[.../]<arch>/...  The ``engines`` parent
+        scopes the match to the plugin engines dir (matching TheRock's
+        ``**/engines/arch_content/**`` include).
 
         Returns:
             Bundle key (the gfx arch directory, e.g. 'gfx942') or None.
         """
         parts = Path(self._relative_path(path, prefix_root)).parts
-        # Anchor on the engines/arch_content container (see class docstring).
         root = next(
             (
                 i
@@ -337,7 +317,7 @@ class HipKernelProviderRockeHandler(DatabaseHandler):
         )
         if root is None:
             return None
-        # First arch directory after the arch_content root with a file beneath it.
+        # First arch dir under arch_content with a file beneath it is the key.
         for i in range(root + 1, len(parts) - 1):
             if _GFX_ARCH_PATTERN.fullmatch(parts[i]):
                 return parts[i]

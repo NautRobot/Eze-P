@@ -786,8 +786,7 @@ class TestHipKernelProviderRockeHandler:
         assert result == "gfx942"
 
     def test_detect_deeply_nested_file(self, handler, prefix_root):
-        """Any file nested below the arch dir routes to that arch, not just
-        immediate children (directory-based match)."""
+        """Any file nested below the arch dir routes to that arch."""
         file_path = (
             prefix_root / f"{self._ENGINE_DIR}/gfx942/sub/extra/blob.bin"
         )
@@ -823,8 +822,7 @@ class TestHipKernelProviderRockeHandler:
 
     def test_detect_second_engine(self, handler, prefix_root):
         """A different engine's per-arch content under arch_content/ routes with
-        no handler change (the anchor is the generic container, not the engine
-        name) -- e.g. a future aiter engine."""
+        no handler change (the anchor is the container, not the engine name)."""
         file_path = (
             prefix_root
             / "lib/hipdnn_plugins/engines/arch_content/aiter/gfx942/kernels.kpack"
@@ -845,10 +843,8 @@ class TestHipKernelProviderRockeHandler:
         assert result is None
 
     def test_reject_arch_dir_without_arch_content_parent(self, handler, prefix_root):
-        """An <arch>/ path not under an arch_content/ container does not match, so
-        unrelated arch-named dirs elsewhere in the tree stay generic. This
-        includes the rocKE authoring SDK tree (hip_kernel_provider/rocke/), which
-        ships generic rather than arch-split."""
+        """An <arch>/ path not under an arch_content/ container stays generic,
+        including the rocKE authoring SDK tree (bin/hip_kernel_provider/rocke/)."""
         for rel in (
             "lib/hipdnn_plugins/engines/other/gfx942/blob.bin",
             "bin/hip_kernel_provider/rocke/instances/gfx942/wmma_gemm.py",
@@ -859,9 +855,8 @@ class TestHipKernelProviderRockeHandler:
             assert handler.detect(file_path, prefix_root) is None, rel
 
     def test_reject_arch_content_not_under_engines(self, handler, prefix_root):
-        """An arch_content dir not directly under an engines/ dir stays generic,
-        so an unrelated component's arch_content tree is never captured. The
-        producer always installs under hipdnn_plugins/engines/arch_content/."""
+        """An arch_content dir not directly under engines/ stays generic, so an
+        unrelated component's arch_content tree is never captured."""
         for rel in (
             "share/some_component/arch_content/gfx942/data.bin",
             "lib/arch_content/gfx942/rocke_client_gfx942.kpack",
