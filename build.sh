@@ -34,7 +34,7 @@ module reset
 module load cpe/26.03
 module swap PrgEnv-cray PrgEnv-gnu
 module load gcc-native/14.2
-module load rocm/7.2.0
+module load "rocm/$ROCM_VERSION"
 module load craype-accel-amd-gfx90a
 module load cray-mpich/9.1.0
 module load cray-python/3.12.12
@@ -44,10 +44,10 @@ echo "Loaded modules:"
 module -t list
 
 ###############################################################################
-# VERIFY REQUIRED TOOLS
+# VERIFY REQUIRED TOOLS AND ROCM VERSION
 ###############################################################################
 
-for required_command in git cmake hipcc hipconfig CC; do
+for required_command in git cmake hipcc hipconfig CC ldd; do
     if ! command -v "$required_command" >/dev/null 2>&1; then
         echo "ERROR: $required_command was not found after loading modules."
         exit 1
@@ -55,9 +55,21 @@ for required_command in git cmake hipcc hipconfig CC; do
 done
 
 ROCM_PATH="${ROCM_PATH:-$(hipconfig --path)}"
+ROCM_PATH="$(readlink -f "$ROCM_PATH")"
+EXPECTED_ROCM_PATH="$(readlink -f "/opt/rocm-$ROCM_VERSION")"
+
+if [[ "$ROCM_PATH" != "$EXPECTED_ROCM_PATH" ]]; then
+    echo "ERROR: the loaded ROCm path does not match the requested version."
+    echo "  Requested: $ROCM_VERSION"
+    echo "  Expected:  $EXPECTED_ROCM_PATH"
+    echo "  Loaded:    $ROCM_PATH"
+    exit 1
+fi
+
 HIPCC="$(command -v hipcc)"
 MPICXX="$(command -v CC)"
 
+export ROCM_PATH
 export MPICH_GPU_SUPPORT_ENABLED=1
 
 echo
@@ -71,7 +83,7 @@ echo "Installation:      $INSTALL_DIR"
 echo
 
 ###############################################################################
-# CLONE ROCSHMEM SOURCE
+# CLONE OR UPDATE ROCSHMEM SOURCE
 ###############################################################################
 
 mkdir -p "$SRC_DIR"
@@ -109,13 +121,11 @@ if [[ ! -f "$ROCSHMEM_SOURCE_DIR/CMakeLists.txt" ]]; then
 fi
 
 ###############################################################################
-# PREPARE BUILD AND INSTALL DIRECTORIES
+# PREPARE COMPLETELY CLEAN BUILD AND INSTALL DIRECTORIES
 ###############################################################################
 
-if [[ -d "$BUILD_DIR" ]]; then
-    rm -rf "$BUILD_DIR"
-fi
-
+echo "Removing old build and installation artifacts."
+rm -rf "$BUILD_DIR" "$INSTALL_DIR"
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 
 ###############################################################################
@@ -170,11 +180,46 @@ cmake --build "$BUILD_DIR" --parallel "$PARALLEL_JOBS"
 cmake --install "$BUILD_DIR"
 
 ###############################################################################
+# VERIFY THE INSTALLED RUNTIME ABI
+###############################################################################
+
+UNIT_TEST_EXE="$INSTALL_DIR/share/rocshmem/rocshmem_unit_tests"
+
+if [[ ! -x "$UNIT_TEST_EXE" ]]; then
+    echo "ERROR: the installed unit-test executable was not found:"
+    echo "  $UNIT_TEST_EXE"
+    exit 1
+fi
+
+export LD_LIBRARY_PATH="$INSTALL_DIR/lib:$INSTALL_DIR/lib64:$ROCM_PATH/lib:$ROCM_PATH/lib64:${LD_LIBRARY_PATH:-}"
+
+LDD_OUTPUT="$(ldd "$UNIT_TEST_EXE")"
+echo
+echo "Installed HIP runtime dependency:"
+printf '%s\n' "$LDD_OUTPUT" | grep 'libamdhip64' || true
+
+if printf '%s\n' "$LDD_OUTPUT" | grep -q 'not found'; then
+    echo "ERROR: the installed rocSHMEM executable has unresolved libraries:"
+    printf '%s\n' "$LDD_OUTPUT" | grep 'not found'
+    exit 1
+fi
+
+if printf '%s\n' "$LDD_OUTPUT" | grep -q 'libamdhip64\.so\.6'; then
+    echo "ERROR: a stale ROCm 6 dependency remains after the clean build."
+    exit 1
+fi
+
+if ! printf '%s\n' "$LDD_OUTPUT" | grep -q 'libamdhip64\.so\.7'; then
+    echo "ERROR: the installed executable is not linked to ROCm 7's HIP runtime."
+    exit 1
+fi
+
+###############################################################################
 # RESULTS
 ###############################################################################
 
 echo
-echo "rocSHMEM build completed."
+echo "rocSHMEM build and ABI verification completed."
 echo
 echo "Source:"
 echo "  $ROCSHMEM_SOURCE_DIR"
