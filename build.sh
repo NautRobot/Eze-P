@@ -47,7 +47,7 @@ module -t list
 # VERIFY REQUIRED TOOLS AND ROCM VERSION
 ###############################################################################
 
-for required_command in git cmake hipcc hipconfig CC ldd; do
+for required_command in cmake hipcc hipconfig CC ldd; do
     if ! command -v "$required_command" >/dev/null 2>&1; then
         echo "ERROR: $required_command was not found after loading modules."
         exit 1
@@ -83,42 +83,23 @@ echo "Installation:      $INSTALL_DIR"
 echo
 
 ###############################################################################
-# CLONE OR UPDATE ROCSHMEM SOURCE
+# VERIFY THE VENDORED ROCSHMEM SOURCE
 ###############################################################################
 
-mkdir -p "$SRC_DIR"
-
-if [[ ! -d "$ROCM_SYSTEMS_DIR/.git" ]]; then
-    if [[ -e "$ROCM_SYSTEMS_DIR" ]] &&
-       [[ -n "$(ls -A "$ROCM_SYSTEMS_DIR" 2>/dev/null)" ]]; then
-        echo "ERROR: $ROCM_SYSTEMS_DIR exists but is not a Git repository."
-        exit 1
-    fi
-
-    git clone \
-        --no-checkout \
-        --filter=blob:none \
-        https://github.com/ROCm/rocm-systems \
-        "$ROCM_SYSTEMS_DIR"
-
-    git -C "$ROCM_SYSTEMS_DIR" sparse-checkout set \
-        --cone projects/rocshmem
-
-    git -C "$ROCM_SYSTEMS_DIR" checkout develop
-else
-    echo "Using existing rocm-systems checkout."
-
-    git -C "$ROCM_SYSTEMS_DIR" sparse-checkout set \
-        --cone projects/rocshmem
-
-    git -C "$ROCM_SYSTEMS_DIR" checkout develop
-    git -C "$ROCM_SYSTEMS_DIR" pull --ff-only origin develop
-fi
-
 if [[ ! -f "$ROCSHMEM_SOURCE_DIR/CMakeLists.txt" ]]; then
-    echo "ERROR: rocSHMEM source checkout is incomplete."
+    echo "ERROR: the vendored rocSHMEM source is missing or incomplete:"
+    echo "  $ROCSHMEM_SOURCE_DIR"
+    echo "This build script never clones, pulls, checks out, stages, or commits Git content."
     exit 1
 fi
+
+if [[ -e "$ROCM_SYSTEMS_DIR/.git" ]]; then
+    echo "ERROR: $ROCM_SYSTEMS_DIR is still a nested Git repository."
+    echo "Remove its nested .git metadata before committing it in the outer repository."
+    exit 1
+fi
+
+echo "Using vendored rocSHMEM source; no Git operations will be performed."
 
 ###############################################################################
 # PREPARE COMPLETELY CLEAN BUILD AND INSTALL DIRECTORIES
