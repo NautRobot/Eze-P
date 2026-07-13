@@ -16,5 +16,7 @@
 .vscode/
 /.rocshmem-worktree
 /projects/cuid/_build
-build/
-.*
+/build/
+/install/
+/test-logs/
+/test-helpers/
