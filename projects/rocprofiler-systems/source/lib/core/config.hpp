@@ -5,6 +5,7 @@
 
 #include "common.hpp"
 #include "common/defines.h"
+#include "common/environment.hpp"
 #include "state.hpp"
 #include "timemory.hpp"
 #include <cstdint>
@@ -143,9 +144,6 @@ get_config_file();
 
 Mode
 get_mode();
-
-bool&
-is_attached();
 
 bool&
 is_binary_rewrite();
