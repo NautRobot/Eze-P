@@ -36,6 +36,7 @@ namespace rocshmem {
 __host__ ROHostContext::ROHostContext(Backend *backend, [[maybe_unused]] long options)
     : Context(backend) {
   ROBackend *b{static_cast<ROBackend *>(backend)};
+  ro_backend = b;
 
   host_interface = b->host_interface;
 
@@ -128,7 +129,17 @@ __host__ void ROHostContext::barrier_all() {
 
   host_interface->fence(context_window_info);
 
+  // All origins must finish their device-side RO operations before each
+  // target synchronizes the exact GPU-backed MPI windows used by those ops.
   host_interface->barrier_for_sync();
+
+  WindowInfoMPI **window_info = ro_backend->ro_window_proxy_->get();
+  size_t num_windows =
+      ro_backend->ro_window_proxy_->get_num_MPI_windows();
+
+  for (size_t i = 0; i < num_windows; ++i) {
+    host_interface->sync_all(window_info[i]);
+  }
 }
 
 __host__ void ROHostContext::barrier(rocshmem_team_t team) {

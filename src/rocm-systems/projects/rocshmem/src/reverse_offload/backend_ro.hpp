@@ -324,7 +324,7 @@ class ROBackend : public Backend {
   /**
    * @brief Number of MPI windows used for device contexts in RO Backend
    */
-  size_t num_windows_{32};
+  size_t num_windows_{1};
 
   /**
    * @brief Return buffer for rocshmem_g API

@@ -29,6 +29,8 @@
 
 namespace rocshmem {
 
+class ROBackend;
+
 class ROContextWindowInfo {
  public:
   /**
@@ -77,6 +79,9 @@ class ROHostContext : public Context {
 
   /* Pointer to the backend's host interface */
   HostInterface *host_interface = nullptr;
+
+  /* Backend owning the GPU-backed RO MPI windows. */
+  ROBackend *ro_backend = nullptr;
 
   /* An MPI Window implements a context */
   WindowInfoMPI *context_window_info = nullptr;

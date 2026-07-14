@@ -1,416 +1,355 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
-###############################################################################
-# PATHS AND SETTINGS
-###############################################################################
+# Usage:
+#   UNIT_ONLY=1 ./test.sh   # unit suite only
+#   FUNCTIONAL_ONLY=1 FUNCTIONAL_REGEX='^put_n2_w1_z1024_512B(_uuid)?$' \
+#     FUNCTIONAL_REPEAT=20 ./test.sh
+#
+# Incremental Testing Usage:
+#   START_INDEX=1 BATCH_SIZE=15 ./test.sh
+#   START_INDEX=16 BATCH_SIZE=15 APPEND_LOG=1 ./test.sh
 
-WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="$WORKSPACE_DIR/install"
+ROCM_VERSION="${ROCM_VERSION:-7.2.0}"
+UNIT_ONLY="${UNIT_ONLY:-0}"
+FUNCTIONAL_ONLY="${FUNCTIONAL_ONLY:-0}"
+FUNCTIONAL_REGEX="${FUNCTIONAL_REGEX:-}"
+FUNCTIONAL_REPEAT="${FUNCTIONAL_REPEAT:-1}"
+STOP_ON_FAILURE="${STOP_ON_FAILURE:-0}"
 
-UNIT_TEST_DIR="$INSTALL_DIR/bin/rocshmem/tests/unit"
-FUNCTIONAL_TEST_DIR="$INSTALL_DIR/bin/rocshmem/tests/functional"
+START_INDEX="${START_INDEX:-1}"
+BATCH_SIZE="${BATCH_SIZE:-15}"
+APPEND_LOG="${APPEND_LOG:-0}"
 
-UNIT_TEST_BINARY="$INSTALL_DIR/share/rocshmem/rocshmem_unit_tests"
-FUNCTIONAL_TEST_BINARY="$INSTALL_DIR/share/rocshmem/rocshmem_functional_tests"
-
-NODES="${NODES:-2}"
-WALLTIME="${WALLTIME:-04:00:00}"
-TEST_TIMEOUT="${TEST_TIMEOUT:-600}"
-
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-LOG_DIR="$WORKSPACE_DIR/test-logs/$TIMESTAMP"
-HELPER_DIR="$WORKSPACE_DIR/test-helpers"
-MPI_LAUNCHER="$HELPER_DIR/frontier-mpiexec"
-
-###############################################################################
-# OBTAIN A SLURM ALLOCATION
-###############################################################################
-
-if [[ -z "${SLURM_JOB_ID:-}" ]]; then
-    if [[ -z "${ACCOUNT:-}" ]]; then
-        echo "ERROR: No active Slurm allocation."
-        echo
-        echo "Run:"
-        echo "  ACCOUNT=<project> ./tests.sh"
-        exit 1
-    fi
-
-    SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}")"
-
-    exec salloc \
-        -A "$ACCOUNT" \
-        -N "$NODES" \
-        -t "$WALLTIME" \
-        "$SCRIPT_PATH"
+if [[ "$UNIT_ONLY" == 1 && "$FUNCTIONAL_ONLY" == 1 ]]; then
+    echo "Error: UNIT_ONLY=1 and FUNCTIONAL_ONLY=1 cannot be used together."
+    exit 2
 fi
 
-###############################################################################
-# FRONTIER MODULE ENVIRONMENT
-###############################################################################
-
-if ! command -v module >/dev/null 2>&1; then
-    if [[ -f /etc/profile.d/modules.sh ]]; then
-        source /etc/profile.d/modules.sh
-    else
-        echo "ERROR: Frontier module environment is unavailable."
-        exit 1
-    fi
+if [[ ! "$FUNCTIONAL_REPEAT" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: FUNCTIONAL_REPEAT must be a positive integer."
+    exit 2
 fi
 
 module reset
 module load cpe/26.03
 module swap PrgEnv-cray PrgEnv-gnu
 module load gcc-native/14.2
-module load rocm/7.2.0
+module load "rocm/$ROCM_VERSION"
 module load craype-accel-amd-gfx90a
 module load cray-mpich/9.1.0
-module load cray-python/3.12.12
 module load cmake
 
-###############################################################################
-# VERIFY REQUIRED COMMANDS
-###############################################################################
+module unload darshan-runtime >/dev/null 2>&1 || true
 
-for required_command in \
-    ctest \
-    hipconfig \
-    ldd \
-    srun; do
-    if ! command -v "$required_command" >/dev/null 2>&1; then
-        echo "ERROR: Required command was not found: $required_command"
-        exit 1
+if module -t list 2>&1 | grep -q '^darshan-runtime/'; then
+    echo "Error: darshan-runtime is still loaded."
+    exit 1
+fi
+
+WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="${INSTALL_DIR:-$WORKSPACE_DIR/install}"
+UNIT_DIR="$INSTALL_DIR/bin/rocshmem/tests/unit"
+FUNCTIONAL_DIR="$INSTALL_DIR/bin/rocshmem/tests/functional"
+HELPER_DIR="$WORKSPACE_DIR/test-helpers"
+LOG_ROOT="$WORKSPACE_DIR/test-logs"
+
+if [[ "$APPEND_LOG" == 1 && -d "$LOG_ROOT" ]]; then
+    LAST_RUN_ID=$(ls -1t "$LOG_ROOT" 2>/dev/null | head -n 1)
+    if [[ -n "$LAST_RUN_ID" ]]; then
+        RUN_ID="$LAST_RUN_ID"
+    else
+        RUN_ID="$(date +%Y%m%d-%H%M%S)"
     fi
-done
+else
+    RUN_ID="$(date +%Y%m%d-%H%M%S)"
+fi
 
-ROCM_PATH="${ROCM_PATH:-$(hipconfig --path)}"
+LOG_DIR="$LOG_ROOT/$RUN_ID"
+LAUNCHER="$HELPER_DIR/frontier-mpiexec"
 
-###############################################################################
-# VERIFY ROCSHMEM INSTALLATION
-###############################################################################
+if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+    echo "Error: run this script inside a Frontier compute-node allocation."
+    echo "Example: salloc -A <project> -N2 -t 01:00:00"
+    exit 1
+fi
 
-if [[ ! -f "$UNIT_TEST_DIR/CTestTestfile.cmake" ]]; then
-    echo "ERROR: Installed unit tests were not found:"
-    echo "  $UNIT_TEST_DIR"
-    echo
+if [[ ! -d "$UNIT_DIR" || ! -d "$FUNCTIONAL_DIR" ]]; then
+    echo "Error: installed rocSHMEM tests were not found under:"
+    echo "  $INSTALL_DIR"
     echo "Run ./build.sh first."
     exit 1
 fi
 
-if [[ ! -f "$FUNCTIONAL_TEST_DIR/CTestTestfile.cmake" ]]; then
-    echo "ERROR: Installed functional tests were not found:"
-    echo "  $FUNCTIONAL_TEST_DIR"
-    echo
-    echo "Run ./build.sh first."
+ALLOCATED_NODES="${SLURM_NNODES:-1}"
+if [[ "$UNIT_ONLY" != 1 ]] && ((ALLOCATED_NODES < 2)); then
+    echo "Error: the cross-node RO tests require at least two allocated nodes."
+    echo "Example: salloc -A <project> -N2 -t 01:00:00"
     exit 1
 fi
 
-if [[ ! -x "$UNIT_TEST_BINARY" ]]; then
-    echo "ERROR: Unit-test executable was not found:"
-    echo "  $UNIT_TEST_BINARY"
-    exit 1
-fi
-
-if [[ ! -x "$FUNCTIONAL_TEST_BINARY" ]]; then
-    echo "ERROR: Functional-test executable was not found:"
-    echo "  $FUNCTIONAL_TEST_BINARY"
-    exit 1
-fi
-
-###############################################################################
-# RUNTIME ENVIRONMENT
-###############################################################################
-
-export LD_LIBRARY_PATH="$INSTALL_DIR/lib:$INSTALL_DIR/lib64:$ROCM_PATH/lib:$ROCM_PATH/lib64:${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
-
+ROCM_ROOT="${ROCM_PATH:-/opt/rocm-$ROCM_VERSION}"
+export PATH="$ROCM_ROOT/bin:$ROCM_ROOT/llvm/bin:$PATH"
+export LD_LIBRARY_PATH="$INSTALL_DIR/lib:$INSTALL_DIR/lib64:$ROCM_ROOT/lib:$ROCM_ROOT/lib64:${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
 export MPICH_GPU_SUPPORT_ENABLED=1
+export MPICH_OFI_NIC_POLICY=GPU
 
-export ROCSHMEM_BACKEND=ro
-export ROCSHMEM_BACKEND_TYPE=ro
-export ROCSHMEM_DISABLE_MIXED_IPC=0
+mkdir -p "$HELPER_DIR" "$LOG_DIR"
 
-# Each test creates its own srun step.
-export CTEST_PARALLEL_LEVEL=1
-
-mkdir -p "$LOG_DIR" "$HELPER_DIR"
-
-###############################################################################
-# CHECK DYNAMIC LIBRARIES BEFORE LAUNCHING 584 TESTS
-###############################################################################
-
-check_libraries() {
-    local executable="$1"
-    local output
-
-    output="$(ldd "$executable" 2>&1)"
-
-    if grep -q "not found" <<< "$output"; then
-        echo "ERROR: Missing runtime libraries for:"
-        echo "  $executable"
-        echo
-        echo "$output" | grep -E "not found|amdhip|hsa|mpi"
-        echo
-        echo "ROCm path:"
-        echo "  $ROCM_PATH"
-        echo
-        echo "LD_LIBRARY_PATH:"
-        echo "  $LD_LIBRARY_PATH"
-        exit 1
-    fi
-}
-
-check_libraries "$UNIT_TEST_BINARY"
-check_libraries "$FUNCTIONAL_TEST_BINARY"
-
-###############################################################################
-# FRONTIER LAUNCH WRAPPER
-###############################################################################
-
-cat > "$MPI_LAUNCHER" <<'LAUNCHER_EOF'
+cat > "$LAUNCHER" <<'LAUNCHER_EOF'
 #!/bin/bash
 set -euo pipefail
 
-TASKS=1
+tasks=1
 
-while [[ $# -gt 0 ]]; do
+while (($#)); do
     case "$1" in
         -n|-np|--np)
-            if [[ $# -lt 2 ]]; then
-                echo "ERROR: $1 requires a process count."
-                exit 2
-            fi
-
-            TASKS="$2"
+            tasks="$2"
             shift 2
             ;;
-
         -mca|--mca)
-            if [[ $# -lt 3 ]]; then
-                echo "ERROR: $1 requires a key and value."
-                exit 2
-            fi
-
-            # Drop Open MPI MCA key and value.
             shift 3
             ;;
-
         -x)
-            if [[ $# -lt 2 ]]; then
-                echo "ERROR: -x requires an environment specification."
-                exit 2
+            spec="$2"
+            if [[ "$spec" == *=* ]]; then
+                export "$spec"
+            else
+                export "$spec=${!spec-}"
             fi
-
-            EXPORT_SPEC="$2"
-
-            if [[ "$EXPORT_SPEC" == *=* ]]; then
-                export "$EXPORT_SPEC"
-            elif [[ -n "${!EXPORT_SPEC:-}" ]]; then
-                export "$EXPORT_SPEC=${!EXPORT_SPEC}"
-            fi
-
             shift 2
             ;;
-
         --timeout|--map-by|--bind-to)
-            if [[ $# -lt 2 ]]; then
-                echo "ERROR: $1 requires a value."
-                exit 2
-            fi
-
-            # CTest handles timeout. Slurm handles placement and binding.
             shift 2
             ;;
-
-        --report-bindings|--oversubscribe|--allow-run-as-root)
+        --oversubscribe)
             shift
             ;;
-
         --)
             shift
             break
             ;;
-
-        -*)
-            echo "ERROR: Unsupported MPI launcher option: $1"
+        -* )
+            echo "frontier-mpiexec: unsupported launcher option: $1" >&2
             exit 2
             ;;
-
         *)
-            # First non-launcher argument is the executable.
             break
             ;;
     esac
 done
 
-if [[ $# -lt 1 ]]; then
-    echo "ERROR: No executable was supplied to the Frontier launcher."
+if (($# == 0)); then
+    echo "frontier-mpiexec: no executable was supplied" >&2
     exit 2
 fi
 
-EXECUTABLE="$1"
-ALLOCATED_NODES="${SLURM_JOB_NUM_NODES:-1}"
+requested_nodes="${ROCSHMEM_TEST_NODES:-2}"
+allocated_nodes="${SLURM_NNODES:-1}"
+nodes="$requested_nodes"
 
-if [[ "$EXECUTABLE" == *unit* ]]; then
-    # Unit tests are intended to use GPUs within one node.
-    LAUNCH_NODES=1
-else
-    # Spread functional tests across the allocation to exercise RO.
-    LAUNCH_NODES="$ALLOCATED_NODES"
+((nodes > allocated_nodes)) && nodes="$allocated_nodes"
+((nodes > tasks)) && nodes="$tasks"
+((nodes < 1)) && nodes=1
 
-    if (( TASKS < LAUNCH_NODES )); then
-        LAUNCH_NODES="$TASKS"
-    fi
-fi
-
-if (( LAUNCH_NODES < 1 )); then
-    LAUNCH_NODES=1
-fi
-
-TASKS_PER_NODE=$(((TASKS + LAUNCH_NODES - 1) / LAUNCH_NODES))
-
-if (( TASKS_PER_NODE > 8 )); then
-    echo "ERROR: Requested $TASKS_PER_NODE tasks per node."
-    echo "Frontier provides 8 GPU dies per node."
+tasks_per_node=$(((tasks + nodes - 1) / nodes))
+if ((tasks_per_node > 8)); then
+    echo "frontier-mpiexec: $tasks tasks on $nodes nodes requires more than 8 GPUs per node" >&2
     exit 2
 fi
 
-echo "Frontier launch: tasks=$TASKS nodes=$LAUNCH_NODES executable=$EXECUTABLE"
+echo "Frontier launch: tasks=$tasks nodes=$nodes executable=$1"
 
 exec srun \
     --export=ALL \
-    -N "$LAUNCH_NODES" \
-    -n "$TASKS" \
-    --ntasks-per-node="$TASKS_PER_NODE" \
-    -c7 \
-    --gpus-per-task=1 \
-    --gpu-bind=closest \
-    --distribution=cyclic \
+    --nodes="$nodes" \
+    --ntasks="$tasks" \
+    --ntasks-per-node="$tasks_per_node" \
+    --cpus-per-task="${ROCSHMEM_CPUS_PER_TASK:-7}" \
+    --cpu-bind=cores \
+    --kill-on-bad-exit=1 \
     bash -c '
-        export OMPI_COMM_WORLD_LOCAL_RANK="$SLURM_LOCALID"
-        export OMPI_COMM_WORLD_RANK="$SLURM_PROCID"
-        export OMPI_COMM_WORLD_SIZE="$SLURM_NTASKS"
-
+        export OMPI_COMM_WORLD_RANK="${SLURM_PROCID:?}"
+        export OMPI_COMM_WORLD_SIZE="${SLURM_NTASKS:?}"
+        export OMPI_COMM_WORLD_LOCAL_RANK="${SLURM_LOCALID:?}"
+        export OMPI_COMM_WORLD_LOCAL_SIZE="${SLURM_NTASKS_PER_NODE:-1}"
         exec "$@"
     ' bash "$@"
 LAUNCHER_EOF
+chmod +x "$LAUNCHER"
 
-chmod +x "$MPI_LAUNCHER"
-
-###############################################################################
-# TEMPORARILY PATCH INSTALLED CTEST FILES
-#
-# Replace /usr/bin/srun with the compatibility launcher. Files are restored
-# when this script exits or is interrupted.
-###############################################################################
-
-PATCH_SUFFIX=".tests-sh-backup.$$"
-PATCHED_FILES=()
-
+declare -a PATCHED_FILES=()
 restore_ctest_files() {
     local file
-
     for file in "${PATCHED_FILES[@]}"; do
-        if [[ -f "$file$PATCH_SUFFIX" ]]; then
-            mv "$file$PATCH_SUFFIX" "$file"
+        if [[ -f "$file.frontier-backup" ]]; then
+            mv -f "$file.frontier-backup" "$file"
         fi
     done
 }
-
 trap restore_ctest_files EXIT INT TERM
 
 while IFS= read -r file; do
-    cp -p "$file" "$file$PATCH_SUFFIX"
+    cp -p "$file" "$file.frontier-backup"
     PATCHED_FILES+=("$file")
-
-    sed -i \
-        "s|/usr/bin/srun|$MPI_LAUNCHER|g" \
-        "$file"
-done < <(
-    grep -rlF \
-        "/usr/bin/srun" \
-        "$INSTALL_DIR/bin/rocshmem" \
-        --include="*.cmake" \
-        --include="CTestTestfile.cmake" ||
-        true
-)
-
-# It is also valid if a previously generated file already references this
-# launcher path.
-if [[ "${#PATCHED_FILES[@]}" -eq 0 ]]; then
-    if ! grep -rlF \
-        "$MPI_LAUNCHER" \
-        "$INSTALL_DIR/bin/rocshmem" \
-        --include="*.cmake" \
-        --include="CTestTestfile.cmake" \
-        >/dev/null 2>&1; then
-        echo "ERROR: Could not locate the test launcher in CTest metadata."
-        exit 1
-    fi
-fi
-
-###############################################################################
-# DISPLAY CONFIGURATION
-###############################################################################
+    sed -i "s|/usr/bin/srun|$LAUNCHER|g" "$file"
+done < <(grep -RIl --include='CTestTestfile.cmake' '/usr/bin/srun' "$UNIT_DIR" "$FUNCTIONAL_DIR")
 
 echo
 echo "rocSHMEM test configuration"
-echo "  Allocation:   $SLURM_JOB_ID"
-echo "  Nodes:        ${SLURM_JOB_NUM_NODES:-unknown}"
-echo "  ROCm:         $ROCM_PATH"
-echo "  Backend:      RO with local IPC"
-echo "  Installation: $INSTALL_DIR"
-echo "  Launcher:     $MPI_LAUNCHER"
-echo "  Logs:         $LOG_DIR"
+echo "  Allocation:  $SLURM_JOB_ID"
+echo "  Nodes:       $ALLOCATED_NODES"
+echo "  Unit tests:  IPC on one node"
+echo "  Functional:  RO across two nodes, mixed IPC disabled"
+echo "  Launcher:    $LAUNCHER"
+echo "  Logs:        $LOG_DIR"
+
+PREFLIGHT_EXE="$INSTALL_DIR/share/rocshmem/rocshmem_unit_tests"
 echo
+echo "Checking runtime libraries on a compute node"
+export ROCSHMEM_TEST_NODES=1
+if ! "$LAUNCHER" -n 1 bash -c '
+    missing="$(ldd "$1" | sed -n "/not found/p")"
+    if [[ -n "$missing" ]]; then
+        echo "Missing runtime libraries:" >&2
+        echo "$missing" >&2
+        exit 1
+    fi
+    if ! python3 -c '\''import ctypes; ctypes.CDLL("libmpi.so")'\''; then
+        echo "Unable to load libmpi.so through LD_LIBRARY_PATH." >&2
+        exit 1
+    fi
+    echo "MPI runtime-library check passed."
+    echo "Runtime-library check passed."
+' bash "$PREFLIGHT_EXE"; then
+    echo
+    echo "Error: required libraries are not visible inside the Slurm task."
+    echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+    exit 1
+fi
 
-###############################################################################
-# RUN ALL REGISTERED TESTS
-###############################################################################
+overall_rc=0
+unit_rc=0
+functional_rc=0
 
-TEST_STATUS=0
+declare -a CTEST_COMMON_ARGS=(--output-on-failure -j1)
+if [[ "$STOP_ON_FAILURE" == 1 ]]; then
+    CTEST_COMMON_ARGS+=(--stop-on-failure)
+fi
 
-echo "============================================================"
-echo "Running unit tests"
-echo "============================================================"
+REDIRECT=">"
+if [[ "$APPEND_LOG" == 1 ]]; then
+    REDIRECT=">>"
+fi
 
-if ! ctest \
-    --test-dir "$UNIT_TEST_DIR" \
-    --output-on-failure \
-    --timeout "$TEST_TIMEOUT" \
-    -j1 2>&1 | tee "$LOG_DIR/unit-tests.log"; then
-    TEST_STATUS=1
+if [[ "$FUNCTIONAL_ONLY" != 1 ]]; then
+    echo
+    echo "============================================================"
+    echo "Running unit tests with the IPC backend"
+    echo "============================================================"
+    export ROCSHMEM_BACKEND=ipc
+    export ROCSHMEM_BACKEND_TYPE=ipc
+    export ROCSHMEM_TEST_NODES=1
+    export ROCSHMEM_DISABLE_MIXED_IPC=0
+
+    if [[ "$APPEND_LOG" == 1 ]]; then
+        ctest --test-dir "$UNIT_DIR" "${CTEST_COMMON_ARGS[@]}" 2>&1 | tee -a "$LOG_DIR/unit-tests.log"
+    else
+        ctest --test-dir "$UNIT_DIR" "${CTEST_COMMON_ARGS[@]}" 2>&1 | tee "$LOG_DIR/unit-tests.log"
+    fi
+    unit_rc=${PIPESTATUS[0]}
+    if ((unit_rc != 0)); then
+        overall_rc=1
+    fi
+fi
+
+if [[ "$UNIT_ONLY" == 1 ]]; then
+    echo
+    echo "============================================================"
+    if ((unit_rc == 0)); then
+        echo "The rocSHMEM unit suite passed."
+    else
+        echo "The rocSHMEM unit suite failed."
+    fi
+    echo "Log: $LOG_DIR/unit-tests.log"
+    echo "============================================================"
+    exit "$unit_rc"
+fi
+
+if ((unit_rc != 0)) && [[ "$STOP_ON_FAILURE" == 1 ]]; then
+    echo
+    echo "Stopping before the functional suite because the unit suite failed."
+    echo "Log: $LOG_DIR/unit-tests.log"
+    exit "$unit_rc"
 fi
 
 echo
 echo "============================================================"
-echo "Running all functional tests"
+echo "Preparing Functional Suite Batch Execution"
 echo "============================================================"
+export ROCSHMEM_BACKEND=ro
+export ROCSHMEM_BACKEND_TYPE=ro
+export ROCSHMEM_TEST_NODES=2
+export ROCSHMEM_DISABLE_MIXED_IPC=1
 
-if ! ctest \
-    --test-dir "$FUNCTIONAL_TEST_DIR" \
-    --output-on-failure \
-    --timeout "$TEST_TIMEOUT" \
-    -j1 2>&1 | tee "$LOG_DIR/functional-tests.log"; then
-    TEST_STATUS=1
+export FI_CXI_RX_MATCH_MODE=hybrid
+export MPICH_NEMESIS_ASYNC_PROGRESS=1
+export FI_CXI_DEFAULT_TX_SIZE=524288
+
+declare -a FUNCTIONAL_CTEST_ARGS=("${CTEST_COMMON_ARGS[@]}")
+
+echo "Gathering list of functional tests..."
+ALL_FUNCTIONAL_TESTS=$(ctest --test-dir "$FUNCTIONAL_DIR" -N | awk -F': ' '/Test *#/ {print $2}' | tr -d '[:blank:]')
+TOTAL_TESTS=$(echo "$ALL_FUNCTIONAL_TESTS" | wc -l)
+
+END_INDEX=$((START_INDEX + BATCH_SIZE - 1))
+BATCH_TESTS=$(echo "$ALL_FUNCTIONAL_TESTS" | tail -n +"$START_INDEX" | head -n "$BATCH_SIZE")
+BATCH_COUNT=$(echo "$BATCH_TESTS" | grep -v '^$' | wc -l || echo 0)
+
+if (( BATCH_COUNT == 0 )); then
+    echo "Error: No tests found in range ${START_INDEX} to ${END_INDEX}. Total functional tests: ${TOTAL_TESTS}."
+    exit 2
 fi
 
-###############################################################################
-# SUMMARY
-###############################################################################
+INCREMENT_REGEX="^($(echo "$BATCH_TESTS" | paste -sd '|' -))$"
+FUNCTIONAL_CTEST_ARGS+=(--tests-regex "$INCREMENT_REGEX")
+
+echo "Running functional tests index ${START_INDEX} to $((START_INDEX + BATCH_COUNT - 1)) (Batch size: ${BATCH_COUNT} of ${TOTAL_TESTS})"
+
+if [[ -n "$FUNCTIONAL_REGEX" ]]; then
+    echo "Warning: Overriding explicit FUNCTIONAL_REGEX because index-based batching is active."
+fi
+
+if ((FUNCTIONAL_REPEAT > 1)); then
+    FUNCTIONAL_CTEST_ARGS+=(--repeat "until-fail:$FUNCTIONAL_REPEAT")
+    echo "Each selected functional test must pass $FUNCTIONAL_REPEAT consecutive runs."
+fi
+
+if [[ "$APPEND_LOG" == 1 ]]; then
+    echo -e "\n--- BATCH START: INDEX ${START_INDEX} TO ${END_INDEX} ---" >> "$LOG_DIR/functional-tests.log"
+    ctest --test-dir "$FUNCTIONAL_DIR" "${FUNCTIONAL_CTEST_ARGS[@]}" 2>&1 | tee -a "$LOG_DIR/functional-tests.log"
+else
+    ctest --test-dir "$FUNCTIONAL_DIR" "${FUNCTIONAL_CTEST_ARGS[@]}" 2>&1 | tee "$LOG_DIR/functional-tests.log"
+fi
+functional_rc=${PIPESTATUS[0]}
+if ((functional_rc != 0)); then
+    overall_rc=1
+fi
 
 echo
 echo "============================================================"
-
-if [[ "$TEST_STATUS" -eq 0 ]]; then
-    echo "All registered rocSHMEM tests passed."
+if ((overall_rc == 0)); then
+    echo "All selected rocSHMEM tests passed."
 else
     echo "One or more rocSHMEM tests failed."
 fi
-
 echo
 echo "Logs:"
-echo "  $LOG_DIR/unit-tests.log"
+if [[ "$FUNCTIONAL_ONLY" != 1 ]]; then
+    echo "  $LOG_DIR/unit-tests.log"
+fi
 echo "  $LOG_DIR/functional-tests.log"
 echo "============================================================"
 
-exit "$TEST_STATUS"
+exit "$overall_rc"

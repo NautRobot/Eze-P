@@ -13,9 +13,11 @@ INSTALL_DIR="$WORKSPACE_DIR/install"
 ROCM_SYSTEMS_DIR="$SRC_DIR/rocm-systems"
 ROCSHMEM_SOURCE_DIR="$ROCM_SYSTEMS_DIR/projects/rocshmem"
 
+# CPE 26.03's Cray MPICH runtime requires the ROCm 7 HIP ABI.
 ROCM_VERSION="${ROCM_VERSION:-7.2.0}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 PARALLEL_JOBS="${PARALLEL_JOBS:-8}"
+BUILD_EXAMPLES="${BUILD_EXAMPLES:-ON}"
 
 ###############################################################################
 # FRONTIER MODULE ENVIRONMENT
@@ -39,6 +41,15 @@ module load craype-accel-amd-gfx90a
 module load cray-mpich/9.1.0
 module load cray-python/3.12.12
 module load cmake
+
+# The default Darshan interposer is detected as MPI_CXX by CMake on this CPE
+# and can introduce a different HIP ABI. rocSHMEM must link directly to MPICH.
+module unload darshan-runtime >/dev/null 2>&1 || true
+
+if module -t list 2>&1 | grep -q '^darshan-runtime/'; then
+    echo "ERROR: darshan-runtime is still loaded and would contaminate MPI detection."
+    exit 1
+fi
 
 echo "Loaded modules:"
 module -t list
@@ -80,6 +91,7 @@ echo "MPI C++ wrapper:   $MPICXX"
 echo "rocSHMEM source:   $ROCSHMEM_SOURCE_DIR"
 echo "Build directory:   $BUILD_DIR"
 echo "Installation:      $INSTALL_DIR"
+echo "Build examples:    $BUILD_EXAMPLES"
 echo
 
 ###############################################################################
@@ -134,7 +146,7 @@ cmake \
     -DBUILD_CODE_COVERAGE=OFF \
     -DBUILD_FUNCTIONAL_TESTS=ON \
     -DBUILD_UNIT_TESTS=ON \
-    -DBUILD_EXAMPLES=ON \
+    -DBUILD_EXAMPLES="$BUILD_EXAMPLES" \
     -DBUILD_PYTHON_TESTS=ON \
     -DBUILD_CTESTS=ON \
     -DUSE_EXTERNAL_MPI=ON \
@@ -172,7 +184,7 @@ if [[ ! -x "$UNIT_TEST_EXE" ]]; then
     exit 1
 fi
 
-export LD_LIBRARY_PATH="$INSTALL_DIR/lib:$INSTALL_DIR/lib64:$ROCM_PATH/lib:$ROCM_PATH/lib64:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$INSTALL_DIR/lib:$INSTALL_DIR/lib64:$ROCM_PATH/lib:$ROCM_PATH/lib64:${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
 
 LDD_OUTPUT="$(ldd "$UNIT_TEST_EXE")"
 echo
@@ -185,13 +197,17 @@ if printf '%s\n' "$LDD_OUTPUT" | grep -q 'not found'; then
     exit 1
 fi
 
-if printf '%s\n' "$LDD_OUTPUT" | grep -q 'libamdhip64\.so\.6'; then
-    echo "ERROR: a stale ROCm 6 dependency remains after the clean build."
-    exit 1
-fi
+ROCM_MAJOR="${ROCM_VERSION%%.*}"
+EXPECTED_HIP_SONAME="libamdhip64.so.$ROCM_MAJOR"
+HIP_SONAMES="$(printf '%s\n' "$LDD_OUTPUT" | grep -oE 'libamdhip64\.so\.[0-9]+' | sort -u)"
 
-if ! printf '%s\n' "$LDD_OUTPUT" | grep -q 'libamdhip64\.so\.7'; then
-    echo "ERROR: the installed executable is not linked to ROCm 7's HIP runtime."
+if [[ "$HIP_SONAMES" != "$EXPECTED_HIP_SONAME" ]]; then
+    echo "ERROR: inconsistent HIP runtime ABIs were linked."
+    echo "  Expected only: $EXPECTED_HIP_SONAME"
+    echo "  Found:"
+    printf '    %s\n' $HIP_SONAMES
+    echo "Use a ROCm version matching the Cray MPICH GTL, or use an MPI stack"
+    echo "that was built against ROCm $ROCM_MAJOR."
     exit 1
 fi
 
