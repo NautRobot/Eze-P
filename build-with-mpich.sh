@@ -158,9 +158,9 @@ cmake \
     -DUSE_IPC=ON \
     -DUSE_SINGLE_NODE=OFF \
     -DUSE_THREADS=OFF \
-    -DUSE_WF_COAL=ON \
-    -DUSE_HDP_FLUSH=ON \
-    -DUSE_HDP_FLUSH_HOST_SIDE=ON \
+    -DUSE_WF_COAL=OFF \
+    -DUSE_HDP_FLUSH=OFF \
+    -DUSE_HDP_FLUSH_HOST_SIDE=OFF \
     -DASAN="${ASAN:-OFF}" \
     "$@"
 
